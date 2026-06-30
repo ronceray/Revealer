@@ -1107,6 +1107,12 @@ def build(pfile: str) -> str:
             jsval = _to_js_literal(v)
         opts.append(f"{mapped_key}: {jsval}")
 
+    # Point the math plugin at the locally-bundled KaTeX (copied into
+    # reveal.js/katex by assets.inject_revealer_assets) so equations render
+    # offline instead of depending on the jsdelivr CDN at runtime.
+    if "katex" not in setting and (assets.DATA / "katex" / "dist" / "katex.min.js").is_file():
+        opts.append("katex: { local: 'reveal.js/katex' }")
+
     extra = "" if not opts else "\n        " + ",\n        ".join(opts) + "\n        "
     out = out.replace("__REVEAL_OPTIONS__", extra)
 
