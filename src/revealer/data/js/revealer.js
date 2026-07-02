@@ -3,8 +3,22 @@
 function set_fixed(slide) {
   // Set slide fixed divs
 
-  $('header').html($(slide).children(".slide_header").html());
-  $('footer').html($(slide).children(".slide_footer").html());
+  var headerHtml = $(slide).children(".slide_header").html() || '';
+  var footerHtml = $(slide).children(".slide_footer").html() || '';
+  var hideHeader = slide && slide.getAttribute('data-rv-header') === 'none';
+
+  $('header').html(headerHtml).css('display', (hideHeader || !headerHtml) ? 'none' : 'block');
+  $('footer').html(footerHtml).css('display', footerHtml ? 'block' : 'none');
+
+  var themeLink = document.getElementById('rv-theme');
+  if (themeLink) {
+    if (!themeLink.dataset.rvDefaultHref) {
+      themeLink.dataset.rvDefaultHref = themeLink.getAttribute('href');
+    }
+    var slideTheme = slide ? slide.getAttribute('data-rv-theme') : null;
+    var baseHref = themeLink.dataset.rvDefaultHref.replace(/[^/]+\.css$/, '');
+    themeLink.setAttribute('href', slideTheme ? baseHref + slideTheme + '.css' : themeLink.dataset.rvDefaultHref);
+  }
 
   if ($(slide).hasClass('dark')) {
     $('body').addClass('dark');
@@ -26,8 +40,10 @@ function set_fixed(slide) {
  * the header.
  */
 
-// Light margin applied on each edge, as a fraction of the slide dimensions.
-var RV_MARGIN = 0.035;
+// Default geometry (fractions of slide dimensions), overridable per slide via
+// data-rv-* attributes emitted by the builder.
+var RV_HEADER_MARGIN = 0.05;   // vertical gap header/footer <-> central area
+var RV_COLUMN_SPACING = 0.05;  // horizontal edge + inter-block spacing
 
 function rv_slidesElement() {
   return document.querySelector('.reveal .slides');
@@ -51,6 +67,42 @@ function rv_bandFromBottom(el, slidesRect, scale) {
   return Math.max(0, (slidesRect.bottom - r.top) / scale);
 }
 
+function rv_num(slide, attr, fallback) {
+  if (!slide) return fallback;
+  var v = parseFloat(slide.getAttribute(attr));
+  return isFinite(v) ? v : fallback;
+}
+
+// Natural content height of a block in its own coordinates. Measured with the
+// content top-aligned so overflow (which would bleed symmetrically when
+// centered) is captured reliably.
+function rv_blockContentHeight(col) {
+  var prev = col.style.justifyContent;
+  col.style.justifyContent = 'flex-start';
+  var h = col.scrollHeight;
+  col.style.justifyContent = prev;
+  return h;
+}
+
+// Reduce the block font size until its content fits the available height.
+// Returns the applied font scale (<= 1).
+function rv_fitBlock(col, avail) {
+  col.style.setProperty('--rv-fontscale', 1);
+  if (rv_blockContentHeight(col) <= avail + 0.5) return 1;
+  var lo = 0.2, hi = 1;
+  for (var i = 0; i < 20; i++) {
+    var mid = (lo + hi) / 2;
+    col.style.setProperty('--rv-fontscale', mid);
+    if (rv_blockContentHeight(col) <= avail + 0.5) {
+      lo = mid;
+    } else {
+      hi = mid;
+    }
+  }
+  col.style.setProperty('--rv-fontscale', lo);
+  return lo;
+}
+
 function fitSlide(slide) {
   if (!slide) return;
 
@@ -72,11 +124,15 @@ function fitSlide(slide) {
   var scale = slidesRect.height / H;
   if (!isFinite(scale) || scale <= 0) scale = 1;
 
-  // Reserve the space taken by the visible top bar (header or logo strip)
-  // and the footer, expressed in slide coordinates.
+  // Optional explicit header / footer heights (fraction of slide height).
   var header = document.querySelector('body > header');
   var footer = document.querySelector('body > footer');
   var hlogos = document.getElementById('hlogos');
+
+  var hh = rv_num(slide, 'data-rv-header-height', NaN);
+  if (isFinite(hh) && header) header.style.height = (hh * slidesRect.height) + 'px';
+  var fh = rv_num(slide, 'data-rv-footer-height', NaN);
+  if (isFinite(fh) && footer) footer.style.height = (fh * slidesRect.height) + 'px';
 
   var topReserve = Math.max(
     rv_bandFromTop(header, slidesRect, scale),
@@ -84,12 +140,16 @@ function fitSlide(slide) {
   );
   var bottomReserve = rv_bandFromBottom(footer, slidesRect, scale);
 
-  var mh = RV_MARGIN * W;
-  var mv = RV_MARGIN * H;
+  // Vertical breathing margin between header/footer and the central area.
+  var headerMargin = rv_num(slide, 'data-rv-header-margin', RV_HEADER_MARGIN);
+  var columnSpacing = rv_num(slide, 'data-rv-column-spacing', RV_COLUMN_SPACING);
+  var mv = headerMargin * H;
 
-  var boxLeft = mh;
+  // The central area spans the full slide width; horizontal spacing between
+  // blocks and edges is handled by the `.multi-column` padding / gap.
+  var boxLeft = 0;
   var boxTop = topReserve + mv;
-  var boxW = Math.max(1, W - 2 * mh);
+  var boxW = Math.max(1, W);
   var boxH = Math.max(1, H - topReserve - bottomReserve - 2 * mv);
 
   content.style.left = boxLeft + 'px';
@@ -97,15 +157,45 @@ function fitSlide(slide) {
   content.style.width = boxW + 'px';
   content.style.height = boxH + 'px';
 
-  // Reset the scale before measuring the natural content size.
+  // The inner wrapper fills the central area exactly (no global scaling); each
+  // block scales its own font to fit.
+  inner.style.width = boxW + 'px';
+  inner.style.height = boxH + 'px';
   inner.style.transform = 'translate(-50%, -50%) scale(1)';
-  var cw = inner.scrollWidth;
-  var ch = inner.scrollHeight;
 
-  var fit = Math.min(boxW / cw, boxH / ch, 1);
-  if (!isFinite(fit) || fit <= 0) fit = 1;
+  var multi = inner.querySelector(':scope > .multi-column');
+  if (multi) {
+    multi.style.setProperty('--rv-column-spacing', (columnSpacing * 100) + '%');
+    var cols = Array.prototype.slice.call(
+      multi.querySelectorAll(':scope > .column')
+    );
+    var widthMode = slide.getAttribute('data-rv-column-width') || 'equal';
 
-  inner.style.transform = 'translate(-50%, -50%) scale(' + fit + ')';
+    cols.forEach(function (c) { c.style.flex = '1 1 0'; });
+
+    if (widthMode === 'auto' && cols.length > 1) {
+      // Reallocate width between blocks so their font scales get balanced:
+      // a block that had to shrink more receives a bit more width. Damped and
+      // capped so it converges quickly even for image-heavy blocks.
+      var weights = cols.map(function () { return 1; });
+      for (var it = 0; it < 4; it++) {
+        cols.forEach(function (c, i) { c.style.flex = weights[i].toFixed(4) + ' 1 0'; });
+        void multi.offsetHeight;
+        var scales = cols.map(function (c) { return rv_fitBlock(c, c.clientHeight); });
+        var next = weights.map(function (w, i) {
+          return w / Math.sqrt(Math.max(scales[i], 0.05));
+        });
+        var sum = next.reduce(function (a, b) { return a + b; }, 0);
+        weights = next.map(function (w) { return (w / sum) * cols.length; });
+      }
+      cols.forEach(function (c, i) { c.style.flex = weights[i].toFixed(4) + ' 1 0'; });
+    }
+
+    void multi.offsetHeight;
+    cols.forEach(function (col) {
+      rv_fitBlock(col, col.clientHeight);
+    });
+  }
 
   // Re-fit once media with intrinsic size has loaded (images / videos), since
   // their natural dimensions are unknown before that.
@@ -169,7 +259,7 @@ function revealerApplyFragment(fragment, restore) {
     if (!el._revealerOrig) el._revealerOrig = {};
     if (!el._revealerOrigStyle) el._revealerOrigStyle = {};
 
-    el.style.transition = 'all ' + duration + 'ease';
+    el.style.transition = 'all ' + duration + ' ease';
 
     attrs.forEach(function (pair) {
       var name = pair[0];
@@ -274,6 +364,7 @@ Reveal.on('fragmenthidden', function (event) {
 });
 
 Reveal.on('ready', function (event) {
+  set_fixed(event.currentSlide);
   fitSlide(event.currentSlide);
   // Re-fit after asynchronous rendering (KaTeX math, web fonts) settles.
   requestAnimationFrame(function () { fitSlide(Reveal.getCurrentSlide()); });
