@@ -179,7 +179,7 @@ header {
   background: #fff; display: block; margin: 0; max-width: 100%; max-height: 100%;
 }
 .zoo-label, .sfi-card .label { font-size: 30px; font-weight: 600; color: var(--blue-dk); text-align: center; }
-.sfi-card.accent { border: 2.5px solid var(--blue); }
+.sfi-card.accent { border: 2.5px solid var(--blue); box-shadow: 0 0 0 4px rgba(26,79,214,0.10); }
 
 /* ── ! image / !! video shortcuts ──────────────────────────────────────── */
 .rv-fig { display: flex; flex-direction: column; align-items: center; gap: 8px; min-width: 0; min-height: 0; margin: 0; max-width: 100%; }
@@ -198,7 +198,7 @@ header {
   font-size: 24px; font-weight: 600; padding: 5px 16px; border-radius: 4px; letter-spacing: .03em;
 }
 .noise-row { display: flex; justify-content: center; gap: 20px; margin-top: 4px; }
-.noise-row .chip { font-size: 22px; padding: 4px 14px; }
+.noise-row .chip { font-size: 24px; padding: 5px 16px; }
 
 /* ── Math / boxes / text helpers ───────────────────────────────────────── */
 .math-box {
@@ -261,7 +261,7 @@ header {
    demos). Kept small + generic so raw-HTML slides stay clean and editable. */
 
 /* small caption shown under an equation */
-.eq-label { font-size: 22px; color: var(--muted); font-style: italic; line-height: 1.25; margin-top: 4px; }
+.eq-label { font-size: 24px; color: var(--muted); font-style: italic; line-height: 1.25; margin-top: 4px; }
 .eq-label .blue, .eq-label .bold { font-style: normal; }
 
 /* circular collaborator portrait (inline, e.g. next to an equation) */
@@ -273,17 +273,55 @@ header {
 .pc-photo { width: 150px; height: 150px; border-radius: 12px; overflow: hidden; border: 2px solid var(--blue-lt);
   flex: 0 0 auto; display: flex; flex-direction: column; }
 .reveal .pc-photo > img { width: 100%; height: 100%; object-fit: cover; display: block; margin: 0; }
+/* portraits inside a grid cell (e.g. the acknowledgments strip) run larger than
+   the inline portrait-cards */
+.reveal .sfi-cell .pc-photo { width: 195px; height: 195px; }
 .pc-name { font-size: 24px; font-weight: 600; color: var(--blue-dk); line-height: 1.15; text-align: center; }
-.pc-role { font-size: 20px; color: var(--muted); text-align: center; }
+.pc-role { font-size: 22px; color: var(--muted); text-align: center; }
 
 /* compact pale-blue math zone for the SFI-generation method bands */
 .method-card { background: var(--blue-xlt); border-left: 6px solid var(--blue); border-radius: 0 8px 8px 0; padding: 16px 24px; display: flex; flex-direction: column; gap: 10px; min-width: 0; }
 .method-title { font-size: 28px; font-weight: 700; line-height: 1.15; color: var(--blue-dk); }
 .method-card .math-body { font-size: 26px; }
-.method-card .eq-label { font-size: 19px; line-height: 1.2; }
+.method-card .eq-label { font-size: 22px; line-height: 1.25; }
 .method-emph { padding: 8px 14px; border: 2px solid var(--blue-md); background: #fff; color: var(--blue-dk); font-size: 22px; font-weight: 700; line-height: 1.18; border-radius: 6px; }
 
 /* definition grid: key | value (PASTIS term table, etc.) */
 .term-table { display: grid; grid-template-columns: auto 1fr; gap: 8px 24px; align-items: baseline; }
 .term-key { font-family: 'IBM Plex Mono', monospace; font-size: 30px; color: var(--blue); font-weight: 500; }
 .term-val { font-size: 26px; color: var(--muted); line-height: 1.4; }
+
+/* ── Added in the 2026-07-01 canonicalization pass ─────────────────────────
+   Macro-backed helpers so slides author as DSL, not raw inline-styled divs. */
+
+/* green "discovery / recovered physics" callout — pairs with the `> good` macro,
+   mirrors .box-info/.box-warn (used on hapto-SFI, swarming, Klausmeier, EM). */
+.box-good { background: #F3FBF3; border-left: 5px solid #1A8A1A; border-radius: 0 8px 8px 0; padding: 14px 22px; }
+.box-good .box-title { color: #1A8A1A; }
+
+/* cross-fading media stack — pairs with the `> stack` / `> layer` macro.
+   All layers share one grid cell; fragment layers reveal on top (opaque unless
+   `clear`), replacing raw `display:grid; grid-area:1/1` image overlays. */
+.rv-stack { position: relative; display: grid; width: 100%; flex: 1 1 0; min-width: 0; min-height: 0; }
+.rv-stack > .rv-layer { grid-area: 1 / 1; min-width: 0; min-height: 0; display: flex;
+  align-items: center; justify-content: center; overflow: hidden; border-radius: var(--media-radius); }
+.rv-stack > .rv-layer.rv-opaque { background: #fff; }
+.reveal .rv-stack > .rv-layer > img,
+.reveal .rv-stack > .rv-layer > svg { width: 100%; height: 100%; object-fit: contain; display: block; margin: 0; }
+.rv-stack > .rv-layer > .rv-fig, .rv-stack > .rv-layer > .rv-media-fill { flex: 1 1 auto; width: 100%; min-height: 0; }
+
+/* feature / extension cards: title · subtitle · framed equation · description ·
+   attribution. Pieces sit inside a `> card` (.sfi-card) or grid cell; the
+   attribution pins to the card bottom. Replaces repeated inline card markup. */
+.feat-title { font-size: 30px; font-weight: 700; color: var(--blue-dk); line-height: 1.15; text-align: center; }
+.feat-sub   { font-size: 24px; font-weight: 600; color: var(--muted); line-height: 1.25; text-align: center; }
+.feat-eq    { border: 1.5px solid var(--blue-lt); border-radius: 8px; background: #fff; padding: 10px 18px; font-size: 30px; text-align: center; }
+.feat-desc  { font-size: 24px; color: var(--text); line-height: 1.32; text-align: center; }
+.feat-desc.muted { color: var(--muted); }
+.feat-attr  { margin-top: auto; font-size: 22px; color: var(--muted); font-style: italic; text-align: center; }
+.feat-attr.blue { color: var(--blue); font-weight: 500; }
+/* a line-art icon that grows to fill the free space in a card (kept centered) */
+.feat-svg { flex: 1 1 0; min-height: 0; width: 100%; display: flex; align-items: center; justify-content: center; }
+.reveal .feat-svg > svg { width: auto; height: 100%; max-width: 100%; max-height: 190px; }
+/* neutral (non-blue) card variant — e.g. the "other quantitative sciences" grid */
+.sfi-card.neutral { background: #FAFAFA; border-color: #E0E4EE; }

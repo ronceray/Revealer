@@ -291,9 +291,18 @@ def contentify(html: str) -> str:
                 index += 1
                 continue
 
-            card = re.match(r"^>\s*card(?:\s+(plain))?\s*(\+)?\s*(?::\s*(.*?))?\s*$", line)
+            card = re.match(r"^>\s*card\b(.*)$", line)
             if card:
-                current = {"frag": bool(card.group(2)), "plain": bool(card.group(1)), "bg": card.group(3), "content": []}
+                spec = card.group(1).strip()
+                bg = None
+                if ":" in spec:
+                    spec, bg = spec.split(":", 1)
+                    bg = bg.strip() or None
+                parts = spec.split()
+                cf, ca, parts = _frag_attrs(parts)  # + / +N fragment flag
+                plain = "plain" in parts
+                extra = [p for p in parts if p != "plain"]  # any other tokens = extra classes
+                current = {"frag": bool(cf), "fattr": ca, "plain": plain, "bg": bg, "classes": extra, "content": []}
                 cards.append(current)
                 index += 1
                 continue
@@ -325,10 +334,13 @@ def contentify(html: str) -> str:
             gap=_escape_style_value(gap),
         )
         for c in cards:
-            base = "sfi-cell" if c.get("plain") else "sfi-card"
-            cls = base + " fragment" if c["frag"] else base
+            cls = "sfi-cell" if c.get("plain") else "sfi-card"
+            if c.get("classes"):
+                cls += " " + " ".join(c["classes"])
+            if c["frag"]:
+                cls += " fragment"
             style = "background:{0};".format(_escape_style_value(c["bg"])) if c["bg"] else ""
-            out += '<div class="{cls}" style="{style}">'.format(cls=cls, style=style)
+            out += '<div class="{cls}" style="{style}"{fa}>'.format(cls=cls, style=style, fa=c.get("fattr", ""))
             out += contentify("\n".join(c["content"])) if c["content"] else ""
             out += "</div>"
         out += "</div></div>"
@@ -407,7 +419,17 @@ def contentify(html: str) -> str:
         """
         head = re.match(r"^>\s*row\b(.*)$", lines[start_index]).group(1).split()
         fcls, fattr, head = _frag_attrs(head)
-        gap = head[0] if head else "var(--gap-col)"
+        # optional fixed height (`h=460` / `h=460px`): pins the row's height so its
+        # content keeps the same size/position from one slide to the next
+        height = None
+        rest = []
+        for t in head:
+            m = re.match(r"^h=(\d+)(?:px)?$", t)
+            if m:
+                height = m.group(1) + "px"
+            else:
+                rest.append(t)
+        gap = rest[0] if rest else "var(--gap-col)"
 
         cells: list[dict] = []
         current = None
@@ -467,18 +489,19 @@ def contentify(html: str) -> str:
             )
             inner += contentify("\n".join(c["lines"])) if c["lines"] else ""
             inner += "</div>"
+        row_flex = "flex:0 0 {0};height:{0};".format(height) if height else "flex:1 1 auto;"
         out = (
-            '<div class="row{fcls}" style="flex:1 1 auto;min-height:0;align-items:stretch;'
+            '<div class="row{fcls}" style="{row_flex}min-height:0;align-items:stretch;'
             'gap:{gap};"{fattr}>{inner}</div>'
-        ).format(fcls=fcls, gap=_escape_style_value(gap), fattr=fattr, inner=inner)
+        ).format(fcls=fcls, row_flex=row_flex, gap=_escape_style_value(gap), fattr=fattr, inner=inner)
         return out, index
 
     def _parse_box(start_index: int, kind: str):
-        """Parse ``> info|warn [+[N]] [Title]`` … ``> end: info|warn`` → a callout box."""
-        head = re.match(r"^>\s*(?:info|warn)\b(.*)$", lines[start_index]).group(1).split()
+        """Parse ``> info|warn|good [+[N]] [Title]`` … ``> end: info|warn|good`` → a callout box."""
+        head = re.match(r"^>\s*(?:info|warn|good)\b(.*)$", lines[start_index]).group(1).split()
         fcls, fattr, head = _frag_attrs(head)
         title = " ".join(head).strip()
-        box_cls = "box-info" if kind == "info" else "box-warn"
+        box_cls = {"info": "box-info", "warn": "box-warn", "good": "box-good"}[kind]
         content = []
         index = start_index + 1
         while index < len(lines):
@@ -542,6 +565,57 @@ def contentify(html: str) -> str:
         out = '<div class="fragment"{attr}>{body}</div>'.format(attr=attr, body=body)
         return out, index
 
+    def _parse_stack(start_index: int):
+        """Parse ``> stack [h=NNN]`` … ``> layer [+[N]] [clear]`` … ``> end: stack``.
+
+        Renders a set of overlaid layers (all in one grid cell) that cross-fade
+        as fragments — replaces raw ``display:grid; grid-area:1/1`` image stacks.
+        A fragment layer is opaque (white) by default so revealing it hides the
+        one beneath; ``clear`` keeps it transparent (a see-through overlay such as
+        a binning grid). The base (non-fragment) layer is always transparent.
+        """
+        head = re.match(r"^>\s*stack\b(.*)$", lines[start_index]).group(1).split()
+        height = None
+        for t in head:
+            m = re.match(r"^h=(\d+)(?:px)?$", t)
+            if m:
+                height = m.group(1) + "px"
+        layers = []
+        current = None
+        index = start_index + 1
+        while index < len(lines):
+            line = lines[index]
+            if re.match(r"^>\s*end\s*:\s*stack\s*$", line):
+                index += 1
+                break
+            lm = re.match(r"^>\s*layer\b(.*)$", line)
+            if lm:
+                toks = lm.group(1).split()
+                cf, ca, toks = _frag_attrs(toks)
+                clear = "clear" in {t.lower() for t in toks}
+                current = {"fcls": cf, "fattr": ca, "clear": clear, "lines": []}
+                layers.append(current)
+                index += 1
+                continue
+            if current is None:
+                if not line.strip():
+                    index += 1
+                    continue
+                current = {"fcls": "", "fattr": "", "clear": False, "lines": []}
+                layers.append(current)
+            current["lines"].append(line)
+            index += 1
+        inner = ""
+        for ly in layers:
+            # opaque backdrop only on revealed (fragment) layers that aren't `clear`
+            opaque = " rv-opaque" if (ly["fcls"] and not ly["clear"]) else ""
+            inner += '<div class="rv-layer{fc}{op}"{fa}>'.format(fc=ly["fcls"], op=opaque, fa=ly["fattr"])
+            inner += contentify("\n".join(ly["lines"])) if ly["lines"] else ""
+            inner += "</div>"
+        style = "flex:0 0 {0};height:{0};".format(height) if height else "flex:1 1 0;"
+        out = '<div class="rv-stack" style="{st}">{inner}</div>'.format(st=style, inner=inner)
+        return out, index
+
     index = 0
     while index < len(lines):
         line = lines[index]
@@ -599,7 +673,7 @@ def contentify(html: str) -> str:
                 html += row_html
                 continue
 
-            box = re.match(r"^>\s*(info|warn)\b", line)
+            box = re.match(r"^>\s*(info|warn|good)\b", line)
             if box:
                 _close_lists()
                 box_html, index = _parse_box(index, box.group(1))
@@ -610,6 +684,12 @@ def contentify(html: str) -> str:
                 _close_lists()
                 eq_html, index = _parse_eq(index)
                 html += eq_html
+                continue
+
+            if re.match(r"^>\s*stack\b", line):
+                _close_lists()
+                stack_html, index = _parse_stack(index)
+                html += stack_html
                 continue
 
             if re.match(r"^>\s*frag\b", line):
@@ -957,7 +1037,7 @@ def build(pfile: str) -> str:
                 block_open = (
                     re.match(r"^>\s*(?:table|grid)\(\s*\d+\s*,\s*\d+\s*\)\s*(?:compact)?\s*$", line)
                     or re.match(r"^>\s*pin\s*:", line)
-                    or re.match(r"^>\s*(?:row|info|warn|eq|frag)\b", line)
+                    or re.match(r"^>\s*(?:row|info|warn|good|eq|frag|stack)\b", line)
                 )
                 block_close = re.match(r"^>\s*end\s*:\s*\w+\s*$", line)
                 if len(slide) and not notes and (block_depth > 0 or block_open):
