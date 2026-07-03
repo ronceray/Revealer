@@ -52,3 +52,58 @@
 }
 #rv-dev-error button:hover { background: #e6eaf2; }
 #rv-dev-error .rv-dev-hint { color: #888; font-size: 0.85em; }
+
+/* --- inspector (edit mode) ------------------------------------------------ */
+
+#rv-editor-layer {
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 9000;
+  font-family: system-ui, sans-serif;
+}
+#rv-editor-layer .rv-ed-outline {
+  position: fixed;
+  box-sizing: border-box;
+  border-radius: 3px;
+  pointer-events: none;
+}
+#rv-editor-layer .rv-ed-hover {
+  border: 1.5px dashed rgba(42, 118, 221, 0.75);
+  background: rgba(42, 118, 221, 0.06);
+}
+#rv-editor-layer .rv-ed-select {
+  border: 2px solid #2a76dd;
+  box-shadow: 0 0 0 3px rgba(42, 118, 221, 0.18);
+}
+#rv-editor-layer .rv-ed-bar {
+  position: fixed;
+  left: 50%;
+  bottom: 14px;
+  transform: translateX(-50%);
+  display: flex;
+  gap: 0.9em;
+  align-items: center;
+  background: #1c1c2e;
+  color: #fff;
+  padding: 0.45em 1em;
+  border-radius: 8px;
+  font-size: 14px;
+  box-shadow: 0 6px 24px rgba(0, 0, 0, 0.35);
+  pointer-events: auto;
+}
+#rv-editor-layer .rv-ed-kind { font-weight: 700; }
+#rv-editor-layer .rv-ed-line { color: #9db7e8; font-family: monospace; }
+#rv-editor-layer .rv-ed-open {
+  font: inherit;
+  font-size: 13px;
+  padding: 0.2em 0.7em;
+  border-radius: 5px;
+  border: 1px solid #4a5580;
+  background: #2a3350;
+  color: #fff;
+  cursor: pointer;
+}
+#rv-editor-layer .rv-ed-open:hover { background: #37436b; }
+#rv-editor-layer .rv-ed-hint { color: #8a93b5; font-size: 12px; }
+html.rv-edit .reveal .slides section * { cursor: crosshair; }

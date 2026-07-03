@@ -93,6 +93,190 @@
     });
   }
 
+  /* --- inspector: edit mode, picking, breadcrumb --------------------------- */
+
+  var edit = {
+    on: false,
+    sel: null,          // selected [data-rv-src] element
+    hover: null,        // hovered [data-rv-src] element
+    keyboardWas: null,  // reveal keyboard config to restore
+  };
+
+  function layer() {
+    var el = document.getElementById('rv-editor-layer');
+    if (!el) {
+      el = document.createElement('div');
+      el.id = 'rv-editor-layer';
+      el.innerHTML =
+        '<div class="rv-ed-outline rv-ed-hover" hidden></div>' +
+        '<div class="rv-ed-outline rv-ed-select" hidden></div>' +
+        '<div class="rv-ed-bar" hidden>' +
+        '<span class="rv-ed-kind"></span>' +
+        '<span class="rv-ed-line"></span>' +
+        '<button class="rv-ed-open" title="Open the .pres at this line">Open in editor</button>' +
+        '<span class="rv-ed-hint">click: select · Esc: parent / exit · E: exit</span>' +
+        '</div>';
+      document.body.appendChild(el);
+      el.querySelector('.rv-ed-open').addEventListener('click', function () {
+        if (!edit.sel) return;
+        fetch('/__rv__/open?line=' + encodeURIComponent(edit.sel.getAttribute('data-rv-src')),
+              { headers: { 'X-RV-Token': TOKEN } });
+      });
+    }
+    return el;
+  }
+
+  // Friendly names for the DSL constructs, from their emitted classes.
+  var KINDS = [
+    ['rv-pin', 'pin'], ['rv-stack', 'stack'], ['rv-layer', 'layer'],
+    ['rv-grid-wrap', 'grid'], ['rv-card', 'card'], ['rv-cell', 'card (plain)'],
+    ['box-info', 'info box'], ['box-warn', 'warn box'], ['box-good', 'good box'],
+    ['math-box', 'equation'], ['rv-table-wrap', 'table'], ['rv-table-cell', 'table cell'],
+    ['rv-fig', 'figure'], ['rv-media-fill', 'media'], ['rv-media', 'media'],
+    ['region', 'column'], ['row', 'row'], ['rv-paragraph', 'paragraph'],
+    ['column', 'text column'], ['fragment', 'fragment'],
+  ];
+
+  function kindOf(el) {
+    var cls = ' ' + el.className + ' ';
+    for (var i = 0; i < KINDS.length; i++) {
+      if (cls.indexOf(' ' + KINDS[i][0] + ' ') !== -1 || cls.indexOf(' ' + KINDS[i][0]) !== -1) {
+        return KINDS[i][1];
+      }
+    }
+    return el.tagName === 'SECTION' ? 'slide' : el.tagName.toLowerCase();
+  }
+
+  function placeOutline(box, el) {
+    if (!el || !document.contains(el)) { box.hidden = true; return; }
+    var r = el.getBoundingClientRect();
+    box.style.left = r.left + 'px';
+    box.style.top = r.top + 'px';
+    box.style.width = r.width + 'px';
+    box.style.height = r.height + 'px';
+    box.hidden = false;
+  }
+
+  function syncChrome() {
+    if (!edit.on) return;
+    var el = layer();
+    placeOutline(el.querySelector('.rv-ed-hover'), edit.hover !== edit.sel ? edit.hover : null);
+    placeOutline(el.querySelector('.rv-ed-select'), edit.sel);
+    var bar = el.querySelector('.rv-ed-bar');
+    if (edit.sel && document.contains(edit.sel)) {
+      var s = edit.sel.getAttribute('data-rv-src');
+      var e = edit.sel.getAttribute('data-rv-src-end');
+      el.querySelector('.rv-ed-kind').textContent = kindOf(edit.sel);
+      el.querySelector('.rv-ed-line').textContent =
+        '.pres:' + s + (e ? '–' + e : '');
+      bar.hidden = false;
+    } else {
+      bar.hidden = true;
+    }
+  }
+
+  function pickable(target) {
+    if (!target || !target.closest) return null;
+    var el = target.closest('[data-rv-src]');
+    var slide = window.Reveal && Reveal.getCurrentSlide && Reveal.getCurrentSlide();
+    if (el && slide && !slide.contains(el) && el.tagName !== 'SECTION') return null;
+    return el;
+  }
+
+  function onMove(ev) {
+    edit.hover = pickable(ev.target);
+    syncChrome();
+  }
+
+  function onClick(ev) {
+    var el = pickable(ev.target);
+    if (!el) return;
+    ev.preventDefault();
+    ev.stopPropagation();
+    edit.sel = el;
+    syncChrome();
+  }
+
+  function selectParent() {
+    if (!edit.sel) { setEdit(false); return; }
+    var parent = edit.sel.parentElement && edit.sel.parentElement.closest('[data-rv-src]');
+    edit.sel = parent || null;
+    syncChrome();
+  }
+
+  function setEdit(on) {
+    if (on === edit.on) return;
+    edit.on = on;
+    var el = layer();
+    document.documentElement.classList.toggle('rv-edit', on);
+    if (on) {
+      if (window.Reveal && Reveal.getConfig) {
+        edit.keyboardWas = Reveal.getConfig().keyboard;
+        Reveal.configure({ keyboard: false });
+      }
+      document.addEventListener('mousemove', onMove, true);
+      document.addEventListener('click', onClick, true);
+    } else {
+      if (window.Reveal && edit.keyboardWas !== null) {
+        Reveal.configure({ keyboard: edit.keyboardWas });
+        edit.keyboardWas = null;
+      }
+      document.removeEventListener('mousemove', onMove, true);
+      document.removeEventListener('click', onClick, true);
+      edit.sel = edit.hover = null;
+      el.querySelectorAll('.rv-ed-outline').forEach(function (b) { b.hidden = true; });
+      el.querySelector('.rv-ed-bar').hidden = true;
+    }
+    syncChrome();
+  }
+
+  document.addEventListener('keydown', function (ev) {
+    var t = ev.target;
+    if (t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.isContentEditable)) return;
+    if (ev.key === 'e' && !ev.ctrlKey && !ev.metaKey && !ev.altKey) {
+      setEdit(!edit.on);
+      ev.preventDefault();
+    } else if (edit.on && ev.key === 'Escape') {
+      selectParent();
+      ev.preventDefault();
+      ev.stopPropagation();
+    }
+  }, true);
+
+  // Keep the chrome glued to its targets across fits, slides and resizes.
+  function hookFit() {
+    if (typeof window.fitSlide === 'function' && !window.fitSlide.__rvWrapped) {
+      var orig = window.fitSlide;
+      var wrapped = function (s) { orig(s); syncChrome(); };
+      wrapped.__rvWrapped = true;
+      window.fitSlide = wrapped;
+    }
+  }
+  hookFit();
+  window.addEventListener('load', hookFit);
+  window.addEventListener('resize', syncChrome);
+  if (window.Reveal && Reveal.on) {
+    Reveal.on('slidechanged', function () { edit.sel = edit.hover = null; syncChrome(); });
+  }
+
+  // Debug/testing hook: ?rv-edit=1 auto-enters edit mode (and selects the
+  // first annotated element on the current slide with ?rv-select=1).
+  var params = new URLSearchParams(location.search);
+  if (params.get('rv-edit') === '1') {
+    var arm = function () {
+      setEdit(true);
+      if (params.get('rv-select') === '1') {
+        var slide = Reveal.getCurrentSlide();
+        edit.sel = slide && slide.querySelector('[data-rv-src]');
+        syncChrome();
+      }
+    };
+    if (window.Reveal && Reveal.on) {
+      if (Reveal.isReady && Reveal.isReady()) setTimeout(arm, 100);
+      else Reveal.on('ready', function () { setTimeout(arm, 100); });
+    }
+  }
+
   function connect() {
     var es = new EventSource('/__rv__/events?token=' + encodeURIComponent(TOKEN));
     es.onmessage = function (msg) {
