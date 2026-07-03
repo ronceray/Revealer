@@ -126,6 +126,22 @@ the current reveal.js version and plugin set.
 Generate the HTML presentation from a `.pres` file. This is the command used by
 the VS Code *Run on save* integration.
 
+### `revealer pdf [TARGET]`
+
+Export a presentation to PDF, one page per slide with every fragment visible.
+`TARGET` may be a `.pres` file or its folder; `--out` / `-o` sets the output
+path (default: next to the `.pres`).
+
+```bash
+revealer pdf MyTalk               # -> MyTalk/MyTalk.pdf
+revealer pdf MyTalk -o slides.pdf
+```
+
+The export drives a headless Chrome/Chromium (it must be installed, along with
+the `img2pdf` command); each slide is captured at the presentation resolution
+and the pages are assembled losslessly. This avoids the blank pages produced by
+the stock reveal.js `?print-pdf` route with Revealer's fitted layout.
+
 ## How updating works
 
 reveal.js and its plugins are **not** bundled inside the repository. Instead,
