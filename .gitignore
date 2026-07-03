@@ -12,3 +12,4 @@ __pycache__/
 
 # Sphinx documentation build
 Documentation/_build/
+*.dev.html

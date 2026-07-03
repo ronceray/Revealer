@@ -103,7 +103,27 @@ pip install --editable .
 :::
 ```
 
+## Live editing loop
+
+The built-in development server gives a save-and-see loop with no extra
+tooling:
+
+```bash
+revealer serve MyTalk
+```
+
+It builds the presentation, opens it in your browser, then watches the
+`.pres` file (and the deck's media, `.bib` and `.svg` files): every save
+rebuilds and reloads the browser in place, preserving the slide and fragment
+you were on. If a build fails, the browser shows the error (with an *open in
+editor* button) and keeps displaying the last good version until the next
+save. The served copy is a separate `<name>.dev.html` artifact — the exported
+`<name>.html` is only written by `revealer build`.
+
 ## VS Code integration
+
+`revealer serve` replaces the extension-based loop below; keep it if you
+prefer the exported `.html` to refresh on every save.
 
 Revealer pairs well with two VS Code extensions for a fast, near-WYSIWYG loop.
 

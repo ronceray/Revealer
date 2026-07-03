@@ -126,6 +126,25 @@ the current reveal.js version and plugin set.
 Generate the HTML presentation from a `.pres` file. This is the command used by
 the VS Code *Run on save* integration.
 
+### `revealer serve [TARGET]`
+
+Serve a presentation with rebuild-on-save and live browser reload. `TARGET`
+may be a `.pres` file or its folder; `--port` / `-p` picks the port (default
+8000, auto-incremented if busy) and `--no-open` skips launching the browser.
+
+```bash
+revealer serve MyTalk            # build, open, watch
+revealer serve MyTalk -p 9000    # explicit port
+```
+
+While the server runs, every save of the `.pres` (or of the deck's media,
+`.bib`, `.svg` files) rebuilds and reloads the browser in place, keeping the
+current slide and fragment. Build errors appear as an overlay in the browser
+— with an *open in editor* button (uses `$REVEALER_EDITOR`, VS Code's `code
+-g`, or `$EDITOR`) — while the last good version keeps being served. The
+server binds to `127.0.0.1` only and serves a separate `<name>.dev.html`
+artifact, deleted on exit; the exported `<name>.html` is not touched.
+
 ### `revealer pdf [TARGET]`
 
 Export a presentation to PDF, one page per slide with every fragment visible.

@@ -245,6 +245,10 @@ def inject_revealer_assets(reveal_dir: str) -> None:
     js_dest = reveal / "js"
     js_dest.mkdir(parents=True, exist_ok=True)
     for js in (DATA / "js").glob("*.js"):
+        # editor.* are dev-server-only assets (served by `revealer serve`);
+        # they must never ship inside a deck's reveal.js folder.
+        if js.name.startswith("editor"):
+            continue
         shutil.copyfile(js, js_dest / js.name)
 
     theme_dest = reveal / "dist" / "theme"

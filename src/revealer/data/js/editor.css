@@ -1,0 +1,54 @@
+/* Revealer dev-mode styles — served only by `revealer serve`. */
+
+#rv-dev-error {
+  position: fixed;
+  inset: 0;
+  display: none;
+  align-items: center;
+  justify-content: center;
+  background: rgba(15, 15, 25, 0.55);
+  z-index: 10000;
+  font-family: system-ui, sans-serif;
+}
+#rv-dev-error .rv-dev-error-box {
+  background: #fff;
+  color: #1c1c2e;
+  max-width: min(60em, 85vw);
+  max-height: 80vh;
+  overflow: auto;
+  border-radius: 10px;
+  border-top: 6px solid #c75038;
+  padding: 1.2em 1.5em;
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.35);
+}
+#rv-dev-error .rv-dev-error-title {
+  font-size: 1.2em;
+  font-weight: 700;
+  color: #c75038;
+  margin-bottom: 0.5em;
+}
+#rv-dev-error pre {
+  white-space: pre-wrap;
+  font-size: 0.8em;
+  background: #f7f7f9;
+  border-radius: 6px;
+  padding: 0.7em;
+  margin: 0.4em 0;
+}
+#rv-dev-error .rv-dev-error-tb { color: #666; max-height: 14em; overflow: auto; }
+#rv-dev-error .rv-dev-error-actions {
+  display: flex;
+  gap: 1em;
+  align-items: center;
+  margin-top: 0.6em;
+}
+#rv-dev-error button {
+  font: inherit;
+  padding: 0.35em 0.9em;
+  border-radius: 6px;
+  border: 1px solid #bbb;
+  background: #f2f4f8;
+  cursor: pointer;
+}
+#rv-dev-error button:hover { background: #e6eaf2; }
+#rv-dev-error .rv-dev-hint { color: #888; font-size: 0.85em; }

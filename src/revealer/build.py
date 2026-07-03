@@ -16,6 +16,8 @@ It also adds inline SVG animation driven from the ``.pres`` file (see
 
 from __future__ import annotations
 
+import hashlib
+import io
 import os
 import re
 from pathlib import Path
@@ -1358,10 +1360,24 @@ def _media_shortcut(kind: str, rest: str) -> str:
     return '<figure class="{0}"{1}>{2}{3}</figure>'.format(fig_cls, frag_attr, vid, cap_html)
 
 
-def build(pfile: str) -> str:
+def _read_pres(pfile: str) -> tuple[str, str]:
+    """Read a ``.pres`` file once; return ``(text, sha256-hex of its bytes)``.
+
+    The hash is computed on the exact bytes the parser consumes, so a source
+    map derived from this text is valid exactly as long as the hash matches.
+    """
+    data = Path(pfile).read_bytes()
+    return data.decode("utf-8"), hashlib.sha256(data).hexdigest()
+
+
+def build(pfile: str, dev: bool = False) -> str:
     """Build the HTML presentation associated with ``pfile``.
 
-    Returns the path of the generated ``.html`` file.
+    Returns the path of the generated ``.html`` file. With ``dev=True`` the
+    output is written to ``<stem>.dev.html`` instead (same folder, so relative
+    ``reveal.js/`` and media paths keep working) and the ``<head>`` carries
+    ``rv-src-file`` / ``rv-src-sha`` meta tags identifying the source the
+    build was made from; the exported ``<stem>.html`` is never touched.
     """
 
     pfile = os.path.abspath(pfile)
@@ -1393,7 +1409,9 @@ def build(pfile: str) -> str:
     table_mode = False
     block_depth = 0
 
-    with open(pfile, "r") as fid:
+    pres_text, pres_sha = _read_pres(pfile)
+
+    with io.StringIO(pres_text) as fid:
         for line in fid:
 
             if line.startswith("#"):
@@ -1916,7 +1934,21 @@ def build(pfile: str) -> str:
 
     # --- Export
 
-    ofile = os.path.join(pdir, os.path.splitext(os.path.basename(pfile))[0] + ".html")
+    stem = os.path.splitext(os.path.basename(pfile))[0]
+    if dev:
+        # Dev builds are separate artifacts (same folder, so relative paths
+        # keep working); the <head> identifies the exact source they were
+        # built from, for the dev server's optimistic-concurrency checks.
+        meta = (
+            '<meta name="rv-src-file" content="{0}">\n'
+            '<meta name="rv-src-sha" content="{1}">\n'.format(
+                _escape_attr(os.path.basename(pfile)), pres_sha
+            )
+        )
+        out = out.replace("</head>", meta + "</head>", 1)
+        ofile = os.path.join(pdir, stem + ".dev.html")
+    else:
+        ofile = os.path.join(pdir, stem + ".html")
     with open(ofile, "w") as fid:
         fid.write(out)
 

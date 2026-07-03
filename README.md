@@ -32,15 +32,17 @@ revealer new MyTalk             # scaffold a folder + reveal.js + MyTalk.pres
 revealer build MyTalk           # generate the HTML
 ```
 
-Other commands: `revealer open`, `revealer pdf`, `revealer select`,
-`revealer list`, `revealer plugins`, `revealer update [--force]`. See the
+Other commands: `revealer serve` (live reload while you edit), `revealer open`,
+`revealer pdf`, `revealer select`, `revealer list`, `revealer plugins`,
+`revealer update [--force]`. See the
 [CLI documentation](https://candelierlab.github.io/Revealer/cli.html).
 
-## VS Code workflow
+## Live editing
 
-With the `Run on save` and `Live Server` extensions, saving a `.pres` file
-rebuilds the presentation and the browser reloads it live. Configure *Run on
-save* to run `revealer build '${file}'`; see the
+`revealer serve MyTalk` builds the deck, opens it in your browser, and then
+rebuilds + reloads on every save — keeping your place, and showing build
+errors in an overlay. No editor extensions needed; a VS Code-based loop is
+also described in the
 [installation guide](https://candelierlab.github.io/Revealer/installation.html).
 
 ## A `.pres` file at a glance

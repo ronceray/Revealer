@@ -248,6 +248,19 @@ def _menu_open() -> None:
     _action_open(str(pdir))
 
 
+def _menu_serve() -> None:
+    pdir = _browse_for_pres()
+    if pdir is None:
+        return
+    pres = _find_pres(Path(pdir))
+    if pres is None:
+        console.print("[red]No .pres file found in {0}.[/red]".format(pdir))
+        return
+    config.add_recent(Path(pdir))
+    from . import serve as serve_mod
+    serve_mod.serve(pres, log=console.print)
+
+
 def _menu_new() -> None:
     name = questionary.text("Name of the new presentation:").ask()
     if not name:
@@ -276,6 +289,7 @@ def interactive_menu() -> None:
 
     actions = {
         "open": ("Load a presentation (open a .pres in the browser)", _menu_open),
+        "serve": ("Serve a presentation (live reload while you edit)", _menu_serve),
         "build": ("Build a presentation", _menu_build),
         "new": ("Create a new presentation", _menu_new),
         "plugins": ("Manage extensions", lambda: _action_plugins(None)),
@@ -383,6 +397,27 @@ def build(target: str = typer.Argument(None, help="Presentation folder or .pres 
             console.print("[red]No .pres file found.[/red]")
             raise typer.Exit(1)
     _action_build(pres)
+
+
+@app.command()
+def serve(
+    target: str = typer.Argument(None, help="Presentation folder or .pres file."),
+    port: int = typer.Option(8000, "--port", "-p", help="Port to listen on."),
+    no_open: bool = typer.Option(False, "--no-open", help="Don't open the browser."),
+):
+    """Serve a presentation with rebuild-on-save and live browser reload."""
+
+    if target and Path(target).suffix == ".pres":
+        pres = Path(target).expanduser().resolve()
+    else:
+        pdir = _resolve_pres_dir(target)
+        pres = _find_pres(pdir)
+        if pres is None:
+            console.print("[red]No .pres file found.[/red]")
+            raise typer.Exit(1)
+    config.add_recent(pres.parent)
+    from . import serve as serve_mod
+    serve_mod.serve(pres, port=port, open_browser=not no_open, log=console.print)
 
 
 @app.command()
