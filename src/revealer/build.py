@@ -718,14 +718,14 @@ def _contentify_legacy(html: str) -> str:
             current["content"].append(line)
             index += 1
 
-        wrap_cls = "sfi-grid-wrap compact" if compact else "sfi-grid-wrap"
+        wrap_cls = "rv-grid-wrap compact" if compact else "rv-grid-wrap"
         row_tmpl = "auto" if compact else "minmax(0,1fr)"
         out = (
             "<style>"
-            ".rv-content-inner:has(> .sfi-grid-wrap){{height:100%;}}"
+            ".rv-content-inner:has(> .rv-grid-wrap){{height:100%;}}"
             "</style>"
             '<div class="{wrap_cls}" style="padding:{margin};">'
-            '<div class="sfi-grid" style="grid-template-columns:repeat({cols},minmax(0,1fr));'
+            '<div class="rv-grid" style="grid-template-columns:repeat({cols},minmax(0,1fr));'
             'grid-template-rows:repeat({rows},{row_tmpl});gap:{gap};">'
         ).format(
             wrap_cls=wrap_cls,
@@ -736,7 +736,7 @@ def _contentify_legacy(html: str) -> str:
             gap=_escape_style_value(gap),
         )
         for c in cards:
-            cls = "sfi-cell" if c.get("plain") else "sfi-card"
+            cls = "rv-cell" if c.get("plain") else "rv-card"
             if c.get("classes"):
                 cls += " " + " ".join(c["classes"])
             if c["frag"]:
@@ -777,7 +777,7 @@ def _contentify_legacy(html: str) -> str:
         style = "left:{x};top:{y};".format(x=_escape_style_value(x), y=_escape_style_value(y))
         if w:
             style += "width:{w};".format(w=_escape_style_value(w))
-        cls = "sfi-pin fragment" if frag else "sfi-pin"
+        cls = "rv-pin fragment" if frag else "rv-pin"
         out = '<div class="{cls}" style="{style}">'.format(cls=cls, style=style)
         out += _contentify_legacy("\n".join(content)) if content else ""
         out += "</div>"
