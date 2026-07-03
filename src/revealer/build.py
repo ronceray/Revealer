@@ -222,6 +222,63 @@ def _is_truthy(value: str) -> bool:
     return value.strip().lower() in {"true", "yes", "1", "on"}
 
 
+# --- Source provenance --------------------------------------------------------
+#
+# Every line list flowing through the content pipeline is accompanied by a
+# parallel "source map": a list of 1-based `.pres` line numbers (or None for
+# synthetic lines) with the same indices. The map is threaded unconditionally
+# so there is a single code path; only the *emission* of `data-rv-src`
+# attributes is gated on dev builds (see `build(dev=True)`), which keeps
+# normal builds byte-identical.
+
+_DEV = False
+
+
+def _src_attr(start: int | None, end: int | None = None) -> str:
+    """The dev-only provenance attribute(s) for an emitted element."""
+    if not _DEV or start is None:
+        return ""
+    out = ' data-rv-src="{0}"'.format(start)
+    if end is not None and end != start:
+        out += ' data-rv-src-end="{0}"'.format(end)
+    return out
+
+
+def _nosrc(lines: list) -> list:
+    return [None] * len(lines)
+
+
+def _trim_empty_edges(lines: list, src: list) -> tuple[list, list]:
+    """Drop empty edge lines — the lockstep twin of ``text.strip("\\n")``."""
+    start, end = 0, len(lines)
+    while start < end and lines[start] == "":
+        start += 1
+    while end > start and lines[end - 1] == "":
+        end -= 1
+    return lines[start:end], src[start:end]
+
+
+def _trim_ws_edges(lines: list, src: list) -> tuple[list, list]:
+    """The lockstep twin of ``"\\n".join(lines).strip().split("\\n")``.
+
+    Whitespace-only edge lines are dropped, and the first / last surviving
+    lines are lstripped / rstripped, exactly like ``str.strip()`` acting on
+    the joined text. Degenerate all-whitespace input yields ``([""], [None])``
+    to mirror ``"".split("\\n") == [""]``.
+    """
+    start, end = 0, len(lines)
+    while start < end and lines[start].strip() == "":
+        start += 1
+    while end > start and lines[end - 1].strip() == "":
+        end -= 1
+    if start == end:
+        return [""], [None]
+    out = list(lines[start:end])
+    out[0] = out[0].lstrip()
+    out[-1] = out[-1].rstrip()
+    return out, src[start:end]
+
+
 # --- Block / paragraph model ------------------------------------------------
 #
 # A slide's (or column's) content is organised as blocks (columns) laid out
@@ -267,14 +324,19 @@ def _norm_align(value):
     return None
 
 
-def _split_into_blocks(lines):
+def _split_into_blocks(lines, src=None):
     """Split content lines into blocks on ``||`` / ``|`` separators.
 
     Returns ``(preamble_lines, blocks)`` where each block is a dict with
-    ``lines`` and an optional ``width``. Code blocks (``@@``) and tables are
-    kept atomic so separators inside them are ignored.
+    ``lines``, a parallel source map ``src``, the line number of the ``||`` /
+    ``|`` separator that opened it (``sep``), and an optional ``width``. Code
+    blocks (``@@``) and tables are kept atomic so separators inside them are
+    ignored.
     """
+    if src is None:
+        src = _nosrc(lines)
     preamble = []
+    preamble_src = []
     blocks = []
     current = None
     in_code = False
@@ -282,43 +344,48 @@ def _split_into_blocks(lines):
     macro_depth = 0
     started = False
 
-    def target():
-        return current["lines"] if current is not None else preamble
+    def emit(line, ln):
+        if current is not None:
+            current["lines"].append(line)
+            current["src"].append(ln)
+        else:
+            preamble.append(line)
+            preamble_src.append(ln)
 
-    for line in lines:
+    for line, ln in zip(lines, src):
         stripped = line.strip()
 
         if stripped.startswith("@@"):
             in_code = not in_code
-            target().append(line)
+            emit(line, ln)
             continue
         if in_code:
-            target().append(line)
+            emit(line, ln)
             continue
         if _TABLE_OPEN_RE.match(stripped):
             in_table = True
-            target().append(line)
+            emit(line, ln)
             continue
         if in_table:
-            target().append(line)
+            emit(line, ln)
             if _TABLE_END_RE.match(stripped):
                 in_table = False
             continue
         if _MACRO_OPEN_RE.match(stripped):
             macro_depth += 1
-            target().append(line)
+            emit(line, ln)
             continue
         if macro_depth > 0:
             if _BLOCK_END_RE.match(stripped):
                 macro_depth -= 1
-            target().append(line)
+            emit(line, ln)
             continue
 
         if stripped.startswith("||"):
             width = stripped[2:].strip() or None
             if not started:
                 started = True
-                current = {"lines": [], "width": width}
+                current = {"lines": [], "src": [], "sep": ln, "width": width}
             else:
                 if current is not None:
                     blocks.append(current)
@@ -328,92 +395,98 @@ def _split_into_blocks(lines):
             width = stripped[1:].strip() or None
             if current is not None:
                 blocks.append(current)
-            current = {"lines": [], "width": width}
+            current = {"lines": [], "src": [], "sep": ln, "width": width}
             continue
 
-        target().append(line)
+        emit(line, ln)
 
     if current is not None:
         blocks.append(current)
 
     if not blocks:
-        blocks = [{"lines": preamble, "width": None}]
+        blocks = [{"lines": preamble, "src": preamble_src, "sep": None, "width": None}]
         preamble = []
 
     return preamble, blocks
 
 
-def _split_into_paragraphs(lines):
+def _split_into_paragraphs(lines, src=None):
     """Split block lines into paragraphs on blank lines.
 
-    Returns a list of ``{"directives": [(key, value)...], "body": [lines...]}``.
-    Leading ``size`` / ``align`` / ``paragraph-spacing`` directives are attached
-    to the paragraph; a paragraph with directives but no body sets block-scope
-    defaults. Code blocks and tables are kept atomic.
+    Returns a list of ``{"directives": [(key, value)...], "body": [lines...],
+    "body_src": [linenos...]}``. Leading ``size`` / ``align`` /
+    ``paragraph-spacing`` directives are attached to the paragraph; a
+    paragraph with directives but no body sets block-scope defaults. Code
+    blocks and tables are kept atomic.
     """
+    if src is None:
+        src = _nosrc(lines)
     groups = []
     current = []
+
     in_code = False
     in_table = False
     macro_depth = 0
 
     def flush():
         nonlocal current
-        if any(item.strip() for item in current):
+        if any(item.strip() for item, _ln in current):
             groups.append(current)
         current = []
 
-    for line in lines:
+    for line, ln in zip(lines, src):
         stripped = line.strip()
         if stripped.startswith("@@"):
             in_code = not in_code
-            current.append(line)
+            current.append((line, ln))
             continue
         if in_code:
-            current.append(line)
+            current.append((line, ln))
             continue
         if _TABLE_OPEN_RE.match(stripped):
             in_table = True
-            current.append(line)
+            current.append((line, ln))
             continue
         if in_table:
-            current.append(line)
+            current.append((line, ln))
             if _TABLE_END_RE.match(stripped):
                 in_table = False
             continue
         if _MACRO_OPEN_RE.match(stripped):
             macro_depth += 1
-            current.append(line)
+            current.append((line, ln))
             continue
         if macro_depth > 0:
             if _BLOCK_END_RE.match(stripped):
                 macro_depth -= 1
-            current.append(line)
+            current.append((line, ln))
             continue
         if stripped == "":
             flush()
             continue
-        current.append(line)
+        current.append((line, ln))
     flush()
 
     paragraphs = []
     for group in groups:
         directives = []
         body = []
-        for line in group:
+        body_src = []
+        for line, ln in group:
             match = _SCOPED_DIRECTIVE_RE.match(line.strip())
             if match and not body:
                 key = match.group(1).replace("_", "-")
                 directives.append((key, match.group(2).strip()))
             else:
                 body.append(line)
-        paragraphs.append({"directives": directives, "body": body})
+                body_src.append(ln)
+        paragraphs.append({"directives": directives, "body": body, "body_src": body_src})
     return paragraphs
 
 
 def _render_block(block, base_size, base_align, base_spacing):
     """Render one block (column) into a ``.column`` div of ``.rv-paragraph``."""
-    paragraphs = _split_into_paragraphs(block["lines"])
+    paragraphs = _split_into_paragraphs(block["lines"], block.get("src"))
 
     block_size = base_size
     block_align = base_align
@@ -440,43 +513,60 @@ def _render_block(block, base_size, base_align, base_spacing):
             elif key == "align":
                 para_align = _norm_align(value) or para_align
 
-        body_html = _contentify_legacy("\n".join(para["body"]))
+        body_html = _contentify_legacy("\n".join(para["body"]), src=para["body_src"])
         styles = []
         if abs(para_size - 1.0) > 1e-6:
             styles.append("font-size:{:.4f}em".format(para_size))
         if para_align:
             styles.append("text-align:{}".format(para_align))
         attr = ' style="{}"'.format(";".join(styles)) if styles else ""
+        para_lns = [ln for ln in para["body_src"] if ln is not None]
+        attr += _src_attr(para_lns[0] if para_lns else None,
+                          para_lns[-1] if para_lns else None)
         rendered.append('<div class="rv-paragraph"{}>{}</div>'.format(attr, body_html))
 
     col_styles = ["--rv-para-spacing:{:.3f}".format(block_spacing)]
     if block.get("width"):
         col_styles.append("flex-basis:{}".format(_escape_attr(block["width"])))
-    return '<div class="column" style="{}">{}</div>'.format(
-        ";".join(col_styles), "".join(rendered)
+    blk_lns = [ln for ln in block.get("src", []) if ln is not None]
+    blk_attr = _src_attr(
+        block.get("sep") if block.get("sep") is not None else (blk_lns[0] if blk_lns else None),
+        blk_lns[-1] if blk_lns else None,
+    )
+    return '<div class="column" style="{}"{}>{}</div>'.format(
+        ";".join(col_styles), blk_attr, "".join(rendered)
     )
 
 
-def contentify(html, base_size=1.0, base_align=None, paragraph_spacing=0.5, fill=False):
+def contentify(html, base_size=1.0, base_align=None, paragraph_spacing=0.5, fill=False, src=None):
     """Convert Revealer content into blocks and paragraphs.
 
     ``base_size`` / ``base_align`` / ``paragraph_spacing`` are the inherited
     presentation-scope defaults. The content is split into blocks (columns) and
     paragraphs; ``size`` and ``align`` directives resolve to slide, block or
-    paragraph scope depending on their position.
+    paragraph scope depending on their position. ``src`` is the parallel
+    source map of ``html``'s lines (see the provenance section above).
     """
-    text = (html or "").strip("\n")
-    if not text.strip():
+    all_lines = (html or "").split("\n")
+    if src is None:
+        src = _nosrc(all_lines)
+    else:
+        # `html` was accumulated line-by-line (each ending in "\n"), so the
+        # split carries one trailing "" beyond the map.
+        if len(all_lines) == len(src) + 1 and all_lines[-1] == "":
+            all_lines = all_lines[:-1]
+        assert len(all_lines) == len(src), (len(all_lines), len(src))
+    lines, src = _trim_empty_edges(all_lines, src)
+    if not any(line.strip() for line in lines):
         return ""
 
     if fill:
         # `> fill` slides use the flex layout DSL (rows / cols / stacks): render
         # the whole body with the line renderer, without block / paragraph
         # wrappers, so the flex chain resolves heights against the canvas.
-        return _contentify_legacy(text)
+        return _contentify_legacy("\n".join(lines), src=src)
 
-    lines = text.split("\n")
-    preamble, blocks = _split_into_blocks(lines)
+    preamble, blocks = _split_into_blocks(lines, src)
 
     slide_size = base_size
     slide_align = base_align
@@ -499,15 +589,20 @@ def contentify(html, base_size=1.0, base_align=None, paragraph_spacing=0.5, fill
     return '<div class="multi-column">{}</div>'.format(columns)
 
 
-def _contentify_legacy(html: str) -> str:
+def _contentify_legacy(html: str, src: list | None = None) -> str:
     """Render a paragraph body (lists, code, tables, highlight, raw HTML).
 
     This is the historical per-line renderer. It is now used to render the body
     of each paragraph produced by :func:`contentify`, which handles the block
-    (column) and paragraph structure on top of it.
+    (column) and paragraph structure on top of it. ``src`` is the parallel
+    source map of ``html``'s lines.
     """
 
-    lines = html.strip().split("\n")
+    raw_lines = html.split("\n")
+    if src is None:
+        src = _nosrc(raw_lines)
+    assert len(raw_lines) == len(src), (len(raw_lines), len(src))
+    lines, src = _trim_ws_edges(raw_lines, src)
     html = ""
     codemode = False
     colmode = False
@@ -592,6 +687,8 @@ def _contentify_legacy(html: str) -> str:
                 "column": current_column,
                 "background": background or "transparent",
                 "content": [],
+                "src": [],
+                "head": src[index],
             }
             cells.append(current_cell)
 
@@ -629,6 +726,7 @@ def _contentify_legacy(html: str) -> str:
             if current_cell is None:
                 start_cell(None)
             current_cell["content"].append(line)
+            current_cell["src"].append(src[index])
             index += 1
 
         table_classes = "rv-table bordered" if border else "rv-table"
@@ -650,6 +748,12 @@ def _contentify_legacy(html: str) -> str:
             cols=column_count,
             rows=row_count,
         )
+        out = out.replace(
+            '<div class="rv-table-wrap" style=',
+            '<div class="rv-table-wrap"{0} style='.format(
+                _src_attr(src[start_index], src[index - 1])),
+            1,
+        )
         for cell in cells:
             style = (
                 "grid-row:{row};grid-column:{column};background:{background};"
@@ -658,8 +762,11 @@ def _contentify_legacy(html: str) -> str:
                 column=cell["column"],
                 background=_escape_style_value(cell["background"]),
             )
-            out += '<div class="rv-table-cell" style="{style}"><div>'.format(style=style)
-            out += _contentify_legacy("\n".join(cell["content"])) if cell["content"] else ""
+            cell_lns = [ln for ln in cell["src"] if ln is not None]
+            cell_attr = _src_attr(cell.get("head"), cell_lns[-1] if cell_lns else None)
+            out += '<div class="rv-table-cell"{attr} style="{style}"><div>'.format(
+                attr=cell_attr, style=style)
+            out += _contentify_legacy("\n".join(cell["content"]), src=cell["src"]) if cell["content"] else ""
             out += "</div></div>"
         out += "</div></div>"
         return out, index
@@ -706,7 +813,8 @@ def _contentify_legacy(html: str) -> str:
                 cf, ca, parts = _frag_attrs(parts)  # + / +N fragment flag
                 plain = "plain" in parts
                 extra = [p for p in parts if p != "plain"]  # any other tokens = extra classes
-                current = {"frag": bool(cf), "fattr": ca, "plain": plain, "bg": bg, "classes": extra, "content": []}
+                current = {"frag": bool(cf), "fattr": ca, "plain": plain, "bg": bg, "classes": extra,
+                           "content": [], "src": [], "head": src[index]}
                 cards.append(current)
                 index += 1
                 continue
@@ -715,9 +823,11 @@ def _contentify_legacy(html: str) -> str:
                 index += 1
                 continue
             if current is None:
-                current = {"frag": False, "plain": False, "bg": None, "content": []}
+                current = {"frag": False, "plain": False, "bg": None,
+                           "content": [], "src": [], "head": src[index]}
                 cards.append(current)
             current["content"].append(line)
+            current["src"].append(src[index])
             index += 1
 
         wrap_cls = "rv-grid-wrap compact" if compact else "rv-grid-wrap"
@@ -737,6 +847,12 @@ def _contentify_legacy(html: str) -> str:
             row_tmpl=row_tmpl,
             gap=_escape_style_value(gap),
         )
+        out = out.replace(
+            '<div class="{0}" style='.format(wrap_cls),
+            '<div class="{0}"{1} style='.format(
+                wrap_cls, _src_attr(src[start_index], src[index - 1])),
+            1,
+        )
         for c in cards:
             cls = "rv-cell" if c.get("plain") else "rv-card"
             if c.get("classes"):
@@ -744,8 +860,11 @@ def _contentify_legacy(html: str) -> str:
             if c["frag"]:
                 cls += " fragment"
             style = "background:{0};".format(_escape_style_value(c["bg"])) if c["bg"] else ""
-            out += '<div class="{cls}" style="{style}"{fa}>'.format(cls=cls, style=style, fa=c.get("fattr", ""))
-            out += _contentify_legacy("\n".join(c["content"])) if c["content"] else ""
+            card_lns = [ln for ln in c["src"] if ln is not None]
+            out += '<div class="{cls}" style="{style}"{fa}{sa}>'.format(
+                cls=cls, style=style, fa=c.get("fattr", ""),
+                sa=_src_attr(c.get("head"), card_lns[-1] if card_lns else None))
+            out += _contentify_legacy("\n".join(c["content"]), src=c["src"]) if c["content"] else ""
             out += "</div>"
         out += "</div></div>"
         return out, index
@@ -767,6 +886,7 @@ def _contentify_legacy(html: str) -> str:
         w = nums[2] if len(nums) > 2 else None
 
         content = []
+        content_src = []
         index = start_index + 1
         while index < len(lines):
             line = lines[index]
@@ -774,14 +894,16 @@ def _contentify_legacy(html: str) -> str:
                 index += 1
                 break
             content.append(line)
+            content_src.append(src[index])
             index += 1
 
         style = "left:{x};top:{y};".format(x=_escape_style_value(x), y=_escape_style_value(y))
         if w:
             style += "width:{w};".format(w=_escape_style_value(w))
         cls = "rv-pin fragment" if frag else "rv-pin"
-        out = '<div class="{cls}" style="{style}">'.format(cls=cls, style=style)
-        out += _contentify_legacy("\n".join(content)) if content else ""
+        out = '<div class="{cls}"{sa} style="{style}">'.format(
+            cls=cls, sa=_src_attr(src[start_index], src[index - 1]), style=style)
+        out += _contentify_legacy("\n".join(content), src=content_src) if content else ""
         out += "</div>"
         return out, index
 
@@ -843,7 +965,8 @@ def _contentify_legacy(html: str) -> str:
         def _ensure_cell():
             nonlocal current
             if current is None:
-                current = {"flex": "1 1 0", "fcls": "", "fattr": "", "lines": []}
+                current = {"flex": "1 1 0", "fcls": "", "fattr": "", "lines": [],
+                           "src": [], "head": None}
                 cells.append(current)
 
         while index < len(lines):
@@ -852,6 +975,7 @@ def _contentify_legacy(html: str) -> str:
                 depth += 1
                 _ensure_cell()
                 current["lines"].append(line)
+                current["src"].append(src[index])
                 index += 1
                 continue
             if re.match(r"^>\s*end\s*:\s*row\s*$", line):
@@ -860,6 +984,7 @@ def _contentify_legacy(html: str) -> str:
                     index += 1
                     break
                 current["lines"].append(line)
+                current["src"].append(src[index])
                 index += 1
                 continue
             col = re.match(r"^>\s*col\b(.*)$", line) if depth == 1 else None
@@ -877,27 +1002,37 @@ def _contentify_legacy(html: str) -> str:
                 size = toks[0] if toks else ""
                 current = {
                     "flex": _col_flex(size), "fcls": cf, "fattr": ca,
-                    "justify": "center" if center else "flex-start", "extra": extra, "lines": [],
+                    "justify": "center" if center else "flex-start", "extra": extra,
+                    "lines": [], "src": [], "head": src[index],
                 }
                 cells.append(current)
                 index += 1
                 continue
             _ensure_cell()
             current["lines"].append(line)
+            current["src"].append(src[index])
             index += 1
 
         inner = ""
         for c in cells:
-            inner += '<div class="region{cf}" style="flex:{flex};gap:var(--gap-row);justify-content:{just};{extra}"{ca}>'.format(
-                cf=c["fcls"], flex=c["flex"], just=c.get("justify", "flex-start"), extra=c.get("extra", ""), ca=c["fattr"]
+            cell_lns = [ln for ln in c["src"] if ln is not None]
+            if c.get("head") is not None:
+                sa = _src_attr(c["head"], cell_lns[-1] if cell_lns else None)
+            else:
+                # Implicit first cell: no `> col` line exists to edit.
+                sa = ' data-rv-implicit="1"' if _DEV else ""
+            inner += '<div class="region{cf}" style="flex:{flex};gap:var(--gap-row);justify-content:{just};{extra}"{ca}{sa}>'.format(
+                cf=c["fcls"], flex=c["flex"], just=c.get("justify", "flex-start"),
+                extra=c.get("extra", ""), ca=c["fattr"], sa=sa
             )
-            inner += _contentify_legacy("\n".join(c["lines"])) if c["lines"] else ""
+            inner += _contentify_legacy("\n".join(c["lines"]), src=c["src"]) if c["lines"] else ""
             inner += "</div>"
         row_flex = "flex:0 0 {0};height:{0};".format(height) if height else "flex:1 1 auto;"
         out = (
             '<div class="row{fcls}" style="{row_flex}min-height:0;align-items:stretch;'
-            'gap:{gap};"{fattr}>{inner}</div>'
-        ).format(fcls=fcls, row_flex=row_flex, gap=_escape_style_value(gap), fattr=fattr, inner=inner)
+            'gap:{gap};"{fattr}{sa}>{inner}</div>'
+        ).format(fcls=fcls, row_flex=row_flex, gap=_escape_style_value(gap), fattr=fattr,
+                 sa=_src_attr(src[start_index], src[index - 1]), inner=inner)
         return out, index
 
     def _parse_box(start_index: int, kind: str):
@@ -907,6 +1042,7 @@ def _contentify_legacy(html: str) -> str:
         title = " ".join(head).strip()
         box_cls = {"info": "box-info", "warn": "box-warn", "good": "box-good"}[kind]
         content = []
+        content_src = []
         index = start_index + 1
         while index < len(lines):
             line = lines[index]
@@ -914,11 +1050,13 @@ def _contentify_legacy(html: str) -> str:
                 index += 1
                 break
             content.append(line)
+            content_src.append(src[index])
             index += 1
-        body = _contentify_legacy("\n".join(content)) if content else ""
+        body = _contentify_legacy("\n".join(content), src=content_src) if content else ""
         title_html = '<div class="box-title">{0}</div>'.format(title) if title else ""
-        out = '<div class="{bc}{fcls}"{fattr}>{title}{body}</div>'.format(
-            bc=box_cls, fcls=fcls, fattr=fattr, title=title_html, body=body
+        out = '<div class="{bc}{fcls}"{fattr}{sa}>{title}{body}</div>'.format(
+            bc=box_cls, fcls=fcls, fattr=fattr,
+            sa=_src_attr(src[start_index], src[index - 1]), title=title_html, body=body
         )
         return out, index
 
@@ -938,7 +1076,8 @@ def _contentify_legacy(html: str) -> str:
         body = "\n".join(content).strip()
         if body and "$$" not in body and "$" not in body:
             body = "$$" + body + "$$"
-        out = '<div class="math-box{fcls}"{fattr}>{body}</div>'.format(fcls=fcls, fattr=fattr, body=body)
+        out = '<div class="math-box{fcls}"{fattr}{sa}>{body}</div>'.format(
+            fcls=fcls, fattr=fattr, sa=_src_attr(src[start_index], src[index - 1]), body=body)
         return out, index
 
     def _parse_frag(start_index: int):
@@ -946,6 +1085,7 @@ def _contentify_legacy(html: str) -> str:
         head = re.match(r"^>\s*frag\b(.*)$", lines[start_index]).group(1).strip()
         attr = ' data-fragment-index="{0}"'.format(head) if re.match(r"^\d+$", head) else ""
         content = []
+        content_src = []
         depth = 1
         index = start_index + 1
         while index < len(lines):
@@ -953,6 +1093,7 @@ def _contentify_legacy(html: str) -> str:
             if re.match(r"^>\s*frag\b", line):
                 depth += 1
                 content.append(line)
+                content_src.append(src[index])
                 index += 1
                 continue
             if re.match(r"^>\s*end\s*:\s*frag\s*$", line):
@@ -961,12 +1102,15 @@ def _contentify_legacy(html: str) -> str:
                     index += 1
                     break
                 content.append(line)
+                content_src.append(src[index])
                 index += 1
                 continue
             content.append(line)
+            content_src.append(src[index])
             index += 1
-        body = _contentify_legacy("\n".join(content)) if content else ""
-        out = '<div class="fragment"{attr}>{body}</div>'.format(attr=attr, body=body)
+        body = _contentify_legacy("\n".join(content), src=content_src) if content else ""
+        out = '<div class="fragment"{attr}{sa}>{body}</div>'.format(
+            attr=attr, sa=_src_attr(src[start_index], src[index - 1]), body=body)
         return out, index
 
     def _parse_stack(start_index: int):
@@ -997,7 +1141,8 @@ def _contentify_legacy(html: str) -> str:
                 toks = lm.group(1).split()
                 cf, ca, toks = _frag_attrs(toks)
                 clear = "clear" in {t.lower() for t in toks}
-                current = {"fcls": cf, "fattr": ca, "clear": clear, "lines": []}
+                current = {"fcls": cf, "fattr": ca, "clear": clear, "lines": [],
+                           "src": [], "head": src[index]}
                 layers.append(current)
                 index += 1
                 continue
@@ -1005,19 +1150,25 @@ def _contentify_legacy(html: str) -> str:
                 if not line.strip():
                     index += 1
                     continue
-                current = {"fcls": "", "fattr": "", "clear": False, "lines": []}
+                current = {"fcls": "", "fattr": "", "clear": False, "lines": [],
+                           "src": [], "head": src[index]}
                 layers.append(current)
             current["lines"].append(line)
+            current["src"].append(src[index])
             index += 1
         inner = ""
         for ly in layers:
             # opaque backdrop only on revealed (fragment) layers that aren't `clear`
             opaque = " rv-opaque" if (ly["fcls"] and not ly["clear"]) else ""
-            inner += '<div class="rv-layer{fc}{op}"{fa}>'.format(fc=ly["fcls"], op=opaque, fa=ly["fattr"])
-            inner += _contentify_legacy("\n".join(ly["lines"])) if ly["lines"] else ""
+            ly_lns = [ln for ln in ly["src"] if ln is not None]
+            inner += '<div class="rv-layer{fc}{op}"{fa}{sa}>'.format(
+                fc=ly["fcls"], op=opaque, fa=ly["fattr"],
+                sa=_src_attr(ly.get("head"), ly_lns[-1] if ly_lns else None))
+            inner += _contentify_legacy("\n".join(ly["lines"]), src=ly["src"]) if ly["lines"] else ""
             inner += "</div>"
         style = "flex:0 0 {0};height:{0};".format(height) if height else "flex:1 1 0;"
-        out = '<div class="rv-stack" style="{st}">{inner}</div>'.format(st=style, inner=inner)
+        out = '<div class="rv-stack"{sa} style="{st}">{inner}</div>'.format(
+            sa=_src_attr(src[start_index], src[index - 1]), st=style, inner=inner)
         return out, index
 
     index = 0
@@ -1207,11 +1358,11 @@ def _contentify_legacy(html: str) -> str:
 
             lstripped = line.lstrip()
             if lstripped.startswith("!! "):
-                html += _media_shortcut("video", lstripped[3:].strip())
+                html += _media_shortcut("video", lstripped[3:].strip(), lineno=src[index])
                 index += 1
                 continue
             if lstripped.startswith("! "):
-                html += _media_shortcut("img", lstripped[2:].strip())
+                html += _media_shortcut("img", lstripped[2:].strip(), lineno=src[index])
                 index += 1
                 continue
 
@@ -1272,7 +1423,7 @@ _VIDEO_MIME = {
 }
 
 
-def _media_shortcut(kind: str, rest: str) -> str:
+def _media_shortcut(kind: str, rest: str, lineno: int | None = None) -> str:
     """Render an ``!`` image or ``!!`` video shortcut.
 
     Syntax: ``! path [flags] [| caption]`` and ``!! path [flags] [| caption]``.
@@ -1282,6 +1433,7 @@ def _media_shortcut(kind: str, rest: str) -> str:
     ``controls``. A trailing ``| caption`` adds a caption (styled as a figure caption,
     or as a card label when inside a card).
     """
+    sa = _src_attr(lineno)
     caption = None
     if "|" in rest:
         rest, caption = rest.split("|", 1)
@@ -1331,11 +1483,11 @@ def _media_shortcut(kind: str, rest: str) -> str:
     if kind == "img":
         if fill:
             style = "object-fit:{0};object-position:{1};{2}".format(objfit, pos, size_css)
-            return '<img class="rv-media-fill{0}"{1} style="{2}" src="{3}" alt="">{4}'.format(
-                frag_cls, frag_attr, style, p, cap_html
+            return '<img class="rv-media-fill{0}"{1}{5} style="{2}" src="{3}" alt="">{4}'.format(
+                frag_cls, frag_attr, style, p, cap_html, sa
             )
         img = '<img class="rv-media" style="object-fit:{0};{1}" src="{2}" alt="">'.format(objfit, size_css, p)
-        return '<figure class="{0}"{1}>{2}{3}</figure>'.format(fig_cls, frag_attr, img, cap_html)
+        return '<figure class="{0}"{1}{4}>{2}{3}</figure>'.format(fig_cls, frag_attr, img, cap_html, sa)
 
     # video
     ext = path.rsplit(".", 1)[-1].lower() if "." in path else "mp4"
@@ -1350,14 +1502,22 @@ def _media_shortcut(kind: str, rest: str) -> str:
     attrs_s = " ".join(attrs)
     if fill:
         style = "object-fit:{0};object-position:{1};{2}".format(objfit, pos, size_css)
-        vid = '<video class="rv-media-fill{0}"{1} style="{2}" {3}><source src="{4}" type="{5}"></video>'.format(
-            frag_cls, frag_attr, style, attrs_s, p, mime
+        vid = '<video class="rv-media-fill{0}"{1}{6} style="{2}" {3}><source src="{4}" type="{5}"></video>'.format(
+            frag_cls, frag_attr, style, attrs_s, p, mime, sa
         )
         return vid + cap_html
     vid = '<video class="rv-media" style="object-fit:{0};{1}" {2}><source src="{3}" type="{4}"></video>'.format(
         objfit, size_css, attrs_s, p, mime
     )
-    return '<figure class="{0}"{1}>{2}{3}</figure>'.format(fig_cls, frag_attr, vid, cap_html)
+    return '<figure class="{0}"{1}{4}>{2}{3}</figure>'.format(fig_cls, frag_attr, vid, cap_html, sa)
+
+
+def _slide_append(S: dict, line: str, lineno: int | None) -> None:
+    """Append a content line to a slide, keeping the source map in lockstep."""
+    if not line.endswith("\n"):
+        line += "\n"  # EOF-without-newline normalization; output-neutral
+    S["html"] += line
+    S["srcmap"].append(lineno)
 
 
 def _read_pres(pfile: str) -> tuple[str, str]:
@@ -1375,11 +1535,21 @@ def build(pfile: str, dev: bool = False) -> str:
 
     Returns the path of the generated ``.html`` file. With ``dev=True`` the
     output is written to ``<stem>.dev.html`` instead (same folder, so relative
-    ``reveal.js/`` and media paths keep working) and the ``<head>`` carries
+    ``reveal.js/`` and media paths keep working), emitted elements carry
+    ``data-rv-src`` source-line annotations, and the ``<head>`` carries
     ``rv-src-file`` / ``rv-src-sha`` meta tags identifying the source the
     build was made from; the exported ``<stem>.html`` is never touched.
     """
+    global _DEV
+    prev = _DEV
+    _DEV = dev
+    try:
+        return _build(pfile, dev)
+    finally:
+        _DEV = prev
 
+
+def _build(pfile: str, dev: bool) -> str:
     pfile = os.path.abspath(pfile)
     pdir = os.path.dirname(pfile) + "/"
     rdir = os.path.join(pdir, "reveal.js") + "/"
@@ -1412,14 +1582,14 @@ def build(pfile: str, dev: bool = False) -> str:
     pres_text, pres_sha = _read_pres(pfile)
 
     with io.StringIO(pres_text) as fid:
-        for line in fid:
+        for lineno, line in enumerate(fid, 1):
 
             if line.startswith("#"):
                 continue
 
             s = ">>> first: "
             if line.startswith(s):
-                slide.append({"type": "first", "title": line[len(s):].strip(), "html": "", "notes": "", "param": {}})
+                slide.append({"type": "first", "title": line[len(s):].strip(), "html": "", "notes": "", "param": {}, "src": lineno, "srcmap": []})
                 notes = False
                 table_mode = False
                 block_depth = 0
@@ -1427,7 +1597,7 @@ def build(pfile: str, dev: bool = False) -> str:
 
             s = r"%%% "
             if line.startswith(s):
-                slide.append({"type": "section", "title": line[len(s):].strip(), "html": "", "notes": "", "param": {}})
+                slide.append({"type": "section", "title": line[len(s):].strip(), "html": "", "notes": "", "param": {}, "src": lineno, "srcmap": []})
                 notes = False
                 table_mode = False
                 block_depth = 0
@@ -1435,7 +1605,7 @@ def build(pfile: str, dev: bool = False) -> str:
 
             s = "=== "
             if line.startswith(s):
-                slide.append({"type": "slide", "title": line[len(s):].strip(), "html": "", "notes": "", "param": {}})
+                slide.append({"type": "slide", "title": line[len(s):].strip(), "html": "", "notes": "", "param": {}, "src": lineno, "srcmap": []})
                 notes = False
                 table_mode = False
                 block_depth = 0
@@ -1448,7 +1618,7 @@ def build(pfile: str, dev: bool = False) -> str:
                         slide[-1]["type"] = "child"
                     case _:
                         slide[-1]["type"] = "parent"
-                slide.append({"type": "lastchild", "title": line[len(s):].strip(), "html": "", "notes": "", "param": {}})
+                slide.append({"type": "lastchild", "title": line[len(s):].strip(), "html": "", "notes": "", "param": {}, "src": lineno, "srcmap": []})
                 notes = False
                 table_mode = False
                 block_depth = 0
@@ -1456,7 +1626,7 @@ def build(pfile: str, dev: bool = False) -> str:
 
             s = ">>> biblio"
             if line.startswith(s):
-                slide.append({"type": "biblio", "title": "Bibliography", "html": "", "notes": "", "param": {}})
+                slide.append({"type": "biblio", "title": "Bibliography", "html": "", "notes": "", "param": {}, "src": lineno, "srcmap": []})
                 notes = False
                 table_mode = False
                 block_depth = 0
@@ -1469,7 +1639,7 @@ def build(pfile: str, dev: bool = False) -> str:
                 table_start = re.match(r"^>\s*table\(\s*\d+\s*,\s*\d+\s*\)\s*$", line)
                 table_end = re.match(r"^>\s*end\s*:\s*table\s*$", line)
                 if len(slide) and not notes and (table_mode or table_start):
-                    slide[-1]["html"] += line
+                    _slide_append(slide[-1], line, lineno)
                     if table_start:
                         table_mode = True
                     if table_end:
@@ -1484,7 +1654,7 @@ def build(pfile: str, dev: bool = False) -> str:
                 # inside a table is a table row, not a layout row).
                 block_open = _MACRO_OPEN_RE.match(line)
                 if len(slide) and not notes and (block_depth > 0 or block_open):
-                    slide[-1]["html"] += line
+                    _slide_append(slide[-1], line, lineno)
                     if block_open:
                         block_depth += 1
                     elif _BLOCK_END_RE.match(line.strip()) and block_depth > 0:
@@ -1492,7 +1662,7 @@ def build(pfile: str, dev: bool = False) -> str:
                     continue
 
                 if len(slide) and not notes and re.match(r"^>\s*end\s*:\s*\w+\s*$", line):
-                    slide[-1]["html"] += line
+                    _slide_append(slide[-1], line, lineno)
                     continue
 
                 if line.startswith("> notes:"):
@@ -1515,7 +1685,7 @@ def build(pfile: str, dev: bool = False) -> str:
                     # kept in the content stream so their scope can be resolved
                     # from their position (slide / block / paragraph).
                     if len(slide) and not notes and key.strip() in {"align", "size", "paragraph-spacing"}:
-                        slide[-1]["html"] += line
+                        _slide_append(slide[-1], line, lineno)
                         continue
 
                     if not len(slide) and key in {"author", "photo"}:
@@ -1549,7 +1719,7 @@ def build(pfile: str, dev: bool = False) -> str:
                     # in the source .pres file.
                     if key == "svg" and len(slide):
                         placeholder = "__REVEALER_SVG__"
-                        slide[-1]["html"] += placeholder + "\n"
+                        _slide_append(slide[-1], placeholder + "\n", None)
                         target["_svg_placeholder"] = placeholder
 
             # --- Slide content
@@ -1558,7 +1728,7 @@ def build(pfile: str, dev: bool = False) -> str:
                 if notes:
                     slide[-1]["notes"] += line
                 else:
-                    slide[-1]["html"] += line
+                    _slide_append(slide[-1], line, lineno)
 
     # === Bibliography ========================================================
 
@@ -1696,7 +1866,7 @@ def build(pfile: str, dev: bool = False) -> str:
             if S["type"] == "parent":
                 content += '<section data-transition="none">'
 
-            opt = 'data-transition="none" data-state="slide_{:d}"'.format(k)
+            opt = 'data-transition="none" data-state="slide_{:d}"'.format(k) + _src_attr(S.get("src"))
 
             if S["param"].get("visibility") == "hidden":
                 opt += ' data-visibility="hidden"'
@@ -1825,7 +1995,8 @@ def build(pfile: str, dev: bool = False) -> str:
                     sindex = 0
                     content += '<section data-transition="none">'
                     for i in range(npages):
-                        content += '<section data-transition="none" data-state="slide_{:d}">'.format(k + i)
+                        content += '<section data-transition="none" data-state="slide_{:d}"{:s}>'.format(
+                            k + i, _src_attr(S.get("src")))
                         title = S["param"].get("title", S["title"])
                         if npages == 1:
                             content += '<div class="slide_header">{:s}</div>'.format(title)
@@ -1862,12 +2033,12 @@ def build(pfile: str, dev: bool = False) -> str:
         if placeholder and placeholder in S["html"]:
             body += contentify(
                 S["html"], base_size=pres_size, base_align=pres_align,
-                paragraph_spacing=pres_spacing, fill=fill_mode
+                paragraph_spacing=pres_spacing, fill=fill_mode, src=S["srcmap"]
             ).replace(placeholder, svg_html)
         else:
             body += svg_html + contentify(
                 S["html"], base_size=pres_size, base_align=pres_align,
-                paragraph_spacing=pres_spacing, fill=fill_mode
+                paragraph_spacing=pres_spacing, fill=fill_mode, src=S["srcmap"]
             )
 
         # --- Speaker notes (kept as a direct child of <section>) -------------
