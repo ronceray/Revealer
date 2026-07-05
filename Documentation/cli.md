@@ -145,6 +145,33 @@ current slide and fragment. Build errors appear as an overlay in the browser
 server binds to `127.0.0.1` only and serves a separate `<name>.dev.html`
 artifact, deleted on exit; the exported `<name>.html` is not touched.
 
+#### Editing from the browser
+
+Press `E` in the served presentation to toggle **edit mode**. Hovering
+outlines the element under the cursor; clicking selects it and shows which
+`.pres` line it comes from (`Esc` walks up to the enclosing construct). Every
+change made from the browser is written back into the `.pres` file as a
+minimal text edit — a session diffs like hand edits.
+
+- **Drag handles** on the selection adjust layout parameters: move a `> pin`
+  overlay (or drag its edge for width), resize media (writes `h=`), drag the
+  bottom edge of a `> row` / `> stack` (writes `h=`), or drag the boundary
+  between two `> col` columns (writes fraction sizes, snapping to halves,
+  thirds, quarters, fifths and twelfths). Arrow keys nudge the selected
+  element; `Shift` makes bigger steps.
+- **The move grip** (top-left square) drags a whole block — a figure, box,
+  equation, stack, … — into another column; insertion points highlight as
+  you hover.
+- **`F`** opens the fragment drawer: the slide's reveal order, reorderable
+  with the ↑/↓ buttons (rewrites explicit `+1..+n` indices).
+- **Drop an image or movie file** from your file manager onto a column to
+  upload it into `Media/` and insert the matching `!` / `!!` line.
+- **`Ctrl+Z` / `Ctrl+Shift+Z`** undo/redo browser-made edits (refused if the
+  file changed in your text editor in between — use the editor's undo there).
+
+If the file changed on disk since the page was rendered, an edit is refused
+and the page resyncs — nothing is ever overwritten blindly.
+
 ### `revealer pdf [TARGET]`
 
 Export a presentation to PDF, one page per slide with every fragment visible.

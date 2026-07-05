@@ -107,3 +107,97 @@
 #rv-editor-layer .rv-ed-open:hover { background: #37436b; }
 #rv-editor-layer .rv-ed-hint { color: #8a93b5; font-size: 12px; }
 html.rv-edit .reveal .slides section * { cursor: crosshair; }
+
+/* --- drag handles, toast, drawer, drop targets ---------------------------- */
+
+#rv-editor-layer .rv-ed-grip {
+  position: fixed;
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background: #fff;
+  border: 2px solid #2a76dd;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.3);
+  z-index: 9500;
+}
+#rv-editor-layer .rv-ed-grip.rv-ed-move {
+  border-radius: 3px;
+  background: #2a76dd;
+  border-color: #fff;
+}
+#rv-editor-layer .rv-ed-grip.rv-ed-col { background: #ffd166; }
+
+#rv-ed-toast {
+  position: fixed;
+  left: 50%;
+  top: 18px;
+  transform: translateX(-50%) translateY(-8px);
+  background: #1c1c2e;
+  color: #fff;
+  padding: 0.5em 1.1em;
+  border-radius: 8px;
+  font: 14px system-ui, sans-serif;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.15s, transform 0.15s;
+  z-index: 10001;
+}
+#rv-ed-toast.rv-on { opacity: 1; transform: translateX(-50%) translateY(0); }
+
+#rv-ed-ghost {
+  position: fixed;
+  background: rgba(42, 118, 221, 0.92);
+  color: #fff;
+  padding: 0.25em 0.8em;
+  border-radius: 6px;
+  font: 13px system-ui, sans-serif;
+  pointer-events: none;
+  z-index: 10002;
+}
+
+#rv-ed-slotbar {
+  position: fixed;
+  height: 4px;
+  background: #2a76dd;
+  border-radius: 2px;
+  box-shadow: 0 0 0 2px rgba(42, 118, 221, 0.25);
+  pointer-events: none;
+  z-index: 9400;
+}
+
+.rv-ed-droptarget { outline: 2px dashed rgba(42, 118, 221, 0.55); outline-offset: 2px; }
+
+#rv-ed-drawer {
+  position: fixed;
+  right: 14px;
+  top: 14px;
+  width: 260px;
+  max-height: 70vh;
+  overflow: auto;
+  background: #1c1c2e;
+  color: #fff;
+  border-radius: 10px;
+  font: 13px system-ui, sans-serif;
+  box-shadow: 0 10px 32px rgba(0, 0, 0, 0.4);
+  z-index: 9600;
+}
+#rv-ed-drawer .rv-ed-drawer-title { font-weight: 700; padding: 0.7em 1em 0.3em; }
+#rv-ed-drawer .rv-ed-drawer-foot { color: #8a93b5; font-size: 11px; padding: 0.3em 1em 0.7em; }
+#rv-ed-drawer .rv-ed-drawer-item {
+  display: flex;
+  justify-content: space-between;
+  gap: 0.6em;
+  padding: 0.35em 1em;
+  border-top: 1px solid #2a3350;
+}
+#rv-ed-drawer .rv-ed-drawer-item:hover { background: #252c48; }
+#rv-ed-drawer button {
+  font: inherit;
+  background: #2a3350;
+  color: #fff;
+  border: 1px solid #4a5580;
+  border-radius: 4px;
+  cursor: pointer;
+  padding: 0 0.4em;
+}
+#rv-ed-drawer button:hover { background: #37436b; }
