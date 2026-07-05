@@ -147,30 +147,39 @@ artifact, deleted on exit; the exported `<name>.html` is not touched.
 
 #### Editing from the browser
 
-Press `E` in the served presentation to toggle **edit mode**. Hovering
-outlines the element under the cursor; clicking selects it and shows which
-`.pres` line it comes from (`Esc` walks up to the enclosing construct). Every
-change made from the browser is written back into the `.pres` file as a
-minimal text edit — a session diffs like hand edits.
+The served presentation carries a small toolbar (top left): **✏ Edit**
+toggles edit mode, **↶ / ↷** undo and redo, **☰** opens the fragment
+drawer, and the status chip names the `.pres` file being edited and reports
+every save. **You are always editing the `.pres` source file, never the
+HTML** — each change is written to it immediately as a minimal text edit
+(a session diffs like hand edits), the deck rebuilds, and the preview
+reloads in place, keeping your slide, edit mode and selection. There is no
+separate save step.
 
-- **Drag handles** on the selection adjust layout parameters: move a `> pin`
-  overlay (or drag its edge for width), resize media (writes `h=`), drag the
-  bottom edge of a `> row` / `> stack` (writes `h=`), or drag the boundary
-  between two `> col` columns (writes fraction sizes, snapping to halves,
-  thirds, quarters, fifths and twelfths). Arrow keys nudge the selected
-  element; `Shift` makes bigger steps.
-- **The move grip** (top-left square) drags a whole block — a figure, box,
-  equation, stack, … — into another column; insertion points highlight as
-  you hover.
-- **`F`** opens the fragment drawer: the slide's reveal order, reorderable
-  with the ↑/↓ buttons (rewrites explicit `+1..+n` indices).
-- **Drop an image or movie file** from your file manager onto a column to
-  upload it into `Media/` and insert the matching `!` / `!!` line.
-- **`Ctrl+Z` / `Ctrl+Shift+Z`** undo/redo browser-made edits (refused if the
-  file changed in your text editor in between — use the editor's undo there).
+In edit mode, hovering names the element under the cursor and clicking
+selects it. The **side panel** then shows everything about the selection:
 
-If the file changed on disk since the page was rendered, an edit is refused
-and the page resyncs — nothing is ever overwritten blindly.
+- a clickable **breadcrumb** (slide ▸ row ▸ column ▸ figure) to reach
+  enclosing constructs — no guessing what you clicked;
+- **parameter fields** — pin x/y/width, media height/width, row height and
+  gap, column size, grid gap, fragment index, … — type a value and press
+  Enter;
+- **▲ Up / ▼ Down / 🗑 Delete** to reorder a block among its siblings or
+  remove it;
+- the **source box**: the actual `.pres` lines of the selection, editable in
+  place (*Apply source*) — anything the quick fields don't cover.
+
+Direct manipulation works too: drag handles move pins and resize media,
+rows, stacks and column splits (with fraction snapping); the square grip
+drags a block into another column; arrow keys nudge (`Shift` = bigger
+steps); dropping an image or movie file onto a column uploads it into
+`Media/` and inserts the matching `!` / `!!` line; `F` opens the fragment
+drawer to reorder the slide's reveal sequence.
+
+Undo/redo covers all browser-made edits. If the file changed on disk in the
+meantime (e.g. you saved in your text editor), the edit is refused and the
+page resyncs — nothing is ever overwritten blindly, and the two workflows
+can be mixed freely.
 
 ### `revealer pdf [TARGET]`
 

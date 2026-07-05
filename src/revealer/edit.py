@@ -97,6 +97,7 @@ class Insert:
 class Delete:
     start: int
     end: int
+    seam: bool = True  # collapse a blank-blank join left at the cut
 
 
 def _err(status: int, error: str, **kw) -> EditError:
@@ -383,6 +384,21 @@ def _op_insert_media(lines, op):
     return [Insert(before, [text], pad=pad)]
 
 
+def _op_replace_lines(lines, op):
+    """Replace a line span verbatim — the panel's source-box editor.
+
+    No construct validation: the user is editing raw DSL text. The SHA
+    precondition and the server's build-failure rollback are the safety net.
+    """
+    s, e = int(op["start"]), int(op["end"])
+    if not (1 <= s <= e <= len(lines)):
+        raise _err(422, "line_out_of_range", line=s if s < 1 else e)
+    text = op.get("text")
+    if not isinstance(text, list) or any(not isinstance(t, str) or "\n" in t for t in text):
+        raise _err(422, "bad_value", value="text must be a list of lines")
+    return [Delete(s, e, seam=False), Insert(s, list(text))]
+
+
 def _op_reorder_fragments(lines, op):
     prims = []
     for i, item in enumerate(op["order"], 1):
@@ -404,6 +420,7 @@ _OPS = {
     "set_fragment_index": _op_set_fragment_index,
     "move_block": _op_move_block,
     "delete_block": _op_delete_block,
+    "replace_lines": _op_replace_lines,
     "insert_media": _op_insert_media,
     "reorder_fragments": _op_reorder_fragments,
 }
@@ -436,9 +453,10 @@ def _check_overlaps(prims):
             raise _err(422, "overlap", lines=sorted(span & touched))
         touched |= span
     for p in prims:
-        if isinstance(p, Insert) and p.before in touched and \
-                any(isinstance(d, Delete) and d.start <= p.before <= d.end for d in prims):
-            # Inserting into a deleted range is ambiguous.
+        if isinstance(p, Insert) and \
+                any(isinstance(d, Delete) and d.start < p.before <= d.end for d in prims):
+            # Inserting strictly inside a deleted range is ambiguous
+            # (inserting AT the start expresses a span replacement).
             raise _err(422, "overlap", lines=[p.before])
 
 
@@ -448,10 +466,11 @@ def _reconstruct(lines: list[str], prims: list) -> list[str]:
     for p in prims:
         if isinstance(p, Insert):
             inserts.setdefault(p.before, []).append(p)
-    deleted: set[int] = set()
+    deleted: dict[int, bool] = {}  # line -> seam-collapse allowed
     for p in prims:
         if isinstance(p, Delete):
-            deleted.update(range(p.start, p.end + 1))
+            for n in range(p.start, p.end + 1):
+                deleted[n] = p.seam
 
     def emit_insert(out: list[str], ins: Insert):
         if ins.pad and out and out[-1].strip() != "":
@@ -478,7 +497,7 @@ def _reconstruct(lines: list[str], prims: list) -> list[str]:
             nxt = n + 1
             while nxt in deleted:
                 nxt += 1
-            if (n - 1) not in deleted:  # only at the first line of the range
+            if (n - 1) not in deleted and deleted[n]:  # first line of a seam-collapsing range
                 prev_blank = bool(out) and out[-1].strip() == ""
                 next_blank = nxt <= len(lines) and lines[nxt - 1].strip() == ""
                 if prev_blank and next_blank:

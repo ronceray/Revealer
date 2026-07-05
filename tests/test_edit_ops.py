@@ -256,3 +256,26 @@ def test_crlf_and_no_trailing_newline_preserved(tmp_path):
     assert b"> col 1/2\r\n" in data
     assert not data.endswith(b"\n")
     assert b"\n" not in data.replace(b"\r\n", b"")
+
+
+def test_replace_lines_verbatim(pres):
+    _apply(pres, [{"op": "replace_lines", "start": 5, "end": 5,
+                   "text": ["> row h=444", "", "> col"]}])
+    lines = pres.read_text().split("\n")
+    assert lines[4:7] == ["> row h=444", "", "> col"]  # blank kept verbatim
+
+
+def test_replace_lines_shrink_and_revert(pres):
+    original = pres.read_text()
+    _apply(pres, [{"op": "replace_lines", "start": 12, "end": 15, "text": ["> layer"]}])
+    assert "> layer +" not in pres.read_text()
+    lines = pres.read_text().split("\n")
+    _apply(pres, [{"op": "replace_lines", "start": 12, "end": 12,
+                   "text": ["> layer", "! Media/img.png fill", "> layer +",
+                            "! Media/img.png fill"]}])
+    assert pres.read_text() == original
+
+
+def test_replace_lines_out_of_range(pres):
+    with pytest.raises(EditError):
+        _apply(pres, [{"op": "replace_lines", "start": 999, "end": 999, "text": ["x"]}])

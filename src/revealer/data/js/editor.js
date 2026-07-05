@@ -18,7 +18,10 @@
     try {
       var idx = (window.Reveal && Reveal.getIndices) ? Reveal.getIndices() : {};
       sessionStorage.setItem(RESTORE_KEY, JSON.stringify({
-        h: idx.h || 0, v: idx.v || 0, f: (idx.f === undefined ? -1 : idx.f)
+        h: idx.h || 0, v: idx.v || 0, f: (idx.f === undefined ? -1 : idx.f),
+        editOn: !!(window.edit === undefined ? false : edit.on),
+        selSrc: (edit.sel && edit.sel.getAttribute) ? edit.sel.getAttribute('data-rv-src') : null,
+        drawer: !!document.getElementById('rv-ed-drawer')
       }));
     } catch (e) { /* sessionStorage unavailable — hash restore still works */ }
     location.reload();
@@ -34,6 +37,18 @@
       // `hash: true` usually restores the slide already; this also restores
       // the fragment when fragmentInURL is off, and wins over a stale hash.
       Reveal.slide(s.h, s.v, s.f === -1 ? undefined : s.f);
+      // An editing session survives the save-rebuild-reload cycle: re-enter
+      // edit mode and re-select the same source element when possible.
+      if (s.editOn) {
+        setEdit(true);
+        if (s.selSrc) {
+          var slide = Reveal.getCurrentSlide();
+          var el = slide && slide.querySelector('[data-rv-src="' + s.selSrc + '"]');
+          if (el) { edit.sel = el; }
+          syncChrome();
+        }
+        if (s.drawer) toggleDrawer();
+      }
     } catch (e) {}
   }
 
@@ -163,6 +178,7 @@
     placeOutline(el.querySelector('.rv-ed-hover'), edit.hover !== edit.sel ? edit.hover : null);
     placeOutline(el.querySelector('.rv-ed-select'), edit.sel);
     if (typeof rvRenderHandles === 'function') rvRenderHandles();
+    if (typeof rvPanelSync === 'function') rvPanelSync();
     var bar = el.querySelector('.rv-ed-bar');
     if (edit.sel && document.contains(edit.sel)) {
       var s = edit.sel.getAttribute('data-rv-src');
@@ -227,7 +243,12 @@
       edit.sel = edit.hover = null;
       el.querySelectorAll('.rv-ed-outline').forEach(function (b) { b.hidden = true; });
       el.querySelector('.rv-ed-bar').hidden = true;
+      var tag = document.getElementById('rv-ed-hovertag');
+      if (tag) tag.style.display = 'none';
     }
+    var tbBtn = document.querySelector('#rv-ed-toolbar .rv-tb-edit');
+    if (tbBtn) tbBtn.classList.toggle('rv-active', on);
+    if (typeof rvPanelSync === 'function') rvPanelSync();
     syncChrome();
   }
 
@@ -285,6 +306,7 @@
   function rvPostEdit(edits) {
     if (postPending) return Promise.resolve(false);
     postPending = true;
+    if (typeof rvStatus === 'function') rvStatus('saving', 'Saving to ' + PRES_NAME + '…');
     return fetch('/__rv__/edit', {
       method: 'POST',
       headers: { 'X-RV-Token': TOKEN, 'Content-Type': 'application/json' },
@@ -293,6 +315,8 @@
       return r.json().catch(function () { return {}; }).then(function (j) {
         postPending = false;
         if (!r.ok) {
+          if (typeof rvStatus === 'function') rvStatus('error', 'Not saved ✗');
+          try { sessionStorage.removeItem('rv-ed-lastsave'); } catch (e2) {}
           toast(j.error === 'sha_mismatch'
             ? 'Deck changed on disk — resyncing'
             : 'Edit rejected: ' + (j.error || r.status));
@@ -849,6 +873,370 @@
 
   // Debug/testing hook: ?rv-edit=1 auto-enters edit mode (and selects the
   // first annotated element on the current slide with ?rv-select=1).
+  /* --- editor shell: toolbar, status chip, side panel ------------------------ */
+
+  var PRES_NAME = (function () {
+    var m = document.querySelector('meta[name="rv-src-file"]');
+    return m ? m.getAttribute('content') : 'the .pres file';
+  })();
+
+  function rvStatus(state, msg) {
+    var chip = document.querySelector('#rv-ed-toolbar .rv-tb-status');
+    if (!chip) return;
+    chip.className = 'rv-tb-status rv-st-' + state;
+    chip.textContent = msg;
+    try {
+      if (state === 'saving') sessionStorage.setItem('rv-ed-lastsave', 'pending');
+    } catch (e) {}
+  }
+
+  function buildToolbar() {
+    if (document.getElementById('rv-ed-toolbar')) return;
+    var tb = document.createElement('div');
+    tb.id = 'rv-ed-toolbar';
+    tb.innerHTML =
+      '<button class="rv-tb-edit" title="Toggle edit mode (E)">✏ Edit</button>' +
+      '<button class="rv-tb-undo" title="Undo (Ctrl+Z)">↶</button>' +
+      '<button class="rv-tb-redo" title="Redo (Ctrl+Shift+Z)">↷</button>' +
+      '<button class="rv-tb-frag" title="Fragments (F)">☰</button>' +
+      '<span class="rv-tb-status rv-st-idle">' + PRES_NAME + '</span>' +
+      '<button class="rv-tb-help" title="Help">?</button>';
+    document.body.appendChild(tb);
+    tb.querySelector('.rv-tb-edit').addEventListener('click', function () { setEdit(!edit.on); });
+    tb.querySelector('.rv-tb-undo').addEventListener('click', function () { rvUndoRedo('undo'); });
+    tb.querySelector('.rv-tb-redo').addEventListener('click', function () { rvUndoRedo('redo'); });
+    tb.querySelector('.rv-tb-frag').addEventListener('click', function () {
+      if (!edit.on) setEdit(true);
+      toggleDrawer();
+    });
+    tb.querySelector('.rv-tb-help').addEventListener('click', toggleHelp);
+    try {
+      if (sessionStorage.getItem('rv-ed-lastsave') === 'pending') {
+        sessionStorage.removeItem('rv-ed-lastsave');
+        rvStatus('saved', 'Saved to ' + PRES_NAME + ' ✓');
+        setTimeout(function () { rvStatus('idle', PRES_NAME); }, 2500);
+      }
+    } catch (e) {}
+  }
+
+  function toggleHelp() {
+    var h = document.getElementById('rv-ed-help');
+    if (h) { h.remove(); return; }
+    h = document.createElement('div');
+    h.id = 'rv-ed-help';
+    h.innerHTML =
+      '<b>How editing works</b>' +
+      '<p>You are editing <code>' + PRES_NAME + '</code> — the source text file, ' +
+      'not the HTML. Every change is written to it immediately as a minimal ' +
+      'edit, the deck rebuilds, and this preview reloads in place. There is ' +
+      'no separate save step.</p>' +
+      '<ul>' +
+      '<li><b>✏ Edit / E</b> — toggle edit mode; click any element to select it</li>' +
+      '<li><b>Panel</b> — edit the selection\'s parameters, move it, or edit its source lines</li>' +
+      '<li><b>Drag</b> — blue handles resize/move; the square grip drags a block to another column</li>' +
+      '<li><b>↶ ↷ / Ctrl+Z</b> — undo/redo edits made here</li>' +
+      '<li><b>☰ / F</b> — reorder the slide\'s fragments</li>' +
+      '<li><b>Drop a file</b> — insert an image/movie into a column</li>' +
+      '</ul><button class="rv-help-close">Close</button>';
+    document.body.appendChild(h);
+    h.querySelector('.rv-help-close').addEventListener('click', function () { h.remove(); });
+  }
+
+  /* --- side panel ---------------------------------------------------------------- */
+
+  var panelFor = null;  // element the panel currently shows
+
+  function panelEl() {
+    var p = document.getElementById('rv-ed-panel');
+    if (!p) {
+      p = document.createElement('div');
+      p.id = 'rv-ed-panel';
+      document.body.appendChild(p);
+    }
+    return p;
+  }
+
+  function rvPanelSync() {
+    var p = panelEl();
+    p.style.display = edit.on ? 'flex' : 'none';
+    if (!edit.on) { panelFor = null; return; }
+    if (edit.sel === panelFor) return;
+    panelFor = edit.sel;
+    renderPanel();
+  }
+
+  function crumbChain(el) {
+    var chain = [];
+    var cur = el;
+    while (cur && cur.tagName !== 'BODY') {
+      if (cur.hasAttribute && cur.hasAttribute('data-rv-src')) chain.unshift(cur);
+      cur = cur.parentElement;
+    }
+    return chain;
+  }
+
+  function renderPanel() {
+    var p = panelEl();
+    var el = edit.sel;
+    if (!el || !document.contains(el)) {
+      p.innerHTML =
+        '<div class="rv-pn-head">Nothing selected</div>' +
+        '<div class="rv-pn-hint">Click an element in the slide to inspect and edit it. ' +
+        'Everything you change is written into <code>' + PRES_NAME + '</code> automatically.</div>';
+      return;
+    }
+    var kind = constructOf(el) || 'element';
+    var s = srcOf(el), e = srcEndOf(el);
+
+    var crumbs = crumbChain(el).map(function (c) {
+      var label = c === el ? '<b>' + kindOf(c) + '</b>' : kindOf(c);
+      return '<span class="rv-pn-crumb" data-src="' + c.getAttribute('data-rv-src') + '">' + label + '</span>';
+    }).join(' ▸ ');
+
+    p.innerHTML =
+      '<div class="rv-pn-head">' + crumbs + '</div>' +
+      '<div class="rv-pn-sub">' + PRES_NAME + ' : ' + s + (e !== s ? '–' + e : '') + '</div>' +
+      '<div class="rv-pn-fields"></div>' +
+      '<div class="rv-pn-actions">' +
+      '<button class="rv-pn-up" title="Move before the previous sibling">▲ Up</button>' +
+      '<button class="rv-pn-down" title="Move after the next sibling">▼ Down</button>' +
+      '<button class="rv-pn-del" title="Delete this block from the .pres">🗑 Delete</button>' +
+      '<button class="rv-pn-opensrc" title="Open in your text editor">Editor</button>' +
+      '</div>' +
+      '<div class="rv-pn-srctitle">Source (editable)</div>' +
+      '<textarea class="rv-pn-src" spellcheck="false"></textarea>' +
+      '<button class="rv-pn-apply">Apply source</button>' +
+      '<div class="rv-pn-foot">Changes save automatically to the .pres — no save button needed.</div>';
+
+    p.querySelectorAll('.rv-pn-crumb').forEach(function (c) {
+      c.addEventListener('click', function () {
+        var slide = Reveal.getCurrentSlide();
+        var t = (slide && slide.querySelector('[data-rv-src="' + c.getAttribute('data-src') + '"]')) ||
+                document.querySelector('section[data-rv-src="' + c.getAttribute('data-src') + '"]');
+        if (t) { edit.sel = t; syncChrome(); }
+      });
+    });
+    p.querySelector('.rv-pn-up').addEventListener('click', function () { moveSibling(el, -1); });
+    p.querySelector('.rv-pn-down').addEventListener('click', function () { moveSibling(el, 1); });
+    p.querySelector('.rv-pn-del').addEventListener('click', function () { deleteSelected(el); });
+    p.querySelector('.rv-pn-opensrc').addEventListener('click', function () {
+      fetch('/__rv__/open?line=' + s, { headers: { 'X-RV-Token': TOKEN } });
+    });
+
+    // Source box + parameter fields need the actual .pres lines.
+    fetch('/__rv__/src?start=' + s + '&end=' + e + '&token=' + encodeURIComponent(TOKEN))
+      .then(function (r) { return r.json(); })
+      .then(function (j) {
+        if (!j.lines) return;
+        var ta = p.querySelector('.rv-pn-src');
+        if (ta) ta.value = j.lines.join('\n');
+        buildFields(p.querySelector('.rv-pn-fields'), kind, el, j.lines, s, e);
+      });
+
+    p.querySelector('.rv-pn-apply').addEventListener('click', function () {
+      var ta = p.querySelector('.rv-pn-src');
+      rvPostEdit([{ op: 'replace_lines', start: s, end: e, text: ta.value.split('\n') }]);
+    });
+  }
+
+  /* --- parameter fields -------------------------------------------------------------- */
+
+  function fld(label, value, hint) {
+    return '<label class="rv-pn-fld"><span>' + label + '</span>' +
+      '<input type="text" value="' + (value == null ? '' : String(value).replace(/"/g, '&quot;')) + '"' +
+      (hint ? ' placeholder="' + hint + '"' : '') + '></label>';
+  }
+
+  function tokensOf(line, headRe) {
+    var m = line.match(headRe);
+    return m ? m[1].trim().split(/\s+/).filter(Boolean) : [];
+  }
+
+  function findToken(tokens, re) {
+    for (var i = 0; i < tokens.length; i++) {
+      var m = tokens[i].match(re);
+      if (m) return m;
+    }
+    return null;
+  }
+
+  function buildFields(box, kind, el, lines, s, e) {
+    if (!box) return;
+    var line0 = lines[0] || '';
+    var defs = [];  // {label, value, apply(newValue) -> op or null}
+
+    function fragDef(construct) {
+      var toks = tokensOf(line0, /^\s*>?\s*\S+(.*)$/) ;
+      var fm = findToken(toks, /^\+(\d+)?$/);
+      defs.push({
+        label: 'fragment #', value: fm ? (fm[1] || '+') : '',
+        apply: function (v) {
+          if (v === '') return null;
+          return { op: 'set_fragment_index', line: s, construct: construct,
+                   index: v === '+' ? null : parseInt(v, 10) };
+        },
+      });
+    }
+
+    if (kind === 'pin') {
+      var nums = (line0.match(/pin\s*:\s*(.*)$/) || ['', ''])[1]
+        .replace('+', ' ').trim().split(/\s+/).filter(Boolean);
+      defs.push({ label: 'x', value: nums[0] || '50%', apply: pinApply(0, nums, s) });
+      defs.push({ label: 'y', value: nums[1] || '50%', apply: pinApply(1, nums, s) });
+      defs.push({ label: 'width', value: nums[2] || '', apply: pinApply(2, nums, s) });
+    } else if (kind === 'media') {
+      var toks = tokensOf(line0, /^\s*!{1,2}\s+\S+(.*?)(?:\|.*)?$/);
+      var h = findToken(toks, /^h=(.+)$/i), w = findToken(toks, /^w=(.+)$/i);
+      defs.push({ label: 'height', value: h ? h[1] : '',
+        apply: function (v) { return { op: 'set_media_size', line: s, dim: 'h', value: v || null }; } });
+      defs.push({ label: 'width', value: w ? w[1] : '',
+        apply: function (v) { return { op: 'set_media_size', line: s, dim: 'w', value: v || null }; } });
+      fragDef('media');
+    } else if (kind === 'row') {
+      var toks2 = tokensOf(line0, /^\s*>\s*row\b(.*)$/);
+      var h2 = findToken(toks2, /^h=(\d+)/i);
+      var gap = toks2.filter(function (t) { return !/^h=/i.test(t) && !/^\+\d*$/.test(t); })[0];
+      defs.push({ label: 'height px', value: h2 ? h2[1] : '',
+        apply: function (v) { return { op: 'set_row_height', line: s, value: v ? parseInt(v, 10) : null }; } });
+      defs.push({ label: 'gap', value: gap || '',
+        apply: function (v) { return v ? { op: 'set_row_gap', line: s, value: v } : null; } });
+    } else if (kind === 'stack') {
+      var h3 = findToken(tokensOf(line0, /^\s*>\s*stack\b(.*)$/), /^h=(\d+)/i);
+      defs.push({ label: 'height px', value: h3 ? h3[1] : '',
+        apply: function (v) { return { op: 'set_stack_height', line: s, value: v ? parseInt(v, 10) : null }; } });
+    } else if (kind === 'region') {
+      var toks3 = tokensOf(line0, /^\s*>\s*col\b(.*)$/);
+      var size = toks3.filter(function (t) {
+        return !/^\+\d*$/.test(t) && ['center', 'relative', 'clip'].indexOf(t.toLowerCase()) === -1;
+      })[0];
+      defs.push({ label: 'size (2/5, 40%, 300px)', value: size || '',
+        apply: function (v) { return { op: 'set_col_size', line: s, new: v || null }; } });
+      fragDef('col');
+    } else if (kind === 'grid') {
+      var gapLine = null;
+      for (var i = 1; i < lines.length; i++) {
+        var gm = lines[i].match(/^\s*>\s*gap\s*:\s*(.*)$/);
+        if (gm) { gapLine = gm[1]; break; }
+      }
+      defs.push({ label: 'gap', value: gapLine || '',
+        apply: function (v) { return v ? { op: 'set_grid_gap', line: s, end: e, value: v } : null; } });
+    } else if (kind === 'card') {
+      fragDef('card');
+    } else if (kind === 'layer') {
+      fragDef('layer');
+    } else if (kind === 'box') {
+      fragDef('box');
+    } else if (kind === 'eq') {
+      fragDef('eq');
+    } else if (kind === 'frag') {
+      fragDef('frag');
+    } else if (kind === 'column') {
+      var wm = line0.match(/^\s*\|{1,2}\s*(.*)$/);
+      defs.push({ label: 'width', value: wm ? wm[1] : '',
+        apply: function (v) { return { op: 'set_block_width', line: s, new: v || null }; } });
+    }
+
+    box.innerHTML = defs.length
+      ? defs.map(function (d, i) { return fld(d.label, d.value).replace('<label', '<label data-i="' + i + '"'); }).join('')
+      : '<div class="rv-pn-hint">No quick parameters for this element — edit its source below.</div>';
+
+    box.querySelectorAll('.rv-pn-fld input').forEach(function (input) {
+      var def = defs[parseInt(input.parentElement.getAttribute('data-i'), 10)];
+      function commit() {
+        var op = def.apply(input.value.trim());
+        if (op) rvPostEdit([op]);
+      }
+      input.addEventListener('keydown', function (ev) {
+        if (ev.key === 'Enter') { commit(); ev.preventDefault(); }
+        ev.stopPropagation();
+      });
+      input.addEventListener('change', commit);
+    });
+  }
+
+  function pinApply(idx, nums, line) {
+    return function (v) {
+      var parts = nums.slice();
+      parts[idx] = v;
+      var op = { op: 'set_pin', line: line, x: parts[0] || '50%', y: parts[1] || '50%' };
+      if (parts[2]) op.w = parts[2];
+      return op;
+    };
+  }
+
+  /* --- sibling move / delete ------------------------------------------------------------ */
+
+  function containerOf(el) {
+    var cur = el.parentElement;
+    while (cur && cur.tagName !== 'SECTION') {
+      if (cur.hasAttribute && cur.hasAttribute('data-rv-src') &&
+          (hasCls(cur, 'region') || hasCls(cur, 'column') || hasCls(cur, 'rv-card') ||
+           hasCls(cur, 'rv-cell') || hasCls(cur, 'rv-layer'))) return cur;
+      cur = cur.parentElement;
+    }
+    return null;
+  }
+
+  function moveSibling(el, dir) {
+    var parent = el.parentElement;
+    var mine = mappedChildren(parent);
+    var i = mine.indexOf(el);
+    var target = mine[i + dir];
+    if (!target) { toast('Already at the ' + (dir < 0 ? 'top' : 'bottom')); return; }
+    var container = containerOf(el);
+    var cSpan = container ? [srcOf(container), srcEndOf(container)]
+                          : [srcOf(el), srcEndOf(target)];
+    var kindC = container && hasCls(container, 'column') ? 'column' : 'col';
+    var construct = constructOf(el);
+    rvPostEdit([{
+      op: 'move_block',
+      src: [srcOf(el), srcEndOf(el)],
+      construct: MOVABLE[construct] ? construct : 'paragraph',
+      dest: {
+        insert_before: dir < 0 ? srcOf(target) : srcEndOf(target) + 1,
+        container: cSpan,
+        container_kind: kindC,
+      },
+    }]);
+  }
+
+  function deleteSelected(el) {
+    var construct = constructOf(el);
+    if (!window.confirm('Delete this ' + kindOf(el) + ' from ' + PRES_NAME + '?\n' +
+                        '(You can undo with Ctrl+Z.)')) return;
+    edit.sel = null;
+    rvPostEdit([{
+      op: 'delete_block',
+      src: [srcOf(el), srcEndOf(el)],
+      construct: MOVABLE[construct] ? construct : 'paragraph',
+    }]);
+  }
+
+  /* --- hover kind tag --------------------------------------------------------------------- */
+
+  function hoverTag(ev) {
+    var tag = document.getElementById('rv-ed-hovertag');
+    if (!edit.on || !edit.hover || edit.hover === edit.sel || drag) {
+      if (tag) tag.style.display = 'none';
+      return;
+    }
+    if (!tag) {
+      tag = document.createElement('div');
+      tag.id = 'rv-ed-hovertag';
+      document.body.appendChild(tag);
+    }
+    tag.textContent = kindOf(edit.hover);
+    tag.style.display = 'block';
+    tag.style.left = (ev.clientX + 14) + 'px';
+    tag.style.top = (ev.clientY + 16) + 'px';
+  }
+
+  document.addEventListener('mousemove', function (ev) {
+    if (edit.on) hoverTag(ev);
+  }, true);
+
+  buildToolbar();
+
   var params = new URLSearchParams(location.search);
   if (params.get('rv-test-edit')) {
     // Headless smoke hook: POST the given ops through the real pipeline.
@@ -864,9 +1252,12 @@
   if (params.get('rv-edit') === '1') {
     var arm = function () {
       setEdit(true);
-      if (params.get('rv-select') === '1') {
+      var selParam = params.get('rv-select');
+      if (selParam) {
         var slide = Reveal.getCurrentSlide();
-        edit.sel = slide && slide.querySelector('[data-rv-src]');
+        edit.sel = slide && (selParam === '1'
+          ? slide.querySelector('[data-rv-src]')
+          : slide.querySelector('[data-rv-src="' + selParam + '"]'));
         syncChrome();
       }
       if (params.get('rv-drawer') === '1') toggleDrawer();

@@ -273,6 +273,10 @@ class _Handler(http.server.SimpleHTTPRequestHandler):
             return self._sse()
         if path in (DEV_PREFIX + "/editor.js", DEV_PREFIX + "/editor.css"):
             return self._dev_asset(path.rsplit("/", 1)[1])
+        if path == DEV_PREFIX + "/src":
+            if not self._check_token():
+                return self._send_json(403, {"error": "forbidden"})
+            return self._src_span()
         if path == DEV_PREFIX + "/open":
             if not self._check_token():
                 return self._send_json(403, {"error": "forbidden"})
@@ -347,6 +351,26 @@ class _Handler(http.server.SimpleHTTPRequestHandler):
                     "detail": sess.build_error and sess.build_error.get("message"),
                 })
             return self._send_json(200, {"ok": True, "sha256": result["sha256"]})
+
+    def _src_span(self) -> None:
+        """Return the .pres source lines of a span (panel display + editing)."""
+        q = self._query()
+        try:
+            start = int(q.get("start", "1"))
+            end = int(q.get("end", str(start)))
+        except ValueError:
+            return self._send_json(400, {"error": "bad range"})
+        with self.sess.lock:
+            data = self.sess.pres.read_bytes()
+            lines = data.decode("utf-8").replace("\r\n", "\n").split("\n")
+            if not (1 <= start <= end <= len(lines)):
+                return self._send_json(422, {"error": "line_out_of_range"})
+            return self._send_json(200, {
+                "sha256": _sha_bytes(data),
+                "start": start,
+                "end": end,
+                "lines": lines[start - 1:end],
+            })
 
     def _undo_redo(self, undo: bool) -> None:
         sess = self.sess

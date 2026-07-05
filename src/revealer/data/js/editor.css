@@ -201,3 +201,146 @@ html.rv-edit .reveal .slides section * { cursor: crosshair; }
   padding: 0 0.4em;
 }
 #rv-ed-drawer button:hover { background: #37436b; }
+
+/* --- editor shell: toolbar, panel, help, hover tag -------------------------- */
+
+#rv-ed-toolbar {
+  position: fixed;
+  top: 12px;
+  left: 12px;
+  display: flex;
+  gap: 6px;
+  align-items: center;
+  background: #1c1c2e;
+  padding: 6px 10px;
+  border-radius: 10px;
+  box-shadow: 0 6px 24px rgba(0, 0, 0, 0.35);
+  font: 13px system-ui, sans-serif;
+  z-index: 9700;
+}
+#rv-ed-toolbar button {
+  font: inherit;
+  background: #2a3350;
+  color: #fff;
+  border: 1px solid #4a5580;
+  border-radius: 6px;
+  padding: 3px 10px;
+  cursor: pointer;
+}
+#rv-ed-toolbar button:hover { background: #37436b; }
+#rv-ed-toolbar .rv-tb-edit.rv-active { background: #2a76dd; border-color: #2a76dd; }
+#rv-ed-toolbar .rv-tb-status {
+  color: #9db7e8;
+  font-family: ui-monospace, monospace;
+  font-size: 12px;
+  padding: 0 6px;
+  white-space: nowrap;
+}
+#rv-ed-toolbar .rv-tb-status.rv-st-saving { color: #ffd166; }
+#rv-ed-toolbar .rv-tb-status.rv-st-saved { color: #7ade7a; }
+#rv-ed-toolbar .rv-tb-status.rv-st-error { color: #ff8a7a; }
+
+#rv-ed-help {
+  position: fixed;
+  top: 60px;
+  left: 12px;
+  width: 340px;
+  background: #fff;
+  color: #1c1c2e;
+  border-radius: 10px;
+  padding: 1em 1.2em;
+  font: 13px/1.5 system-ui, sans-serif;
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.35);
+  z-index: 9800;
+}
+#rv-ed-help ul { margin: 0.5em 0; padding-left: 1.2em; }
+#rv-ed-help code { background: #f0f2f8; padding: 0 4px; border-radius: 3px; }
+#rv-ed-help button {
+  font: inherit;
+  padding: 3px 12px;
+  border-radius: 6px;
+  border: 1px solid #bbb;
+  background: #f2f4f8;
+  cursor: pointer;
+}
+
+#rv-ed-panel {
+  position: fixed;
+  top: 12px;
+  right: 12px;
+  width: 280px;
+  max-height: calc(100vh - 24px);
+  overflow-y: auto;
+  display: none;
+  flex-direction: column;
+  gap: 8px;
+  background: #1c1c2e;
+  color: #fff;
+  border-radius: 10px;
+  padding: 12px 14px;
+  font: 13px system-ui, sans-serif;
+  box-shadow: 0 10px 32px rgba(0, 0, 0, 0.4);
+  z-index: 9600;
+}
+#rv-ed-panel .rv-pn-head { font-size: 13px; line-height: 1.5; }
+#rv-ed-panel .rv-pn-crumb { cursor: pointer; color: #9db7e8; }
+#rv-ed-panel .rv-pn-crumb:hover { text-decoration: underline; }
+#rv-ed-panel .rv-pn-crumb b { color: #fff; }
+#rv-ed-panel .rv-pn-sub { color: #8a93b5; font-family: ui-monospace, monospace; font-size: 11px; }
+#rv-ed-panel .rv-pn-hint { color: #8a93b5; line-height: 1.5; }
+#rv-ed-panel .rv-pn-fields { display: flex; flex-direction: column; gap: 6px; }
+#rv-ed-panel .rv-pn-fld { display: flex; align-items: center; gap: 8px; }
+#rv-ed-panel .rv-pn-fld span { flex: 0 0 40%; color: #c4cbe4; }
+#rv-ed-panel .rv-pn-fld input {
+  flex: 1;
+  min-width: 0;
+  font: 12px ui-monospace, monospace;
+  background: #12121f;
+  color: #fff;
+  border: 1px solid #4a5580;
+  border-radius: 5px;
+  padding: 4px 6px;
+}
+#rv-ed-panel .rv-pn-fld input:focus { border-color: #2a76dd; outline: none; }
+#rv-ed-panel .rv-pn-actions { display: flex; gap: 6px; flex-wrap: wrap; }
+#rv-ed-panel button {
+  font: 12px system-ui, sans-serif;
+  background: #2a3350;
+  color: #fff;
+  border: 1px solid #4a5580;
+  border-radius: 6px;
+  padding: 3px 9px;
+  cursor: pointer;
+}
+#rv-ed-panel button:hover { background: #37436b; }
+#rv-ed-panel .rv-pn-del:hover { background: #7a2d2d; }
+#rv-ed-panel .rv-pn-srctitle { color: #c4cbe4; margin-top: 2px; }
+#rv-ed-panel .rv-pn-src {
+  width: 100%;
+  min-height: 90px;
+  resize: vertical;
+  font: 11px/1.5 ui-monospace, monospace;
+  background: #12121f;
+  color: #d7e0f5;
+  border: 1px solid #4a5580;
+  border-radius: 6px;
+  padding: 6px;
+  box-sizing: border-box;
+  white-space: pre;
+}
+#rv-ed-panel .rv-pn-foot { color: #8a93b5; font-size: 11px; line-height: 1.4; }
+
+#rv-ed-hovertag {
+  position: fixed;
+  display: none;
+  background: rgba(28, 28, 46, 0.92);
+  color: #fff;
+  font: 11px system-ui, sans-serif;
+  padding: 2px 7px;
+  border-radius: 4px;
+  pointer-events: none;
+  z-index: 9900;
+}
+
+/* keep the fragment drawer clear of the panel */
+#rv-ed-drawer { right: 306px; }
