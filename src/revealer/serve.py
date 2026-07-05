@@ -39,6 +39,7 @@ from functools import partial
 from pathlib import Path
 
 from . import build as build_mod
+from . import edit as edit_mod
 
 DEV_PREFIX = "/__rv__"
 SSE_KEEPALIVE_S = 15
@@ -64,6 +65,9 @@ class DevSession:
     clients: list[queue.SimpleQueue] = field(default_factory=list)
     clients_lock: threading.Lock = field(default_factory=threading.Lock)
     lock: threading.RLock = field(default_factory=threading.RLock)
+    # undo/redo journals: full before-images (sha_before, text_before, sha_after)
+    journal: list[tuple[str, str, str]] = field(default_factory=list)
+    redo: list[tuple[str, str, str]] = field(default_factory=list)
 
 
 def _sha_bytes(data: bytes) -> str:
@@ -284,12 +288,121 @@ class _Handler(http.server.SimpleHTTPRequestHandler):
         return self._serve_static()
 
     def do_POST(self):  # noqa: N802
-        # Edit endpoints land in a later stage; the guard rails are in place.
         if not self._check_token():
             return self._send_json(403, {"error": "forbidden"})
-        return self._send_json(501, {"error": "not implemented"})
+        path = self._path_only()
+        if path == DEV_PREFIX + "/edit":
+            return self._edit()
+        if path == DEV_PREFIX + "/undo":
+            return self._undo_redo(undo=True)
+        if path == DEV_PREFIX + "/redo":
+            return self._undo_redo(undo=False)
+        return self._send_json(404, {"error": "not found"})
 
-    do_PUT = do_POST  # noqa: N815
+    def do_PUT(self):  # noqa: N802
+        if not self._check_token():
+            return self._send_json(403, {"error": "forbidden"})
+        if self._path_only() == DEV_PREFIX + "/upload":
+            return self._upload()
+        return self._send_json(404, {"error": "not found"})
+
+    def _read_body(self, limit: int = 220 * 1024 * 1024) -> bytes:
+        try:
+            length = int(self.headers.get("Content-Length", "0"))
+        except ValueError:
+            length = 0
+        if length < 0 or length > limit:
+            raise ValueError("body too large")
+        return self.rfile.read(length)
+
+    def _edit(self) -> None:
+        sess = self.sess
+        try:
+            req = json.loads(self._read_body().decode("utf-8"))
+        except (ValueError, UnicodeDecodeError):
+            return self._send_json(400, {"error": "bad json"})
+        sha = str(req.get("sha256", ""))
+        edits = req.get("edits", [])
+        if not isinstance(edits, list) or not edits:
+            return self._send_json(400, {"error": "no edits"})
+        with sess.lock:
+            before_text = sess.pres.read_text()
+            try:
+                result = edit_mod.apply_edits(sess.pres, sha, edits)
+            except edit_mod.EditError as exc:
+                return self._send_json(exc.status, exc.payload)
+            # To undo: the file must still carry the new sha; restore the old text.
+            sess.journal.append((result["sha256"], before_text, sha))
+            del sess.journal[:-200]
+            sess.redo.clear()
+            _rebuild(sess, log=self._log)
+            if sess.build_error:
+                # The edit produced an unbuildable deck — engine bug or bad op.
+                # Roll it back so the user is never stuck on a broken file.
+                sess.pres.write_text(before_text)
+                sess.journal.pop()
+                _rebuild(sess, log=self._log)
+                return self._send_json(422, {
+                    "error": "edit_breaks_build",
+                    "detail": sess.build_error and sess.build_error.get("message"),
+                })
+            return self._send_json(200, {"ok": True, "sha256": result["sha256"]})
+
+    def _undo_redo(self, undo: bool) -> None:
+        sess = self.sess
+        with sess.lock:
+            stack = sess.journal if undo else sess.redo
+            other = sess.redo if undo else sess.journal
+            if not stack:
+                return self._send_json(409, {"error": "nothing_to_" + ("undo" if undo else "redo")})
+            expect_sha, restore_text, restore_sha = stack[-1]
+            data = sess.pres.read_bytes()
+            current_sha = _sha_bytes(data)
+            if current_sha != expect_sha:
+                return self._send_json(409, {
+                    "error": "external_edit",
+                    "detail": "the file changed outside the editor; use your editor's undo",
+                })
+            stack.pop()
+            current_text = data.decode("utf-8")
+            sess.pres.write_text(restore_text)
+            other.append((restore_sha, current_text, current_sha))
+            _rebuild(sess, log=self._log)
+            return self._send_json(200, {"ok": True, "sha256": sess.sha})
+
+    _UPLOAD_ROUTES = {
+        "Images": {".png", ".jpg", ".jpeg", ".gif", ".webp", ".svg"},
+        "Movies": {".mp4", ".webm", ".ogv", ".mov"},
+        "Audio": {".mp3", ".wav", ".ogg"},
+    }
+
+    def _upload(self) -> None:
+        sess = self.sess
+        name = os.path.basename(self._query().get("name", "")).strip()
+        ext = os.path.splitext(name)[1].lower()
+        allowed = set().union(*self._UPLOAD_ROUTES.values()) | {".pdf"}
+        if not name or ext not in allowed:
+            return self._send_json(400, {"error": "bad name", "name": name})
+        try:
+            body = self._read_body()
+        except ValueError:
+            return self._send_json(413, {"error": "too large"})
+        media = sess.pdir / "Media"
+        dest_dir = media
+        for sub, exts in self._UPLOAD_ROUTES.items():
+            if ext in exts and (media / sub).is_dir():
+                dest_dir = media / sub
+                break
+        dest_dir.mkdir(parents=True, exist_ok=True)
+        stem, suffix = os.path.splitext(name)
+        dest = dest_dir / name
+        n = 1
+        while dest.exists():
+            dest = dest_dir / "{0}-{1}{2}".format(stem, n, suffix)
+            n += 1
+        dest.write_bytes(body)
+        rel = dest.relative_to(sess.pdir).as_posix()
+        return self._send_json(200, {"ok": True, "path": rel})
 
     # --- implementations ----------------------------------------------------
 
