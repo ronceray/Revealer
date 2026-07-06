@@ -436,6 +436,11 @@ body.rv-split #rv-ed-panel { padding-top: 12px; }
 }
 #rv-ed-history button:hover { background: #37436b; }
 #rv-ed-history .rv-hi-hint { color: #8a93b5; font-size: 11px; line-height: 1.45; margin: 6px 0; }
+#rv-ed-history .rv-hi-item.rv-hi-current { background: rgba(94, 156, 255, 0.12); }
+#rv-ed-history .rv-hi-cur {
+  color: #5e9cff; font-size: 10px; font-weight: 600; margin-right: 6px;
+  white-space: nowrap;
+}
 #rv-ed-history .rv-hi-item {
   display: flex; gap: 8px; align-items: center; padding: 4px 2px;
   border-top: 1px solid #2a3350;

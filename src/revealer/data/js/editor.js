@@ -926,7 +926,18 @@
         .catch(function () { toast('Export failed', 4000); });
     }
     tb.querySelector('.rv-tb-xhtml').addEventListener('click', function () { doExport('html'); });
-    tb.querySelector('.rv-tb-hist').addEventListener('click', toggleHistory);
+    if (window.__RV_DEV__.history === 'fallback') {
+      var hb = tb.querySelector('.rv-tb-hist');
+      hb.disabled = true;
+      hb.title = 'Save history needs git on the server\u2019s PATH';
+      hb.style.opacity = '0.4';
+      if (!window.__rvHistToastShown) {
+        window.__rvHistToastShown = true;
+        toast('git not found \u2014 undo limited to the last edit, no save history', 6000);
+      }
+    } else {
+      tb.querySelector('.rv-tb-hist').addEventListener('click', toggleHistory);
+    }
     tb.querySelector('.rv-tb-xpdf').addEventListener('click', function () { doExport('pdf'); });
     tb.querySelector('.rv-tb-media').addEventListener('click', function () {
       if (!edit.on) setEdit(true);
@@ -1224,8 +1235,10 @@
           list.innerHTML = '<div class="rv-hi-item">no snapshots yet — save once</div>';
           return;
         }
+        var cur = j.cursor || (j.entries[0] && j.entries[0].hash);
         list.innerHTML = j.entries.map(function (e) {
-          return '<div class="rv-hi-item">' +
+          return '<div class="rv-hi-item' + (e.hash === cur ? ' rv-hi-current' : '') + '">' +
+            (e.hash === cur ? '<span class="rv-hi-cur">◀ current</span>' : '') +
             '<span class="rv-hi-badge' + (e.auto ? '' : ' rv-hi-manual') + '">' +
             (e.auto ? 'auto' : 'save') + '</span>' +
             '<span class="rv-hi-when">' + relTime(e.ts) + '</span>' +

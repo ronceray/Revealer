@@ -70,9 +70,11 @@ class DevSession:
     clients: list[queue.SimpleQueue] = field(default_factory=list)
     clients_lock: threading.Lock = field(default_factory=threading.Lock)
     lock: threading.RLock = field(default_factory=threading.RLock)
-    # undo/redo journals: full before-images (sha_before, text_before, sha_after)
-    journal: list[tuple[str, str, str]] = field(default_factory=list)
-    redo: list[tuple[str, str, str]] = field(default_factory=list)
+    # undo/redo = a cursor over the shadow-git first-parent history.
+    cursor: str | None = None            # detached position (None = at HEAD)
+    dirty_keep: bytes | None = None      # unbuilt working state saved by a dirty undo
+    fallback_undo: bytes | None = None   # single-slot undo when git is unavailable
+    history_mode: str = "git"            # "git" | "fallback"
     previews: set = field(default_factory=set)  # generated .rv-preview-* artifacts
 
 
@@ -87,7 +89,7 @@ def _broadcast(sess: DevSession, event: dict) -> None:
             q.put(payload)
 
 
-def _rebuild(sess: DevSession, log=print) -> bool:
+def _rebuild(sess: DevSession, log=print, commit: bool = True) -> bool:
     """Rebuild the dev artifact; on failure keep the last good one."""
     with sess.lock:
         try:
@@ -99,11 +101,13 @@ def _rebuild(sess: DevSession, log=print) -> bool:
             sess.build_error = None
             log("rebuilt {0} in {1:.0f} ms".format(
                 sess.html_path.name, 1000 * (time.monotonic() - t0)))
-            try:
-                _history_commit(sess.pdir, sess.pres,
-                                time.strftime("%H:%M:%S"), auto=True)
-            except Exception:
-                pass  # history is best-effort, never blocks a build
+            if commit:
+                try:
+                    _history_commit(sess.pdir, sess.pres,
+                                    time.strftime("%H:%M:%S"), auto=True,
+                                    sess=sess)
+                except Exception:
+                    pass  # history is best-effort, never blocks a build
             _broadcast(sess, {"type": "reload", "sha": sess.sha})
             return True
         except Exception as exc:
@@ -183,7 +187,7 @@ def _watch(sess: DevSession, stop: threading.Event, log=print) -> None:
 
 def _inject_dev(html: str, sess: DevSession) -> str:
     """Inject the dev bootstrap + editor assets at response time."""
-    boot: dict = {"token": sess.token}
+    boot: dict = {"token": sess.token, "history": sess.history_mode}
     if sess.build_error:
         # A page opened while the build is broken shows the overlay right
         # away instead of waiting for the SSE replay.
@@ -203,10 +207,18 @@ HISTORY_DIR = ".rv-history"
 
 
 def _hgit(pdir: Path, *args: str) -> subprocess.CompletedProcess:
-    """Run git against the deck's shadow history repo (never its own .git)."""
+    """Run git against the deck's shadow history repo (raw bytes I/O)."""
     return subprocess.run(
         ["git", "--git-dir", str(pdir / HISTORY_DIR), "--work-tree", str(pdir), *args],
-        capture_output=True, text=True, timeout=30)
+        capture_output=True, timeout=30)
+
+
+def _hgit_text(pdir: Path, *args: str) -> subprocess.CompletedProcess:
+    """Git for display output (log/diff): decoded UTF-8, errors replaced."""
+    return subprocess.run(
+        ["git", "--git-dir", str(pdir / HISTORY_DIR), "--work-tree", str(pdir), *args],
+        capture_output=True, text=True, encoding="utf-8", errors="replace",
+        timeout=30)
 
 
 def _history_init(pdir: Path) -> bool:
@@ -221,22 +233,87 @@ def _history_init(pdir: Path) -> bool:
     return ok
 
 
-def _history_commit(pdir: Path, pres: Path, message: str, auto: bool) -> bool:
-    """Snapshot the .pres (+ .bib files) if anything changed."""
+def _head_hash(pdir: Path) -> str | None:
+    proc = _hgit_text(pdir, "rev-parse", "HEAD")
+    return proc.stdout.strip() if proc.returncode == 0 else None
+
+
+def _blob_bytes(pdir: Path, pres: Path, commit: str) -> bytes | None:
+    if not re.fullmatch(r"[0-9a-f]{7,40}", commit):
+        return None
+    proc = _hgit(pdir, "show", "{0}:{1}".format(commit, pres.name))
+    return proc.stdout if proc.returncode == 0 else None
+
+
+def _parent_of(pdir: Path, commit: str) -> str | None:
+    proc = _hgit_text(pdir, "rev-parse", commit + "^")
+    return proc.stdout.strip() if proc.returncode == 0 else None
+
+
+def _child_of(pdir: Path, commit: str) -> str | None:
+    """The first-parent descendant of *commit* on the HEAD line, if any."""
+    proc = _hgit_text(pdir, "rev-list", "--first-parent", "HEAD")
+    hashes = proc.stdout.split()
+    try:
+        i = hashes.index(commit)
+    except ValueError:
+        return None
+    return hashes[i - 1] if i > 0 else None
+
+
+def _rewind_commit(pdir: Path, cursor: str,
+                   message: str = "auto: rewind") -> bool:
+    """Append a commit whose tree is the cursor's — history stays linear and
+    nothing after the cursor is lost (undo of the undo remains possible)."""
+    head = _head_hash(pdir)
+    if head is None:
+        return False
+    tree = _hgit_text(pdir, "rev-parse", cursor + "^{tree}").stdout.strip()
+    head_tree = _hgit_text(pdir, "rev-parse", head + "^{tree}").stdout.strip()
+    if not tree or tree == head_tree:
+        return False
+    proc = _hgit_text(pdir, "commit-tree", tree, "-p", head, "-m", message)
+    new = proc.stdout.strip()
+    if proc.returncode != 0 or not new:
+        return False
+    return _hgit(pdir, "update-ref", "HEAD", new).returncode == 0
+
+
+def _history_commit(pdir: Path, pres: Path, message: str, auto: bool,
+                    sess: DevSession | None = None) -> bool:
+    """Snapshot the .pres (+ .bib files) if anything changed.
+
+    Committing while the undo cursor is detached first appends a rewind
+    commit (the cursor's tree), so the new content parents onto what the
+    user was actually looking at.
+    """
     if not _history_init(pdir):
         return False
+    prefix = "auto: " if auto else "save: "
+    rewound = False
+    if sess is not None and sess.cursor:
+        head = _head_hash(pdir)
+        if head and sess.cursor != head:
+            # a manual save at a detached cursor: the rewind IS the snapshot
+            rewound = _rewind_commit(
+                pdir, sess.cursor,
+                message="auto: rewind" if auto else prefix + message)
     files = [pres.name] + [f.name for f in pdir.glob("*.bib")]
     _hgit(pdir, "add", "-f", "--", *files)
-    if _hgit(pdir, "diff", "--cached", "--quiet").returncode == 0:
-        return False  # nothing new
-    prefix = "auto: " if auto else "save: "
-    return _hgit(pdir, "commit", "-q", "-m", prefix + message).returncode == 0
+    committed = False
+    if _hgit(pdir, "diff", "--cached", "--quiet").returncode != 0:
+        committed = _hgit(pdir, "commit", "-q", "-m",
+                          prefix + message).returncode == 0
+    if sess is not None and (rewound or committed):
+        sess.cursor = None
+        sess.dirty_keep = None
+    return committed or rewound
 
 
 def _history_list(pdir: Path, limit: int = 60) -> list[dict]:
     if not (pdir / HISTORY_DIR / "HEAD").exists():
         return []
-    proc = _hgit(pdir, "log", "--pretty=%H%x00%ct%x00%s", "-{0}".format(limit))
+    proc = _hgit_text(pdir, "log", "--pretty=%H%x00%ct%x00%s", "-{0}".format(limit))
     out = []
     for line in proc.stdout.splitlines():
         parts = line.split("\x00")
@@ -247,10 +324,41 @@ def _history_list(pdir: Path, limit: int = 60) -> list[dict]:
 
 
 def _history_show(pdir: Path, pres: Path, commit: str) -> str | None:
-    if not re.fullmatch(r"[0-9a-f]{7,40}", commit):
-        return None
-    proc = _hgit(pdir, "show", "{0}:{1}".format(commit, pres.name))
-    return proc.stdout if proc.returncode == 0 else None
+    data = _blob_bytes(pdir, pres, commit)
+    return data.decode("utf-8", errors="replace") if data is not None else None
+
+
+def _resolve_position(sess: DevSession) -> str:
+    """Where the working file sits relative to history.
+
+    ``no_history`` | ``at_head`` | ``at_cursor`` | ``dirty`` — the working
+    bytes are always revalidated; the cursor is never trusted blindly.
+    """
+    if sess.history_mode != "git":
+        return "no_history"
+    head = _head_hash(sess.pdir)
+    if head is None:
+        return "no_history"
+    try:
+        cur = sess.pres.read_bytes()
+    except OSError:
+        return "no_history"
+    if _blob_bytes(sess.pdir, sess.pres, head) == cur:
+        return "at_head"
+    if sess.cursor and _blob_bytes(sess.pdir, sess.pres, sess.cursor) == cur:
+        return "at_cursor"
+    return "dirty"
+
+
+def _bib_differs(sess: DevSession, target: str) -> bool:
+    """Do the working .bib files differ from *target*'s? (Undo/restore write
+    the .pres only; the drawer warns when citations may be out of step.)"""
+    for bib in sess.pdir.glob("*.bib"):
+        proc = _hgit(sess.pdir, "show", "{0}:{1}".format(target, bib.name))
+        blob = proc.stdout if proc.returncode == 0 else None
+        if blob != bib.read_bytes():
+            return True
+    return False
 
 
 def _open_in_editor(pres: Path, line: int, log=print) -> bool:
@@ -373,13 +481,16 @@ class _Handler(http.server.SimpleHTTPRequestHandler):
             h = self._query().get("hash", "")
             if not re.fullmatch(r"[0-9a-f]{7,40}", h):
                 return self._send_json(400, {"error": "bad hash"})
-            proc = _hgit(self.sess.pdir, "show", h, "--format=%s", "--patch",
-                         "--", self.sess.pres.name)
+            proc = _hgit_text(self.sess.pdir, "show", h, "--format=%s",
+                              "--patch", "--", self.sess.pres.name)
             return self._send_json(200, {"diff": proc.stdout[:20000]})
         if path == DEV_PREFIX + "/history":
             if not self._check_token():
                 return self._send_json(403, {"error": "forbidden"})
-            return self._send_json(200, {"entries": _history_list(self.sess.pdir)})
+            return self._send_json(200, {
+                "entries": _history_list(self.sess.pdir),
+                "cursor": self.sess.cursor,
+            })
         if path == DEV_PREFIX + "/schema":
             if not self._check_token():
                 return self._send_json(403, {"error": "forbidden"})
@@ -458,16 +569,16 @@ class _Handler(http.server.SimpleHTTPRequestHandler):
                 result = edit_mod.apply_edits(sess.pres, sha, edits)
             except edit_mod.EditError as exc:
                 return self._send_json(exc.status, exc.payload)
-            # To undo: the file must still carry the new sha; restore the old text.
-            sess.journal.append((result["sha256"], before_text, sha))
-            del sess.journal[:-200]
-            sess.redo.clear()
+            # Undo state: the rebuild's auto-commit records this edit in the
+            # shadow git; without git, keep a single before-image slot.
+            if sess.history_mode != "git":
+                sess.fallback_undo = before_text.encode("utf-8")
             _rebuild(sess, log=self._log)
             if sess.build_error:
                 # The edit produced an unbuildable deck — engine bug or bad op.
                 # Roll it back so the user is never stuck on a broken file.
                 sess.pres.write_text(before_text, encoding="utf-8")
-                sess.journal.pop()
+                sess.fallback_undo = None
                 _rebuild(sess, log=self._log)
                 return self._send_json(422, {
                     "error": "edit_breaks_build",
@@ -502,7 +613,8 @@ class _Handler(http.server.SimpleHTTPRequestHandler):
             req = {}
         msg = str(req.get("message") or "manual snapshot")[:200]
         with self.sess.lock:
-            ok = _history_commit(self.sess.pdir, self.sess.pres, msg, auto=False)
+            ok = _history_commit(self.sess.pdir, self.sess.pres, msg,
+                                 auto=False, sess=self.sess)
         return self._send_json(200, {"ok": True, "committed": ok})
 
     def _history_restore(self) -> None:
@@ -511,23 +623,25 @@ class _Handler(http.server.SimpleHTTPRequestHandler):
             req = json.loads(self._read_body().decode("utf-8"))
         except ValueError:
             return self._send_json(400, {"error": "bad json"})
-        text = _history_show(sess.pdir, sess.pres, str(req.get("hash", "")))
-        if text is None:
+        target = str(req.get("hash", ""))
+        data = _blob_bytes(sess.pdir, sess.pres, target)
+        if data is None:
             return self._send_json(422, {"error": "unknown_version"})
         with sess.lock:
-            before = sess.pres.read_text(encoding="utf-8")
-            if before == text:
+            if sess.pres.read_bytes() == data:
                 return self._send_json(200, {"ok": True, "unchanged": True})
-            # the current state is snapshotted first, so a restore never loses work
-            _history_commit(sess.pdir, sess.pres, "before restore", auto=True)
-            before_sha = _sha_bytes(before.encode("utf-8"))
-            sess.pres.write_text(text, encoding="utf-8")
-            new_sha = _sha_bytes(text.encode("utf-8"))
-            sess.journal.append((new_sha, before, before_sha))
-            del sess.journal[:-200]
-            sess.redo.clear()
+            # the current state is snapshotted first, so a restore never loses
+            # work; the rebuild then commits the restored state as a new entry
+            # (history stays linear — a restore is itself undoable).
+            _history_commit(sess.pdir, sess.pres, "before restore", auto=True,
+                            sess=sess)
+            sess.pres.write_bytes(data)
+            sess.dirty_keep = None
             _rebuild(sess, log=self._log)
-            return self._send_json(200, {"ok": True})
+            return self._send_json(200, {
+                "ok": True, "cursor": sess.cursor,
+                "bib_differs": _bib_differs(sess, target),
+            })
 
     def _history_preview(self) -> None:
         """Build a historical version as a separate artifact, without touching
@@ -585,26 +699,66 @@ class _Handler(http.server.SimpleHTTPRequestHandler):
         return self._send_json(200, {"ok": True, "path": out})
 
     def _undo_redo(self, undo: bool) -> None:
+        """Walk the undo cursor over shadow-git history.
+
+        The working bytes are revalidated against the blob at the claimed
+        position every time, so hand edits are picked up (and become
+        undoable) rather than refused.
+        """
         sess = self.sess
+        kind = "undo" if undo else "redo"
         with sess.lock:
-            stack = sess.journal if undo else sess.redo
-            other = sess.redo if undo else sess.journal
-            if not stack:
-                return self._send_json(409, {"error": "nothing_to_" + ("undo" if undo else "redo")})
-            expect_sha, restore_text, restore_sha = stack[-1]
-            data = sess.pres.read_bytes()
-            current_sha = _sha_bytes(data)
-            if current_sha != expect_sha:
-                return self._send_json(409, {
-                    "error": "external_edit",
-                    "detail": "the file changed outside the editor; use your editor's undo",
-                })
-            stack.pop()
-            current_text = data.decode("utf-8")
-            sess.pres.write_text(restore_text, encoding="utf-8")
-            other.append((restore_sha, current_text, current_sha))
-            _rebuild(sess, log=self._log)
-            return self._send_json(200, {"ok": True, "sha256": sess.sha})
+            if sess.history_mode != "git":
+                if not undo or sess.fallback_undo is None:
+                    return self._send_json(409, {"error": "nothing_to_" + kind})
+                data = sess.pres.read_bytes()
+                sess.pres.write_bytes(sess.fallback_undo)
+                sess.fallback_undo = data  # swap: a second undo re-does
+                _rebuild(sess, log=self._log)
+                return self._send_json(200, {"ok": True, "sha256": sess.sha,
+                                             "cursor": None})
+            pos = _resolve_position(sess)
+            if pos == "no_history":
+                return self._send_json(409, {"error": "nothing_to_" + kind})
+            head = _head_hash(sess.pdir)
+            if undo:
+                if pos == "dirty":
+                    # unbuilt/hand-edited state: keep it aside, step to HEAD
+                    target = head
+                    sess.dirty_keep = sess.pres.read_bytes()
+                    new_cursor = None
+                else:
+                    base = sess.cursor if pos == "at_cursor" else head
+                    target = _parent_of(sess.pdir, base)
+                    if target is None:
+                        return self._send_json(409, {"error": "nothing_to_undo"})
+                    new_cursor = target
+            else:
+                if pos == "at_cursor":
+                    target = _child_of(sess.pdir, sess.cursor)
+                    if target is None:
+                        return self._send_json(409, {"error": "nothing_to_redo"})
+                    new_cursor = None if target == head else target
+                elif pos == "at_head" and sess.dirty_keep is not None:
+                    data, sess.dirty_keep = sess.dirty_keep, None
+                    sess.cursor = None
+                    sess.pres.write_bytes(data)
+                    _rebuild(sess, log=self._log, commit=False)
+                    return self._send_json(200, {
+                        "ok": True, "sha256": sess.sha, "cursor": None,
+                        "bib_differs": False})
+                else:
+                    return self._send_json(409, {"error": "nothing_to_redo"})
+            data = _blob_bytes(sess.pdir, sess.pres, target)
+            if data is None:
+                return self._send_json(409, {"error": "nothing_to_" + kind})
+            sess.pres.write_bytes(data)
+            sess.cursor = new_cursor
+            _rebuild(sess, log=self._log, commit=False)
+            return self._send_json(200, {
+                "ok": True, "sha256": sess.sha, "cursor": sess.cursor,
+                "bib_differs": _bib_differs(sess, target),
+            })
 
     _UPLOAD_ROUTES = {
         "Images": {".png", ".jpg", ".jpeg", ".gif", ".webp", ".svg"},
@@ -767,7 +921,8 @@ def create_server(pres: Path, port: int = 8000, watch: bool = True, log=print):
     """
     pres = Path(pres).resolve()
     sess = DevSession(pres=pres, pdir=pres.parent,
-                      token=secrets.token_urlsafe(24))
+                      token=secrets.token_urlsafe(24),
+                      history_mode="git" if shutil.which("git") else "fallback")
 
     _rebuild(sess, log=log)  # first build (failure tolerated: error page served)
 
