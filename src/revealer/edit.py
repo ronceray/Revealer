@@ -334,10 +334,21 @@ def _op_set_fragment_index(lines, op):
 # --- structural ops -----------------------------------------------------------
 
 
+RE_SLIDE_MARKER = re.compile(r"^(=== |--- |>>> first: |%%% )")
+
+
 def _validate_span(lines, span, construct):
     s, e = int(span[0]), int(span[1])
     if not (1 <= s <= e <= len(lines)):
         raise _err(422, "line_out_of_range", line=s if s < 1 else e)
+    if construct == "slide":
+        # a whole-slide span (the outline's unit): anchored on a slide
+        # marker; the end is provenance-derived, no end-token to check.
+        # A vertical stack moves as parent.src .. last-child.src_end.
+        if not RE_SLIDE_MARKER.match(lines[s - 1]):
+            raise _err(422, "anchor_mismatch", line=s, want="slide",
+                       got=lines[s - 1].strip())
+        return s, e
     regex = CONSTRUCT_OPEN.get(construct)
     if construct not in CONSTRUCT_OPEN:
         raise _err(422, "unsupported_target", detail="construct " + str(construct))
@@ -389,6 +400,18 @@ def _op_insert_media(lines, op):
     return [Insert(before, [text], pad=pad)]
 
 
+def _op_insert_lines(lines, op):
+    """Insert verbatim lines — the outline's add/duplicate primitive."""
+    at = op["at"]
+    before = _dest_insert_line(lines, at)
+    text = op.get("text")
+    if not isinstance(text, list) or not text or \
+            any(not isinstance(t, str) or "\n" in t for t in text):
+        raise _err(422, "bad_value", value="text must be a non-empty list of lines")
+    pad = at.get("container_kind") in PARAGRAPH_CONTAINERS
+    return [Insert(before, list(text), pad=pad)]
+
+
 def _op_replace_lines(lines, op):
     """Replace a line span verbatim — the panel's source-box editor.
 
@@ -426,6 +449,7 @@ _OPS = {
     "move_block": _op_move_block,
     "delete_block": _op_delete_block,
     "replace_lines": _op_replace_lines,
+    "insert_lines": _op_insert_lines,
     "insert_media": _op_insert_media,
     "reorder_fragments": _op_reorder_fragments,
 }
