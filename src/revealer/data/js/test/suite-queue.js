@@ -61,35 +61,47 @@
     pe('pointerup', doc, x0 + dx, y0 + dy);
   }
 
+  function historyCount() {
+    return RVT.fetch('/__rv__/history?token=' + encodeURIComponent(token()))
+      .then(function (r) { return r.json(); })
+      .then(function (j) { return (j.entries || []).length; });
+  }
+
   RVT.test('back-to-back drags both land (FIFO, no silent drop)', function () {
-    var pin0;
+    var pin0, n0;
     return srcAll().then(function (j) {
       pin0 = findPin(j);
       RVT.assert(pin0, 'pin line present');
+      return historyCount();
+    }).then(function (n) {
+      n0 = n;
       return openWithPin();
     }).then(function (f) {
       return clickPin(f).then(function (zone) {
         // two drags in quick succession: the second commits while the
-        // first's POST is still in flight, so it must queue, not vanish
+        // first's POST is still in flight, so it must queue, not vanish.
+        // Each landed edit rebuilds and auto-commits, so exactly two new
+        // history entries prove neither was dropped — deterministic, no
+        // need to catch the short-lived intermediate source line.
         dragBy(f, zone, 40, 0);
         var zone2 = f.contentDocument.querySelector('.rv-ed-dragzone') || zone;
         dragBy(f, zone2, 0, 30);
         var deadline = Date.now() + 20000;
-        var seen = {};
         function poll() {
-          return srcAll().then(function (j) {
-            var now = findPin(j);
-            if (now) seen[now.text] = 1;
-            // done when the line differs from the original AND at least two
-            // distinct rewrites were observed or the queue clearly drained
-            var changed = now && now.text !== pin0.text;
-            if (changed && Object.keys(seen).length >= 2) return true;
+          return historyCount().then(function (n) {
+            if (n >= n0 + 2) return true;
             RVT.assert(Date.now() < deadline,
-                       'second drag never landed; saw ' + JSON.stringify(Object.keys(seen)));
+                       'expected 2 new auto-commits, got ' + (n - n0));
             return new Promise(function (res) { setTimeout(res, 250); }).then(poll);
           });
         }
-        return poll().then(function () { f.remove(); return true; });
+        return poll().then(function () {
+          return srcAll();
+        }).then(function (j) {
+          RVT.assert(findPin(j).text !== pin0.text, 'pin line rewritten');
+          f.remove();
+          return true;
+        });
       });
     });
   });
