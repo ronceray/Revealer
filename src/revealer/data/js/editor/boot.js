@@ -25,16 +25,16 @@
     if (Reveal.isReady && Reveal.isReady()) testArm();
     else Reveal.on('ready', testArm);
   }
-  if (params.get('rv-split') === '1') S.splitPref = true;
+  if (params.get('rv-split') === '1') RV.set('splitPref', true);
   if (params.get('rv-edit') === '1') {
     var arm = function () {
       F.setEdit(true);
       var selParam = params.get('rv-select');
       if (selParam) {
         var slide = Reveal.getCurrentSlide();
-        S.sel = slide && (selParam === '1'
+        RV.set('sel', slide && (selParam === '1'
           ? slide.querySelector('[data-rv-src]')
-          : slide.querySelector('[data-rv-src="' + selParam + '"]'));
+          : slide.querySelector('[data-rv-src="' + selParam + '"]')));
         F.syncChrome();
       }
       if (params.get('rv-drawer') === '1') F.toggleDrawer();

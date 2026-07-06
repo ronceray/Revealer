@@ -50,7 +50,7 @@
 
   function sendEdit(edits) {
     editInFlight = true;
-    if (typeof F.rvStatus === 'function') F.rvStatus('saving', 'Saving to ' + RV.PRES_NAME + '…');
+    F.rvStatus('saving', 'Saving to ' + RV.PRES_NAME + '…');
     return fetch('/__rv__/edit', {
       method: 'POST',
       headers: { 'X-RV-Token': TOKEN, 'Content-Type': 'application/json' },
@@ -60,7 +60,7 @@
         editInFlight = false;
         if (!r.ok) {
           clearEditQueue();
-          if (typeof F.rvStatus === 'function') F.rvStatus('error', 'Not saved ✗');
+          F.rvStatus('error', 'Not saved ✗');
           try { sessionStorage.removeItem('rv-ed-lastsave'); } catch (e2) {}
           F.toast(j.error === 'sha_mismatch'
             ? 'Deck changed on disk — resyncing'

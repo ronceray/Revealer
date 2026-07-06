@@ -59,4 +59,6 @@
 
   // exports (what other editor/ modules call):
   F.applyLayout = applyLayout;
+  RV.onChange('on', applyLayout);
+  RV.onChange('splitPref', applyLayout);
 })();

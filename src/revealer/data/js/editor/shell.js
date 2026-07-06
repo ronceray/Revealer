@@ -77,10 +77,9 @@
       importMedia();
     });
     tb.querySelector('.rv-tb-view').addEventListener('click', function () {
-      S.splitPref = !S.splitPref;
+      RV.set('splitPref', !S.splitPref);
       try { localStorage.setItem('rv-ed-split', S.splitPref ? '1' : '0'); } catch (e) {}
       if (!S.on && S.splitPref) F.setEdit(true);
-      F.applyLayout();
     });
     try {
       if (sessionStorage.getItem('rv-ed-lastsave') === 'pending') {

@@ -86,7 +86,7 @@
         var slide = Reveal.getCurrentSlide();
         var t = (slide && slide.querySelector('[data-rv-src="' + c.getAttribute('data-src') + '"]')) ||
                 document.querySelector('section[data-rv-src="' + c.getAttribute('data-src') + '"]');
-        if (t) { S.sel = t; F.syncChrome(); }
+        if (t) { RV.set('sel', t); F.syncChrome(); }
       });
     });
     p.querySelector('.rv-pn-up').addEventListener('click', function () { moveSibling(el, -1); });
@@ -424,7 +424,7 @@
       return;
     }
     F.toast('Deleted ' + F.kindOf(el) + ' — Ctrl+Z to undo');
-    S.sel = null;
+    RV.set('sel', null);
     F.rvPostEdit([{
       op: 'delete_block',
       src: [F.srcOf(el), F.srcEndOf(el)],
@@ -434,6 +434,8 @@
 
   // exports (what other editor/ modules call):
   F.rvPanelSync = rvPanelSync;
+  RV.onChange('on', rvPanelSync);
+  RV.onChange('sel', rvPanelSync);
   F.deleteSelected = deleteSelected;
   F.containerOf = containerOf;
 })();

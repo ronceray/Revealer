@@ -46,6 +46,34 @@
     document.getElementById('rvt-b').remove();
   });
 
+  RVT.test('state bus: set/onChange/emit semantics', function () {
+    var calls = [];
+    var off = RV.onChange('rvtKey', function (v, prev) { calls.push([v, prev]); });
+    RV.set('rvtKey', 1);
+    RV.set('rvtKey', 1);          // dedup: same value must not notify
+    RV.set('rvtKey', 2);
+    RV.emit('rvtKey');            // forced notification, value unchanged
+    off();
+    RV.set('rvtKey', 3);          // unsubscribed: silent
+    RVT.assert(RV.get('rvtKey') === 3, 'get reads the store');
+    RVT.assert(JSON.stringify(calls) === '[[1,null],[2,1],[2,2]]',
+               'got ' + JSON.stringify(calls));
+    delete RV.state.rvtKey;
+    return true;
+  });
+
+  RVT.test('split view arms via the bus (rv-split boot param)', function () {
+    return RVT.iframe('/?rv-edit=1&rv-split=1', '#rv-ed-toolbar').then(function (f) {
+      return RVT.until(function () {
+        return f.contentDocument.body.classList.contains('rv-split') &&
+               f.contentDocument.getElementById('rv-ed-divider');
+      }, 15000, 'body.rv-split + divider').then(function () {
+        f.remove();
+        return true;
+      });
+    });
+  });
+
   RVT.test('history drawer opens from the toolbar with a current marker', function () {
     return RVT.iframe('/?rv-edit=1', '#rv-ed-toolbar').then(function (f) {
       f.contentDocument.querySelector('.rv-tb-hist').click();

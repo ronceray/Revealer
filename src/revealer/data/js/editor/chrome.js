@@ -95,8 +95,8 @@
     var el = layer();
     placeOutline(el.querySelector('.rv-ed-hover'), S.hover !== S.sel ? S.hover : null);
     placeOutline(el.querySelector('.rv-ed-select'), S.sel);
-    if (typeof F.rvRenderHandles === 'function') F.rvRenderHandles();
-    if (typeof F.rvPanelSync === 'function') F.rvPanelSync();
+    F.rvRenderHandles();
+    F.rvPanelSync();
     var bar = el.querySelector('.rv-ed-bar');
     if (S.sel && document.contains(S.sel)) {
       var s = S.sel.getAttribute('data-rv-src');
@@ -129,14 +129,14 @@
     ev.preventDefault();
     ev.stopPropagation();
     if (el !== S.sel) F.flushNudge();
-    S.sel = el;
+    RV.set('sel', el);
     syncChrome();
   }
 
   function selectParent() {
     if (!S.sel) { setEdit(false); return; }
     var parent = S.sel.parentElement && S.sel.parentElement.closest('[data-rv-src]');
-    S.sel = parent || null;
+    RV.set('sel', parent || null);
     syncChrome();
   }
 
@@ -159,7 +159,8 @@
       }
       document.removeEventListener('mousemove', onMove, true);
       document.removeEventListener('click', onClick, true);
-      S.sel = S.hover = null;
+      RV.set('sel', null);
+      S.hover = null;
       el.querySelectorAll('.rv-ed-outline').forEach(function (b) { b.hidden = true; });
       el.querySelector('.rv-ed-bar').hidden = true;
       var tag = document.getElementById('rv-ed-hovertag');
@@ -167,8 +168,7 @@
     }
     var tbBtn = document.querySelector('#rv-ed-toolbar .rv-tb-edit');
     if (tbBtn) tbBtn.classList.toggle('rv-active', on);
-    if (typeof F.rvPanelSync === 'function') F.rvPanelSync();
-    if (typeof F.applyLayout === 'function') F.applyLayout();
+    RV.emit('on');  // panel + split view subscribe to this transition
     syncChrome();
   }
 
@@ -224,7 +224,8 @@
   if (window.Reveal && Reveal.on) {
     Reveal.on('slidechanged', function () {
       F.flushNudge();
-      S.sel = S.hover = null;
+      RV.set('sel', null);
+      S.hover = null;
       syncChrome();
     });
   }

@@ -25,6 +25,35 @@
     nudgeTimer: null,   // debounce timer for arrow-key nudges
   };
   RV.ui = {};
+
+  /* --- state bus: get/set/onChange over RV.state ------------------------------
+     set() writes S[key] and notifies key listeners on real change; emit()
+     forces notification (for transitions applied piecemeal, like setEdit).
+     Hot-path internals (hover during mousemove, drag) still write S directly
+     and repaint via syncChrome. */
+  var busListeners = {};
+  function busNotify(key, value, prev) {
+    (busListeners[key] || []).forEach(function (fn) {
+      try { fn(value, prev); } catch (e) { /* a listener must not break the editor */ }
+    });
+  }
+  RV.get = function (key) { return S[key]; };
+  RV.set = function (key, value) {
+    var prev = S[key];
+    if (prev === value) return value;
+    S[key] = value;
+    busNotify(key, value, prev);
+    return value;
+  };
+  RV.emit = function (key) { busNotify(key, S[key], S[key]); };
+  RV.onChange = function (key, fn) {
+    (busListeners[key] = busListeners[key] || []).push(fn);
+    return function () {
+      var arr = busListeners[key] || [];
+      var i = arr.indexOf(fn);
+      if (i !== -1) arr.splice(i, 1);
+    };
+  };
   RV.fn = {};          // shared cross-module function namespace
   RV.token = TOKEN;
   var F = RV.fn;
@@ -120,7 +149,7 @@
         if (s.selSrc) {
           var slide = Reveal.getCurrentSlide();
           var el = slide && slide.querySelector('[data-rv-src="' + s.selSrc + '"]');
-          if (el) { S.sel = el; }
+          if (el) { RV.set('sel', el); }
           F.syncChrome();
         }
         if (s.drawer) F.toggleDrawer();
