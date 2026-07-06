@@ -41,6 +41,18 @@ Style **bold** middle plain tail.
 Editable target line here.
 
 Math check $x^2$ trails words.
+
+> include: inc.pres
+"""
+
+# A second source file, pulled in via `> include:`. Its pin (line 2) and
+# plain paragraph (line 6) let suite-multifile.js exercise per-file editing.
+INC = b"""=== Included
+> pin: 30% 30% 10%
+inc text
+> end: pin
+
+plain included paragraph
 """
 
 
@@ -56,7 +68,7 @@ def chrome():
 def js_deck(deck):
     if not (REVEAL / "dist" / "reveal.js").is_file():
         pytest.skip("needs a reveal.js checkout at Demo/reveal.js")
-    pdir = deck(PRES, name="js")
+    pdir = deck(PRES, name="js", media={"inc.pres": INC})
     shutil.rmtree(pdir / "reveal.js")
     shutil.copytree(REVEAL, pdir / "reveal.js",
                     ignore=shutil.ignore_patterns(

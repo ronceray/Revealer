@@ -72,8 +72,17 @@
       RVT.assert(items[0].classList.contains('rv-ol-current'), 'first row is current');
       RVT.assert(items[0].querySelector('button[data-act="up"]').disabled,
                  'first mapped row has ↑ disabled');
-      RVT.assert(items[items.length - 1].querySelector('button[data-act="down"]').disabled,
-                 'last mapped row has ↓ disabled');
+      // The fixture ends with an `> include:`d slide (navigate-only, no move
+      // buttons — P8): the last MOVABLE row is the one before it, and its ↓
+      // is disabled (can't move down into / past the included neighbour).
+      var movable = Array.prototype.filter.call(items, function (it) {
+        return it.querySelector('button[data-act="down"]');
+      });
+      RVT.assert(movable.length &&
+                 movable[movable.length - 1].querySelector('button[data-act="down"]').disabled,
+                 'last movable row has ↓ disabled');
+      RVT.assert(items[items.length - 1].querySelector('.rv-ol-inc'),
+                 'the included slide is a navigate-only row');
       // second toolbar click closes it (toggle-by-remove preserved)
       doc.querySelector('.rv-tb-outline').click();
       RVT.assert(!doc.getElementById('rv-ed-outline'), 'toggles closed');
