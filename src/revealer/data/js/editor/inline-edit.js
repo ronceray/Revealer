@@ -96,7 +96,7 @@
   // renderer cannot express (bullets, media, raw html…) is refused up front
   // so the user never loses typing to an uncommittable session.
   function eligible(para) {
-    if (!para || para.closest('[data-rv-inc]')) return false;
+    if (!para) return false;  // included paragraphs are editable (P8)
     if (para.querySelector('.katex,pre')) return false;
     return reverseRender(para) !== null;
   }
@@ -114,7 +114,8 @@
     }
     var s = F.srcOf(para);
     var e = F.srcEndOf(para);
-    F.rvInspect(s, e).then(function (insp) {
+    var file = F.fileOf(para);  // route the round-trip to this para's file (P8)
+    F.rvInspect(s, e, file).then(function (insp) {
       if (editing || !S.on || !document.contains(para)) return;
       var ok = !!insp;
       for (var i = 0; ok && i < insp.length; i++) {
@@ -127,12 +128,12 @@
         F.toast('This paragraph can’t be edited in place — use the panel');
         return;
       }
-      begin(para, s, e);
+      begin(para, s, e, file);
     });
   }, true);
 
-  function begin(para, s, e) {
-    editing = { el: para, s: s, e: e, html: para.innerHTML };
+  function begin(para, s, e, file) {
+    editing = { el: para, s: s, e: e, file: file || '', html: para.innerHTML };
     F.hideTextBubble();
     para.classList.add('rv-ed-editing');
     para.setAttribute('contenteditable', 'true');
@@ -198,7 +199,7 @@
       return;
     }
     F.rvPostEdit([{ op: 'replace_lines', start: ed.s, end: ed.e,
-                    text: src.split('\n') }]);
+                    text: src.split('\n') }], ed.file);
   }
 
   // exports (what other editor/ modules call):

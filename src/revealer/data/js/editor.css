@@ -263,6 +263,7 @@ html.rv-edit .reveal .slides section * { cursor: crosshair; }
 .rv-ol-num { color: #8a93b5; flex: 0 0 1.4em; text-align: right; }
 .rv-ol-title { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .rv-ol-kids, .rv-ol-unmapped { color: #8a93b5; font-size: 11px; }
+.rv-ol-inc { color: #d9c8ff; }
 .rv-ol-acts { display: flex; gap: 2px; }
 #rv-ed-outline button {
   font: inherit;
@@ -361,6 +362,7 @@ html.rv-edit .reveal .slides section * { cursor: crosshair; }
 #rv-ed-panel .rv-pn-crumb:hover { text-decoration: underline; }
 #rv-ed-panel .rv-pn-crumb b { color: #fff; }
 #rv-ed-panel .rv-pn-sub { color: #8a93b5; font-family: ui-monospace, monospace; font-size: 11px; }
+#rv-ed-panel .rv-pn-file { color: #d9c8ff; background: rgba(150, 120, 220, 0.18); border-radius: 3px; padding: 0 4px; }
 #rv-ed-panel .rv-pn-hint { color: #8a93b5; line-height: 1.5; }
 #rv-ed-panel .rv-pn-fields { display: flex; flex-direction: column; gap: 6px; }
 #rv-ed-panel .rv-pn-fld { display: flex; align-items: center; gap: 8px; }

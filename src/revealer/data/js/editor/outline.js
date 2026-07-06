@@ -37,6 +37,15 @@
     return null;
   }
 
+  // Included slides carry data-rv-f / data-rv-inc: their spans are file-local
+  // to an include, so deck-level move/delete/insert (which post main-file
+  // ops) would corrupt the wrong file. v1 shows them navigate-only (P8).
+  function isInc(sec) {
+    var a = anchorOf(sec) || sec;
+    return !!(sec.hasAttribute('data-rv-inc') ||
+              (a && (a.hasAttribute('data-rv-f') || a.hasAttribute('data-rv-inc'))));
+  }
+
   // {s, e} source span of a top-level slide (stacks span all children),
   // or null when the slide carries no provenance (raw HTML).
   function spanOf(sec) {
@@ -81,9 +90,13 @@
         '<span class="rv-ol-title">' + RV.esc(titleOf(sec, i)) +
         (kids ? ' <span class="rv-ol-kids">▤ ' + kids + '</span>' : '') +
         '</span>';
-      if (span) {
-        var canUp = i > 0 && !!spanOf(secs[i - 1]);
-        var canDown = i < secs.length - 1 && !!spanOf(secs[i + 1]);
+      if (span && isInc(sec)) {
+        html += '<span class="rv-ol-unmapped rv-ol-inc">(included)</span>';
+      } else if (span) {
+        // Cross-file moves are out of scope for v1: a swap with an included
+        // neighbour would post file-local line numbers against the main file.
+        var canUp = i > 0 && !!spanOf(secs[i - 1]) && !isInc(secs[i - 1]);
+        var canDown = i < secs.length - 1 && !!spanOf(secs[i + 1]) && !isInc(secs[i + 1]);
         html += '<span class="rv-ol-acts">' +
           '<button data-act="add" title="Add a slide after">＋</button>' +
           '<button data-act="dup" title="Duplicate">⧉</button>' +
@@ -114,7 +127,7 @@
      SSE reload re-renders everything, so nothing mutates the DOM here. */
   function doAction(act, secs, i) {
     var span = spanOf(secs[i]);
-    if (!span) return;
+    if (!span || isInc(secs[i])) return;  // included slides are navigate-only
     if (act === 'add') {
       F.rvPostEdit([{ op: 'insert_lines',
         at: { insert_before: span.e + 1, container_kind: 'deck' },
@@ -127,7 +140,7 @@
       });
     } else if (act === 'up') {
       var prev = spanOf(secs[i - 1]);
-      if (!prev) return;
+      if (!prev || isInc(secs[i - 1])) return;
       F.rvPostEdit([{ op: 'move_block', construct: 'slide',
         src: [span.s, span.e],
         dest: { insert_before: prev.s, container_kind: 'deck' } }]);
@@ -135,7 +148,7 @@
       // Moving the NEXT slide before this one swaps the pair (same effect,
       // simpler math: this slide's span is untouched by the deletion).
       var next = spanOf(secs[i + 1]);
-      if (!next) return;
+      if (!next || isInc(secs[i + 1])) return;
       F.rvPostEdit([{ op: 'move_block', construct: 'slide',
         src: [next.s, next.e],
         dest: { insert_before: span.s, container_kind: 'deck' } }]);

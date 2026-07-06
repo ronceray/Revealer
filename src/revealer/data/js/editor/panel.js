@@ -48,14 +48,10 @@
     if (!el || !document.contains(el)) {
       var sec = window.Reveal && Reveal.getCurrentSlide && Reveal.getCurrentSlide();
       if (sec && sec.hasAttribute('data-rv-src')) {
+        // Included slides carry data-rv-src too; renderSlideSource routes the
+        // whole-slide edit to the owning file (fileOf(sec)) — no longer
+        // read-only (P8).
         renderSlideSource(p, sec);
-      } else if (sec && sec.hasAttribute('data-rv-inc')) {
-        p.innerHTML =
-          '<div class="rv-pn-head">Included slide</div>' +
-          '<div class="rv-pn-hint">This slide comes from <code>' +
-          RV.esc(sec.getAttribute('data-rv-inc')) +
-          '</code> — edit that file; it is read-only here.</div>';
-        appendCheatsheet(p);
       } else {
         p.innerHTML =
           '<div class="rv-pn-head">Nothing selected</div>' +
@@ -66,6 +62,10 @@
     }
     var kind = F.constructOf(el) || 'element';
     var s = F.srcOf(el), e = F.srcEndOf(el);
+    // The owning file: "" for the main .pres, else an include path. Every
+    // read (fetchSrc) and write (rvPostEdit) for this element carries it, so
+    // an included element edits ITS file with ITS own line numbers (P8).
+    var file = F.fileOf(el);
 
     var crumbs = crumbChain(el).map(function (c) {
       var label = c === el ? '<b>' + F.kindOf(c) + '</b>' : F.kindOf(c);
@@ -74,7 +74,10 @@
 
     p.innerHTML =
       '<div class="rv-pn-head">' + crumbs + '</div>' +
-      '<div class="rv-pn-sub">' + F.escapeHtml(RV.PRES_NAME) + ' : ' + s + (e !== s ? '–' + e : '') + '</div>' +
+      '<div class="rv-pn-sub">' +
+      (file ? '<span class="rv-pn-file">' + F.escapeHtml(file) + '</span>'
+            : F.escapeHtml(RV.PRES_NAME)) +
+      ' : ' + s + (e !== s ? '–' + e : '') + '</div>' +
       (kind === 'paragraph' && !el.querySelector('.katex,pre')
         ? '<div class="rv-pn-hint">Double-click the paragraph to edit its text in place.</div>' : '') +
       '<div class="rv-pn-fields"></div>' +
@@ -113,23 +116,29 @@
       if (!j.lines) return;
       var ta = p.querySelector('.rv-pn-src');
       if (ta) ta.value = j.lines.join('\n');
-      buildFields(p.querySelector('.rv-pn-fields'), kind, el, j.lines, s, e);
+      buildFields(p.querySelector('.rv-pn-fields'), kind, el, j.lines, s, e, file);
       bounds = { start: j.start, end: j.end };
       applyBtn.disabled = false;
-    });
+    }, file);
 
     applyBtn.addEventListener('click', function () {
       if (!bounds) return;
       var ta = p.querySelector('.rv-pn-src');
-      F.rvPostEdit([{ op: 'replace_lines', start: bounds.start, end: bounds.end, text: ta.value.split('\n') }]);
+      F.rvPostEdit([{ op: 'replace_lines', start: bounds.start, end: bounds.end, text: ta.value.split('\n') }], file);
     });
   }
 
   function renderSlideSource(p, sec) {
     var s0 = F.srcOf(sec), e0 = F.srcEndOf(sec);
+    var file = F.fileOf(sec);  // an included slide edits its own file (P8)
     p.innerHTML =
       '<div class="rv-pn-head"><b>' + (F.kindOf(sec) === 'slide' ? 'This slide' : F.kindOf(sec)) + '</b>' +
-      ' <span class="rv-pn-sub">' + F.escapeHtml(RV.PRES_NAME) + ' : ' + s0 + '–' + e0 + '</span></div>' +
+      ' <span class="rv-pn-sub">' +
+      (file ? '<span class="rv-pn-file">' + F.escapeHtml(file) + '</span>'
+            : F.escapeHtml(RV.PRES_NAME)) +
+      ' : ' + s0 + '–' + e0 + '</span></div>' +
+      (file ? '<div class="rv-pn-hint">Included from <code>' + F.escapeHtml(file) +
+              '</code> — edits here save to that file.</div>' : '') +
       '<div class="rv-pn-hint">Click an element for its parameters, or edit the whole slide here.</div>' +
       '<div class="rv-pn-srctitle">Slide source (editable)</div>' +
       '<div class="rv-fmt-slot"></div>' +
@@ -148,11 +157,11 @@
         bounds0 = { start: j.start, end: j.end };
         applyBtn0.disabled = false;
       }
-    });
+    }, file);
     applyBtn0.addEventListener('click', function () {
       if (!bounds0) return;
       var ta = p.querySelector('.rv-pn-src');
-      F.rvPostEdit([{ op: 'replace_lines', start: bounds0.start, end: bounds0.end, text: ta.value.split('\n') }]);
+      F.rvPostEdit([{ op: 'replace_lines', start: bounds0.start, end: bounds0.end, text: ta.value.split('\n') }], file);
     });
     appendCheatsheet(p);
   }
@@ -212,8 +221,9 @@
     return null;
   }
 
-  function buildFields(box, kind, el, lines, s, e) {
+  function buildFields(box, kind, el, lines, s, e, file) {
     if (!box) return;
+    file = file || '';
     var line0 = lines[0] || '';
     var defs = [];  // {label, value, apply(newValue) -> op or null}
 
@@ -283,7 +293,7 @@
     } else if (kind === 'frag') {
       fragDef('frag');
     } else if (kind === 'svg') {
-      buildSvgSteps(box, el, s);
+      buildSvgSteps(box, el, s, file);
       return;
     } else if (kind === 'column') {
       var wm = line0.match(/^\s*\|{1,2}\s*(.*)$/);
@@ -299,7 +309,7 @@
       var def = defs[parseInt(input.parentElement.getAttribute('data-i'), 10)];
       function commit() {
         var op = def.apply(input.value.trim());
-        if (op) F.rvPostEdit([op]);
+        if (op) F.rvPostEdit([op], file);
       }
       input.addEventListener('keydown', function (ev) {
         if (ev.key === 'Enter') { commit(); ev.preventDefault(); }
@@ -313,7 +323,8 @@
   var SVG_HIDE_RE = /^>\s*hide\s*:\s*(.*)$/;
   var SVG_BLOCK_RE = /^>\s*(hide|animate)\s*:/;
 
-  function buildSvgSteps(box, el, svgLine) {
+  function buildSvgSteps(box, el, svgLine, file) {
+    file = file || '';
     var ids = [];
     el.querySelectorAll('svg [id]').forEach(function (n) {
       if (ids.length < 40 && n.id) ids.push({ id: n.id, node: n });
@@ -325,7 +336,8 @@
     }
     var sec = Reveal.getCurrentSlide();
     fetch('/__rv__/src?start=' + F.srcOf(sec) + '&end=' + F.srcEndOf(sec) +
-          '&token=' + encodeURIComponent(TOKEN))
+          '&token=' + encodeURIComponent(TOKEN) +
+          (file ? '&file=' + encodeURIComponent(file) : ''))
       .then(function (r) { return r.json(); })
       .then(function (j) {
         if (!j.lines || !document.contains(box)) return;  // panel re-rendered
@@ -375,7 +387,7 @@
             chosen.forEach(function (c) { block.push('> animate: #' + c.id + ' opacity:1'); });
           }
           preserved.forEach(function (ln) { block.push(ln); });
-          F.rvPostEdit([{ op: 'replace_lines', start: svgLine, end: base + end, text: block }]);
+          F.rvPostEdit([{ op: 'replace_lines', start: svgLine, end: base + end, text: block }], file);
         });
       });
   }
@@ -414,6 +426,8 @@
                           : [F.srcOf(el), F.srcEndOf(target)];
     var kindC = container && F.hasCls(container, 'column') ? 'column' : 'col';
     var construct = F.constructOf(el);
+    // Siblings share a slide, hence a file: an intra-include move is a
+    // single-file structural op (P8) — its spans are file-local already.
     F.rvPostEdit([{
       op: 'move_block',
       src: [F.srcOf(el), F.srcEndOf(el)],
@@ -423,7 +437,7 @@
         container: cSpan,
         container_kind: kindC,
       },
-    }]);
+    }], F.fileOf(el));
   }
 
   function deleteSelected(el) {
@@ -433,12 +447,13 @@
       return;
     }
     F.toast('Deleted ' + F.kindOf(el) + ' — Ctrl+Z to undo');
+    var file = F.fileOf(el);
     RV.set('sel', null);
     F.rvPostEdit([{
       op: 'delete_block',
       src: [F.srcOf(el), F.srcEndOf(el)],
       construct: RV.MOVABLE[construct] ? construct : 'paragraph',
-    }]);
+    }], file);
   }
 
   // exports (what other editor/ modules call):

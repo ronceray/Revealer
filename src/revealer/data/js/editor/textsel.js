@@ -15,11 +15,13 @@
      server's sha precondition when the wrap_span posts. */
   var inspectCache = {};
 
-  function rvInspect(start, end) {
-    var key = start + '-' + end;
+  function rvInspect(start, end, file) {
+    file = file || '';
+    var key = file + ':' + start + '-' + end;  // line numbers are per-file (P8)
     if (!inspectCache[key]) {
       inspectCache[key] = fetch('/__rv__/inspect?start=' + start + '&end=' + end +
-                                '&token=' + encodeURIComponent(TOKEN))
+                                '&token=' + encodeURIComponent(TOKEN) +
+                                (file ? '&file=' + encodeURIComponent(file) : ''))
         .then(function (r) { return r.ok ? r.json() : null; })
         .then(function (j) { return (j && j.lines) || null; })
         .catch(function () { return null; });
@@ -165,10 +167,11 @@
                             start_col: armed.start_col, end_col: armed.end_col,
                             before: b.getAttribute('data-b'),
                             after: b.getAttribute('data-a') };
+        var file = armed ? (armed.file || '') : '';  // owning file (P8)
         hideBubble();
         if (!op) return;
         try { document.getSelection().removeAllRanges(); } catch (e) {}
-        F.rvPostEdit([op]);
+        F.rvPostEdit([op], file);
       });
     });
     document.body.appendChild(el);
@@ -207,9 +210,9 @@
     if (range.startContainer.nodeType !== 3 ||
         range.endContainer.nodeType !== 3) return hideBubble();
     var para = paraOf(range.commonAncestorContainer);
-    if (!para || para.isContentEditable ||
-        para.closest('[data-rv-inc]')) return hideBubble();
-    rvInspect(F.srcOf(para), F.srcEndOf(para)).then(function (insp) {
+    if (!para || para.isContentEditable) return hideBubble();
+    var file = F.fileOf(para);  // included paragraphs are editable (P8)
+    rvInspect(F.srcOf(para), F.srcEndOf(para), file).then(function (insp) {
       if (!insp || !S.on || S.drag) return hideBubble();
       // the fetch was async: remap against the selection as it is NOW
       var sel2 = document.getSelection();
@@ -225,6 +228,7 @@
         }
         return;
       }
+      mapped.file = file;  // wrap_span posts against this paragraph's file
       showBubble(range2, mapped);
     });
   }
