@@ -8,129 +8,10 @@
 (function () {
   'use strict';
   if (!window.__RV_DEV__) return;
-  var TOKEN = window.__RV_DEV__.token;
-
-  /* --- shared editor state: window.RV, explicit ownership --------------------
-     S is THE mutable editor state; RV.ui hosts shared widget helpers. The
-     12-file split shares state through RV rather than closure capture. */
-  var RV = window.RV = {};
-  var S = RV.state = {
-    on: false,          // edit mode armed
-    sel: null,          // selected [data-rv-src] element
-    hover: null,        // hovered [data-rv-src] element
-    keyboardWas: null,  // reveal keyboard config to restore on exit
-    drag: null,         // active drag (kind, el, x0/y0, r0, scale, extras)
-    dropState: null,    // block-move / OS-file drop targets + active slot
-    splitPref: false,   // split-view preference (seeded from localStorage below)
-    nudgeFlush: null,   // pending nudge commit fn (flushNudge runs it early)
-    panelFor: null,     // element the side panel currently renders
-    nudgeTimer: null,   // debounce timer for arrow-key nudges
-  };
-  RV.ui = {};
-
-  function escapeHtml(v) {
-    return String(v).replace(/&/g, '&amp;').replace(/</g, '&lt;')
-      .replace(/>/g, '&gt;').replace(/"/g, '&quot;');
-  }
-  RV.esc = escapeHtml;
-
-  /* Floating box with a shared header row (title, action buttons, ✕).
-     Toggle semantics: calling again while the box exists removes it and
-     returns null (replace: true recreates instead). closes: [ids] removes
-     sibling boxes that would overlap. Returns {box, body}. */
-  RV.ui.box = function (opts) {
-    var existing = document.getElementById(opts.id);
-    if (existing) {
-      existing.remove();
-      if (!opts.replace) return null;
-    }
-    (opts.closes || []).forEach(function (otherId) {
-      var o = document.getElementById(otherId);
-      if (o) o.remove();
-    });
-    var box = document.createElement('div');
-    box.id = opts.id;
-    var head = document.createElement('div');
-    head.className = 'rv-box-head' + (opts.headCls ? ' ' + opts.headCls : '');
-    var title = document.createElement('b');
-    title.textContent = opts.title;
-    head.appendChild(title);
-    if (opts.hint) {
-      var hint = document.createElement('span');
-      hint.className = 'rv-box-hint';
-      hint.textContent = opts.hint;
-      head.appendChild(hint);
-    }
-    (opts.buttons || []).forEach(function (b) {
-      var btn = document.createElement('button');
-      btn.textContent = b.label;
-      if (b.cls) btn.className = b.cls;
-      if (b.title) btn.title = b.title;
-      btn.addEventListener('click', b.onClick);
-      head.appendChild(btn);
-    });
-    if (opts.close !== false) {
-      var x = document.createElement('button');
-      x.className = 'rv-box-close';
-      x.textContent = '✕';
-      x.title = 'Close';
-      x.addEventListener('click', function () { box.remove(); });
-      head.appendChild(x);
-    }
-    box.appendChild(head);
-    var body = document.createElement('div');
-    body.className = 'rv-box-body';
-    box.appendChild(body);
-    document.body.appendChild(box);
-    return { box: box, body: body };
-  };
-
-  /* --- position-preserving reload ---------------------------------------- */
-
-  var RESTORE_KEY = 'rv-dev-restore';
-
-  function saveStateAndReload() {
-    try {
-      var idx = (window.Reveal && Reveal.getIndices) ? Reveal.getIndices() : {};
-      sessionStorage.setItem(RESTORE_KEY, JSON.stringify({
-        h: idx.h || 0, v: idx.v || 0, f: (idx.f === undefined ? -1 : idx.f),
-        editOn: !!S.on,
-        selSrc: (S.sel && S.sel.getAttribute) ? S.sel.getAttribute('data-rv-src') : null,
-        drawer: !!document.getElementById('rv-ed-drawer')
-      }));
-    } catch (e) { /* sessionStorage unavailable — hash restore still works */ }
-    location.reload();
-  }
-
-  function restoreState() {
-    var raw = null;
-    try { raw = sessionStorage.getItem(RESTORE_KEY); } catch (e) {}
-    if (!raw) return;
-    try { sessionStorage.removeItem(RESTORE_KEY); } catch (e) {}
-    try {
-      var s = JSON.parse(raw);
-      // `hash: true` usually restores the slide already; this also restores
-      // the fragment when fragmentInURL is off, and wins over a stale hash.
-      Reveal.slide(s.h, s.v, s.f === -1 ? undefined : s.f);
-      // An editing session survives the save-rebuild-reload cycle: re-enter
-      // edit mode and re-select the same source element when possible.
-      if (s.editOn) {
-        setEdit(true);
-        if (s.selSrc) {
-          var slide = Reveal.getCurrentSlide();
-          var el = slide && slide.querySelector('[data-rv-src="' + s.selSrc + '"]');
-          if (el) { S.sel = el; }
-          syncChrome();
-        }
-        if (s.drawer) toggleDrawer();
-      }
-    } catch (e) {}
-  }
-
-  if (window.Reveal && Reveal.on) {
-    if (Reveal.isReady && Reveal.isReady()) restoreState();
-    else Reveal.on('ready', restoreState);
-  }
+  var RV = window.RV;
+  var S = RV.state;
+  var F = RV.fn;
+  var TOKEN = RV.token;
 
   /* --- build-error overlay ------------------------------------------------ */
 
@@ -204,27 +85,6 @@
     return el;
   }
 
-  // Friendly names for the DSL constructs, from their emitted classes.
-  var KINDS = [
-    ['revealer-svg', 'svg drawing'],
-    ['rv-pin', 'pin'], ['rv-stack', 'stack'], ['rv-layer', 'layer'],
-    ['rv-grid-wrap', 'grid'], ['rv-card', 'card'], ['rv-cell', 'card (plain)'],
-    ['box-info', 'info box'], ['box-warn', 'warn box'], ['box-good', 'good box'],
-    ['math-box', 'equation'], ['rv-table-wrap', 'table'], ['rv-table-cell', 'table cell'],
-    ['rv-fig', 'figure'], ['rv-media-fill', 'media'], ['rv-media', 'media'],
-    ['region', 'column'], ['row', 'row'], ['rv-paragraph', 'paragraph'],
-    ['column', 'text column'], ['fragment', 'fragment'],
-  ];
-
-  function kindOf(el) {
-    var cls = ' ' + el.className + ' ';
-    for (var i = 0; i < KINDS.length; i++) {
-      if (cls.indexOf(' ' + KINDS[i][0] + ' ') !== -1 || cls.indexOf(' ' + KINDS[i][0]) !== -1) {
-        return KINDS[i][1];
-      }
-    }
-    return el.tagName === 'SECTION' ? 'slide' : el.tagName.toLowerCase();
-  }
 
   function placeOutline(box, el) {
     if (!el || !document.contains(el)) { box.hidden = true; return; }
@@ -247,7 +107,7 @@
     if (S.sel && document.contains(S.sel)) {
       var s = S.sel.getAttribute('data-rv-src');
       var e = S.sel.getAttribute('data-rv-src-end');
-      el.querySelector('.rv-ed-kind').textContent = kindOf(S.sel);
+      el.querySelector('.rv-ed-kind').textContent = F.kindOf(S.sel);
       el.querySelector('.rv-ed-line').textContent =
         '.pres:' + s + (e ? '–' + e : '');
       bar.hidden = false;
@@ -377,23 +237,6 @@
 
   /* --- editing machinery: POST plumbing, toasts, undo ----------------------- */
 
-  function curSha() {
-    var m = document.querySelector('meta[name="rv-src-sha"]');
-    return m ? m.getAttribute('content') : '';
-  }
-
-  function toast(msg, ms) {
-    var el = document.getElementById('rv-ed-toast');
-    if (!el) {
-      el = document.createElement('div');
-      el.id = 'rv-ed-toast';
-      document.body.appendChild(el);
-    }
-    el.textContent = msg;
-    el.classList.add('rv-on');
-    clearTimeout(el._t);
-    el._t = setTimeout(function () { el.classList.remove('rv-on'); }, ms || 2600);
-  }
 
   /* --- edit POST plumbing: a FIFO queue for line-preserving ops --------------
      Rapid line-preserving edits (drag + nudge storms) queue and chain on the
@@ -422,11 +265,11 @@
     var structural = edits.some(function (e) { return STRUCTURAL_OPS[e.op] === 1; });
     if (!editsBusy()) return sendEdit(edits);
     if (structural) {
-      if (editQueue.length) toast('Dropped ' + editQueue.length + ' pending edit(s) — layout changed');
+      if (editQueue.length) F.toast('Dropped ' + editQueue.length + ' pending edit(s) — layout changed');
       editQueue.length = 0;
       nextStructural = edits;
     } else if (nextStructural) {
-      toast('Edit dropped — the layout is about to change');
+      F.toast('Edit dropped — the layout is about to change');
     } else {
       editQueue.push(edits);
     }
@@ -439,7 +282,7 @@
     return fetch('/__rv__/edit', {
       method: 'POST',
       headers: { 'X-RV-Token': TOKEN, 'Content-Type': 'application/json' },
-      body: JSON.stringify({ sha256: freshSha || curSha(), edits: edits }),
+      body: JSON.stringify({ sha256: freshSha || F.curSha(), edits: edits }),
     }).then(function (r) {
       return r.json().catch(function () { return {}; }).then(function (j) {
         editInFlight = false;
@@ -447,10 +290,10 @@
           clearEditQueue();
           if (typeof rvStatus === 'function') rvStatus('error', 'Not saved ✗');
           try { sessionStorage.removeItem('rv-ed-lastsave'); } catch (e2) {}
-          toast(j.error === 'sha_mismatch'
+          F.toast(j.error === 'sha_mismatch'
             ? 'Deck changed on disk — resyncing'
             : 'Edit rejected: ' + (j.error || r.status));
-          if (j.error === 'sha_mismatch') saveStateAndReload();
+          if (j.error === 'sha_mismatch') F.saveStateAndReload();
           else maybeReload();  // a deferred reload must not stay stuck
           return false;
         }
@@ -464,7 +307,7 @@
     }).catch(function () {
       editInFlight = false;
       clearEditQueue();
-      toast('Edit failed: server unreachable');
+      F.toast('Edit failed: server unreachable');
       maybeReload();
       return false;
     });
@@ -482,7 +325,7 @@
     pendingReload = false;
     if (reloadForceTimer) { clearTimeout(reloadForceTimer); reloadForceTimer = null; }
     hideError();
-    saveStateAndReload();
+    F.saveStateAndReload();
   }
 
   function scheduleReload() {
@@ -491,7 +334,7 @@
     if (!reloadForceTimer) {
       reloadForceTimer = setTimeout(function () {
         reloadForceTimer = null;
-        if (pendingReload) { pendingReload = false; hideError(); saveStateAndReload(); }
+        if (pendingReload) { pendingReload = false; hideError(); F.saveStateAndReload(); }
       }, 5000);
     }
     maybeReload();
@@ -500,44 +343,12 @@
   function rvUndoRedo(which) {
     fetch('/__rv__/' + which, { method: 'POST', headers: { 'X-RV-Token': TOKEN } })
       .then(function (r) { return r.json().catch(function () { return {}; }).then(function (j) {
-        if (!r.ok) toast(j.error === 'external_edit'
+        if (!r.ok) F.toast(j.error === 'external_edit'
           ? 'File changed outside the editor — use your editor’s undo'
           : 'Nothing to ' + which);
       }); });
   }
 
-
-  /* --- construct model -------------------------------------------------------- */
-
-  function hasCls(el, c) { return el.classList && el.classList.contains(c); }
-
-  function constructOf(el) {
-    if (!el) return null;
-    if (hasCls(el, 'revealer-svg')) return 'svg';
-    if (hasCls(el, 'rv-pin')) return 'pin';
-    if (hasCls(el, 'rv-fig') || hasCls(el, 'rv-media') || hasCls(el, 'rv-media-fill')) return 'media';
-    if (hasCls(el, 'rv-stack')) return 'stack';
-    if (hasCls(el, 'rv-layer')) return 'layer';
-    if (hasCls(el, 'rv-grid-wrap')) return 'grid';
-    if (hasCls(el, 'rv-card') || hasCls(el, 'rv-cell')) return 'card';
-    if (hasCls(el, 'rv-table-wrap')) return 'table';
-    if (hasCls(el, 'box-info') || hasCls(el, 'box-warn') || hasCls(el, 'box-good')) return 'box';
-    if (hasCls(el, 'math-box')) return 'eq';
-    if (hasCls(el, 'region')) return 'region';
-    if (hasCls(el, 'row')) return 'row';
-    if (hasCls(el, 'rv-paragraph')) return 'paragraph';
-    if (hasCls(el, 'fragment')) return 'frag';
-    return null;
-  }
-
-  // Constructs the block-move drag supports (movable text spans).
-  var MOVABLE = { pin: 1, media: 1, stack: 1, grid: 1, table: 1, box: 1, eq: 1, frag: 1, row: 1, paragraph: 1 };
-
-  function srcOf(el) { return parseInt(el.getAttribute('data-rv-src'), 10); }
-  function srcEndOf(el) {
-    var e = el.getAttribute('data-rv-src-end');
-    return e ? parseInt(e, 10) : srcOf(el);
-  }
 
   function rvScale() {
     var slides = document.querySelector('.reveal .slides');
@@ -569,7 +380,7 @@
     if (!S.on || !S.sel || !document.contains(S.sel) || S.drag) return;
     var host = layer();
     var el = S.sel;
-    var kind = constructOf(el);
+    var kind = F.constructOf(el);
     var r = el.getBoundingClientRect();
 
     function place(g, x, y) {
@@ -598,7 +409,7 @@
       place(hg, r.left + r.width / 2, r.bottom);
     } else if (kind === 'region') {
       var next = el.nextElementSibling;
-      if (next && hasCls(next, 'region')) {
+      if (next && F.hasCls(next, 'region')) {
         if (el.hasAttribute('data-rv-implicit') || next.hasAttribute('data-rv-implicit')) {
           // no `> col` line to edit — surfaced in the breadcrumb instead
         } else if (el.hasAttribute('data-rv-src') && next.hasAttribute('data-rv-src')) {
@@ -610,7 +421,7 @@
     }
 
     // Block-move grip for movable constructs with a full source span.
-    if (MOVABLE[kind] && el.hasAttribute('data-rv-src')) {
+    if (RV.MOVABLE[kind] && el.hasAttribute('data-rv-src')) {
       var mv = mkGrip('rv-ed-move', 'grab', 'move to another column');
       mv.addEventListener('pointerdown', function (ev) { startDrag(ev, 'block-move', el); });
       place(mv, r.left, r.top);
@@ -677,7 +488,7 @@
     var d = S.drag;
     S.drag = null;
     if (!d) return;
-    var el = d.el, line = srcOf(el);
+    var el = d.el, line = F.srcOf(el);
 
     if (d.kind === 'pin-move' || d.kind === 'pin-width') {
       var parent = el.offsetParent || el.parentElement;
@@ -720,10 +531,10 @@
 
   function commitColSplit(d) {
     var row = d.el.parentElement;
-    var regions = Array.prototype.filter.call(row.children, function (c) { return hasCls(c, 'region'); });
+    var regions = Array.prototype.filter.call(row.children, function (c) { return F.hasCls(c, 'region'); });
     var ratio = d.ratio;
     if (ratio === undefined) return;
-    var lineA = srcOf(d.el), lineB = srcOf(d.next);
+    var lineA = F.srcOf(d.el), lineB = F.srcOf(d.next);
     var opA, opB;
 
     if (regions.length === 2) {
@@ -747,8 +558,8 @@
       // Coarse: redistribute integer weights within the pair, preserving their sum.
       var sum = Math.round(d.g0 + d.g1);
       if (sum < 2 || Math.abs(sum - (d.g0 + d.g1)) > 0.01) {
-        toast('These columns use sizes I can’t redistribute — edit the source');
-        saveStateAndReload();
+        F.toast('These columns use sizes I can’t redistribute — edit the source');
+        F.saveStateAndReload();
         return;
       }
       var ai = Math.min(sum - 1, Math.max(1, Math.round(ratio * sum)));
@@ -791,7 +602,7 @@
   function nudgeSelected(ev) {
     var v = NUDGE_ARROWS[ev.key];
     if (!v) return;
-    var el = S.sel, kind = constructOf(el);
+    var el = S.sel, kind = F.constructOf(el);
     ev.preventDefault();
     ev.stopPropagation();
     var mult = ev.shiftKey ? 4 : 1;
@@ -806,7 +617,7 @@
         var r = el.getBoundingClientRect();
         var cx = Math.round((r.left + r.width / 2 - pr.left) / pr.width * 200) / 2;
         var cy = Math.round((r.top + r.height / 2 - pr.top) / pr.height * 200) / 2;
-        var op = { op: 'set_pin', line: srcOf(el), x: cx + '%', y: cy + '%' };
+        var op = { op: 'set_pin', line: F.srcOf(el), x: cx + '%', y: cy + '%' };
         if (el.style.width && el.style.width.indexOf('%') !== -1) op.w = el.style.width;
         rvPostEdit([op]);
       });
@@ -820,8 +631,8 @@
       queueNudge(function () {
         var hpx = Math.round(target.getBoundingClientRect().height / rvScale());
         rvPostEdit([kind === 'media'
-          ? { op: 'set_media_size', line: srcOf(el), dim: 'h', value: hpx + 'px' }
-          : { op: (kind === 'row' ? 'set_row_height' : 'set_stack_height'), line: srcOf(el), value: hpx }]);
+          ? { op: 'set_media_size', line: F.srcOf(el), dim: 'h', value: hpx + 'px' }
+          : { op: (kind === 'row' ? 'set_row_height' : 'set_stack_height'), line: F.srcOf(el), value: hpx }]);
       });
     }
     syncChrome();
@@ -844,11 +655,11 @@
       if (c === exclude || c.contains(exclude) || exclude.contains(c)) return;
       var kids = mappedChildren(c).filter(function (k) { return k !== exclude; });
       var slots = kids.map(function (k) {
-        return { line: srcOf(k), y: k.getBoundingClientRect().top };
+        return { line: F.srcOf(k), y: k.getBoundingClientRect().top };
       });
-      slots.push({ line: srcEndOf(c) + 1, y: c.getBoundingClientRect().bottom });
+      slots.push({ line: F.srcEndOf(c) + 1, y: c.getBoundingClientRect().bottom });
       targets.push({ el: c, slots: slots,
-                     kind: hasCls(c, 'column') ? 'column' : 'col' });
+                     kind: F.hasCls(c, 'column') ? 'column' : 'col' });
       c.classList.add('rv-ed-droptarget');
     });
     S.dropState = { targets: targets, active: null };
@@ -871,7 +682,7 @@
     if (!g) {
       g = document.createElement('div');
       g.id = 'rv-ed-ghost';
-      g.textContent = kindOf(S.drag.el);
+      g.textContent = F.kindOf(S.drag.el);
       document.body.appendChild(g);
     }
     g.style.left = (ev.clientX + 12) + 'px';
@@ -910,15 +721,15 @@
     var el = d.el;
     clearDropTargets();
     if (!choice) { syncChrome(); return; }
-    var construct = constructOf(el);
+    var construct = F.constructOf(el);
     if (construct === 'region') construct = 'paragraph';
     rvPostEdit([{
       op: 'move_block',
-      src: [srcOf(el), srcEndOf(el)],
-      construct: MOVABLE[construct] ? construct : 'paragraph',
+      src: [F.srcOf(el), F.srcEndOf(el)],
+      construct: RV.MOVABLE[construct] ? construct : 'paragraph',
       dest: {
         insert_before: choice.slot.line,
-        container: [srcOf(choice.target.el), srcEndOf(choice.target.el)],
+        container: [F.srcOf(choice.target.el), F.srcEndOf(choice.target.el)],
         container_kind: choice.target.kind,
       },
     }]);
@@ -939,7 +750,7 @@
   }
 
   function fragConstruct(el) {
-    var k = constructOf(el);
+    var k = F.constructOf(el);
     if (k === 'region') return 'col';
     if (k === 'media') return 'media';
     if (k === 'layer') return 'layer';
@@ -969,7 +780,7 @@
       var row = document.createElement('div');
       row.className = 'rv-ed-drawer-item';
       var mapped = el.hasAttribute('data-rv-src');
-      var label = kindOf(el) + (mapped ? ' · :' + el.getAttribute('data-rv-src') : ' · (unmapped)');
+      var label = F.kindOf(el) + (mapped ? ' · :' + el.getAttribute('data-rv-src') : ' · (unmapped)');
       row.innerHTML = '<span>' + (i + 1) + '. ' + label + '</span>' +
         (mapped ? '<span class="rv-ed-updown"><button data-d="-1">↑</button>' +
                   '<button data-d="1">↓</button></span>' : '');
@@ -992,12 +803,12 @@
     var tmp = order[i]; order[i] = order[j]; order[j] = tmp;
     var mapped = order.filter(function (el) { return el.hasAttribute('data-rv-src'); });
     if (mapped.length !== order.length) {
-      toast('Some fragments are raw HTML — their order can’t be rewritten');
+      F.toast('Some fragments are raw HTML — their order can’t be rewritten');
     }
     rvPostEdit([{
       op: 'reorder_fragments',
       order: mapped.map(function (el) {
-        return { line: srcOf(el), construct: fragConstruct(el) };
+        return { line: F.srcOf(el), construct: fragConstruct(el) };
       }),
     }]);
   }
@@ -1019,22 +830,22 @@
     var choice = S.dropState && S.dropState.active;
     var file = ev.dataTransfer.files[0];
     clearDropTargets();
-    if (!choice) { toast('Drop inside a column to insert media'); return; }
+    if (!choice) { F.toast('Drop inside a column to insert media'); return; }
     var isVideo = /^video\//.test(file.type) || /\.(mp4|webm|ogv|mov)$/i.test(file.name);
     fetch('/__rv__/upload?name=' + encodeURIComponent(file.name), {
       method: 'PUT', headers: { 'X-RV-Token': TOKEN }, body: file,
     }).then(function (r) { return r.json(); }).then(function (j) {
-      if (!j.ok) { toast('Upload rejected: ' + (j.error || '?')); return; }
+      if (!j.ok) { F.toast('Upload rejected: ' + (j.error || '?')); return; }
       rvPostEdit([{
         op: 'insert_media',
         at: { insert_before: choice.slot.line,
-              container: [srcOf(choice.target.el), srcEndOf(choice.target.el)],
+              container: [F.srcOf(choice.target.el), F.srcEndOf(choice.target.el)],
               container_kind: choice.target.kind },
         kind: isVideo ? 'video' : 'img',
         path: j.path,
         flags: choice.target.kind === 'col' ? ['fill'] : [],
       }]);
-    }).catch(function () { toast('Upload failed'); });
+    }).catch(function () { F.toast('Upload failed'); });
   });
 
   window.addEventListener('dragleave', function (ev) {
@@ -1075,7 +886,7 @@
       '<button class="rv-tb-hist" title="Save history (time machine)">🕐</button>' +
       '<button class="rv-tb-xhtml" title="Export the final HTML next to the .pres">⬇ HTML</button>' +
       '<button class="rv-tb-xpdf" title="Export a PDF next to the .pres">⬇ PDF</button>' +
-      '<span class="rv-tb-status rv-st-idle">' + escapeHtml(PRES_NAME) + '</span>' +
+      '<span class="rv-tb-status rv-st-idle">' + F.escapeHtml(PRES_NAME) + '</span>' +
       '<button class="rv-tb-help" title="Help">?</button>';
     document.body.appendChild(tb);
     tb.querySelector('.rv-tb-edit').addEventListener('click', function () { setEdit(!S.on); });
@@ -1087,13 +898,13 @@
     });
     tb.querySelector('.rv-tb-help').addEventListener('click', toggleHelp);
     function doExport(kind) {
-      toast(kind === 'pdf' ? 'Exporting PDF… (can take a minute)' : 'Exporting HTML…', 60000);
+      F.toast(kind === 'pdf' ? 'Exporting PDF… (can take a minute)' : 'Exporting HTML…', 60000);
       fetch('/__rv__/export?kind=' + kind, { method: 'POST', headers: { 'X-RV-Token': TOKEN } })
         .then(function (r) { return r.json(); })
         .then(function (j) {
-          toast(j.ok ? 'Exported → ' + j.path : 'Export failed: ' + (j.error || '?'), 6000);
+          F.toast(j.ok ? 'Exported → ' + j.path : 'Export failed: ' + (j.error || '?'), 6000);
         })
-        .catch(function () { toast('Export failed', 4000); });
+        .catch(function () { F.toast('Export failed', 4000); });
     }
     tb.querySelector('.rv-tb-xhtml').addEventListener('click', function () { doExport('html'); });
     if (window.__RV_DEV__.history === 'fallback') {
@@ -1103,7 +914,7 @@
       hb.style.opacity = '0.4';
       if (!window.__rvHistToastShown) {
         window.__rvHistToastShown = true;
-        toast('git not found \u2014 undo limited to the last edit, no save history', 6000);
+        F.toast('git not found \u2014 undo limited to the last edit, no save history', 6000);
       }
     } else {
       tb.querySelector('.rv-tb-hist').addEventListener('click', toggleHistory);
@@ -1133,7 +944,7 @@
                         closes: ['rv-ed-history'] });
     if (!w) return;
     w.body.innerHTML =
-      '<p>You are editing <code>' + escapeHtml(PRES_NAME) + '</code> — the source text file, ' +
+      '<p>You are editing <code>' + F.escapeHtml(PRES_NAME) + '</code> — the source text file, ' +
       'not the HTML. Every change is written to it immediately as a minimal ' +
       'edit, the deck rebuilds, and this preview reloads in place. There is ' +
       'no separate save step.</p>' +
@@ -1222,17 +1033,17 @@
       }
       return;
     }
-    var kind = constructOf(el) || 'element';
-    var s = srcOf(el), e = srcEndOf(el);
+    var kind = F.constructOf(el) || 'element';
+    var s = F.srcOf(el), e = F.srcEndOf(el);
 
     var crumbs = crumbChain(el).map(function (c) {
-      var label = c === el ? '<b>' + kindOf(c) + '</b>' : kindOf(c);
-      return '<span class="rv-pn-crumb" data-src="' + escapeHtml(c.getAttribute('data-rv-src')) + '">' + escapeHtml(label) + '</span>';
+      var label = c === el ? '<b>' + F.kindOf(c) + '</b>' : F.kindOf(c);
+      return '<span class="rv-pn-crumb" data-src="' + F.escapeHtml(c.getAttribute('data-rv-src')) + '">' + F.escapeHtml(label) + '</span>';
     }).join(' ▸ ');
 
     p.innerHTML =
       '<div class="rv-pn-head">' + crumbs + '</div>' +
-      '<div class="rv-pn-sub">' + escapeHtml(PRES_NAME) + ' : ' + s + (e !== s ? '–' + e : '') + '</div>' +
+      '<div class="rv-pn-sub">' + F.escapeHtml(PRES_NAME) + ' : ' + s + (e !== s ? '–' + e : '') + '</div>' +
       '<div class="rv-pn-fields"></div>' +
       '<div class="rv-pn-actions">' +
       '<button class="rv-pn-up" title="Move before the previous sibling">▲ Up</button>' +
@@ -1282,10 +1093,10 @@
   }
 
   function renderSlideSource(p, sec) {
-    var s0 = srcOf(sec), e0 = srcEndOf(sec);
+    var s0 = F.srcOf(sec), e0 = F.srcEndOf(sec);
     p.innerHTML =
-      '<div class="rv-pn-head"><b>' + (kindOf(sec) === 'slide' ? 'This slide' : kindOf(sec)) + '</b>' +
-      ' <span class="rv-pn-sub">' + escapeHtml(PRES_NAME) + ' : ' + s0 + '–' + e0 + '</span></div>' +
+      '<div class="rv-pn-head"><b>' + (F.kindOf(sec) === 'slide' ? 'This slide' : F.kindOf(sec)) + '</b>' +
+      ' <span class="rv-pn-sub">' + F.escapeHtml(PRES_NAME) + ' : ' + s0 + '–' + e0 + '</span></div>' +
       '<div class="rv-pn-hint">Click an element for its parameters, or edit the whole slide here.</div>' +
       '<div class="rv-pn-srctitle">Slide source (editable)</div>' +
       '<div class="rv-fmt-slot"></div>' +
@@ -1335,7 +1146,7 @@
       '<button data-b="\`" data-a="\`" title="code">&lt;&gt;</button>' +
       PALETTE.map(function (c) {
         return '<button class="rv-fmt-sw" data-b="[" data-a="]{.' + c[0] + '}" title="' + c[0] +
-          '" style="background:' + escapeHtml(root.getPropertyValue(c[1]).trim() || '#888') + '"></button>';
+          '" style="background:' + F.escapeHtml(root.getPropertyValue(c[1]).trim() || '#888') + '"></button>';
       }).join('') +
       '<input type="color" title="custom color" value="#1a4fd6">' +
       '<select title="size"><option value="">size…</option>' +
@@ -1445,7 +1256,7 @@
             '<span class="rv-hi-badge' + (e.auto ? '' : ' rv-hi-manual') + '">' +
             (e.auto ? 'auto' : 'save') + '</span>' +
             '<span class="rv-hi-when">' + relTime(e.ts) + '</span>' +
-            '<span class="rv-hi-msg">' + escapeHtml(e.msg.replace(/^(auto|save): /, '')) + '</span>' +
+            '<span class="rv-hi-msg">' + F.escapeHtml(e.msg.replace(/^(auto|save): /, '')) + '</span>' +
             '<button class="rv-hi-diff" data-h="' + e.hash + '">Diff</button>' +
             '<button class="rv-hi-peek" data-h="' + e.hash + '">Peek</button>' +
             '<button data-h="' + e.hash + '">Restore</button></div>' +
@@ -1475,7 +1286,7 @@
               method: 'POST', headers: { 'X-RV-Token': TOKEN, 'Content-Type': 'application/json' },
               body: JSON.stringify({ hash: b.getAttribute('data-h') }),
             }).then(function (r) { return r.json(); }).then(function (jj) {
-              if (!jj.ok) { toast('Preview failed: ' + (jj.error || '?')); return; }
+              if (!jj.ok) { F.toast('Preview failed: ' + (jj.error || '?')); return; }
               openPeek(jj.url, b.getAttribute('data-h'));
             });
           });
@@ -1486,9 +1297,9 @@
               method: 'POST', headers: { 'X-RV-Token': TOKEN, 'Content-Type': 'application/json' },
               body: JSON.stringify({ hash: b.getAttribute('data-h') }),
             }).then(function (r) { return r.json(); }).then(function (jj) {
-              if (jj.unchanged) toast('Already at that version');
-              else if (jj.ok) toast('Restored — Ctrl+Z to undo');
-              else toast('Restore failed: ' + (jj.error || '?'));
+              if (jj.unchanged) F.toast('Already at that version');
+              else if (jj.ok) F.toast('Restored — Ctrl+Z to undo');
+              else F.toast('Restore failed: ' + (jj.error || '?'));
             });
           });
         });
@@ -1509,7 +1320,7 @@
           }).then(function (r) { return r.json(); }).then(function (jj) {
             var ov = document.getElementById('rv-ed-peek');
             if (ov) ov.remove();
-            toast(jj.ok ? 'Restored — Ctrl+Z to undo' : 'Restore failed');
+            F.toast(jj.ok ? 'Restored — Ctrl+Z to undo' : 'Restore failed');
           });
         },
       }],
@@ -1537,33 +1348,33 @@
     fetch('/__rv__/upload?name=' + encodeURIComponent(file.name), {
       method: 'PUT', headers: { 'X-RV-Token': TOKEN }, body: file,
     }).then(function (r) { return r.json(); }).then(function (j) {
-      if (!j.ok) { toast('Upload rejected: ' + (j.error || '?')); return; }
+      if (!j.ok) { F.toast('Upload rejected: ' + (j.error || '?')); return; }
       var sel = S.sel, at = null, flags = [];
       var sec = window.Reveal && Reveal.getCurrentSlide();
       function spanDest(container, kind) {
-        return { insert_before: srcEndOf(container) + 1,
-                 container: [srcOf(container), srcEndOf(container)],
+        return { insert_before: F.srcEndOf(container) + 1,
+                 container: [F.srcOf(container), F.srcEndOf(container)],
                  container_kind: kind };
       }
       if (sel && sel.hasAttribute('data-rv-src') &&
-          (hasCls(sel, 'region') || hasCls(sel, 'rv-card') || hasCls(sel, 'rv-cell') ||
-           hasCls(sel, 'rv-layer') || hasCls(sel, 'column'))) {
-        at = spanDest(sel, hasCls(sel, 'column') ? 'column' : 'col');
-        flags = hasCls(sel, 'column') ? [] : ['fill'];
+          (F.hasCls(sel, 'region') || F.hasCls(sel, 'rv-card') || F.hasCls(sel, 'rv-cell') ||
+           F.hasCls(sel, 'rv-layer') || F.hasCls(sel, 'column'))) {
+        at = spanDest(sel, F.hasCls(sel, 'column') ? 'column' : 'col');
+        flags = F.hasCls(sel, 'column') ? [] : ['fill'];
       } else if (sel && sel.hasAttribute('data-rv-src') && sel.tagName !== 'SECTION') {
         var cont = containerOf(sel) || sec;
-        at = { insert_before: srcEndOf(sel) + 1,
-               container: [srcOf(cont), srcEndOf(cont)],
-               container_kind: hasCls(cont, 'column') ? 'column' :
+        at = { insert_before: F.srcEndOf(sel) + 1,
+               container: [F.srcOf(cont), F.srcEndOf(cont)],
+               container_kind: F.hasCls(cont, 'column') ? 'column' :
                                (cont.tagName === 'SECTION' ? 'slide' : 'col') };
-        flags = cont.tagName === 'SECTION' || hasCls(cont, 'column') ? [] : ['fill'];
+        flags = cont.tagName === 'SECTION' || F.hasCls(cont, 'column') ? [] : ['fill'];
       } else if (sec && sec.hasAttribute('data-rv-src')) {
         at = spanDest(sec, 'slide');
       }
-      if (!at) { toast('Uploaded to ' + j.path + ' — add a “! ' + j.path + '” line'); return; }
+      if (!at) { F.toast('Uploaded to ' + j.path + ' — add a “! ' + j.path + '” line'); return; }
       rvPostEdit([{ op: 'insert_media', at: at, kind: isVideo ? 'video' : 'img',
                     path: j.path, flags: flags }]);
-    }).catch(function () { toast('Upload failed'); });
+    }).catch(function () { F.toast('Upload failed'); });
   }
 
   /* --- docked / split view ------------------------------------------------------------ */
@@ -1621,8 +1432,8 @@
 
   function fld(label, value, hint) {
     return '<label class="rv-pn-fld"><span>' + label + '</span>' +
-      '<input type="text" value="' + (value == null ? '' : escapeHtml(value)) + '"' +
-      (hint ? ' placeholder="' + escapeHtml(hint) + '"' : '') + '></label>';
+      '<input type="text" value="' + (value == null ? '' : F.escapeHtml(value)) + '"' +
+      (hint ? ' placeholder="' + F.escapeHtml(hint) + '"' : '') + '></label>';
   }
 
   function tokensOf(line, headRe) {
@@ -1750,12 +1561,12 @@
       return;
     }
     var sec = Reveal.getCurrentSlide();
-    fetch('/__rv__/src?start=' + srcOf(sec) + '&end=' + srcEndOf(sec) +
+    fetch('/__rv__/src?start=' + F.srcOf(sec) + '&end=' + F.srcEndOf(sec) +
           '&token=' + encodeURIComponent(TOKEN))
       .then(function (r) { return r.json(); })
       .then(function (j) {
         if (!j.lines || !document.contains(box)) return;  // panel re-rendered
-        var base = srcOf(sec);
+        var base = F.srcOf(sec);
         var rel = svgLine - base;           // index of `> svg:` in j.lines
         var end = rel;
         var hidden = {}, step = {}, order = 0, preserved = [];
@@ -1775,7 +1586,7 @@
           '(– = always visible):</div>' +
           ids.map(function (it, i) {
             var cur = step[it.id] || '';
-            return '<label class="rv-pn-fld" data-id="' + escapeHtml(it.id) + '"><span>#' + escapeHtml(it.id) +
+            return '<label class="rv-pn-fld" data-id="' + F.escapeHtml(it.id) + '"><span>#' + F.escapeHtml(it.id) +
               '</span><select>' + ['<option value="">–</option>'].concat(
                 [1,2,3,4,5,6,7,8].map(function (n) {
                   return '<option value="' + n + '"' + (cur === n ? ' selected' : '') +
@@ -1822,8 +1633,8 @@
     var cur = el.parentElement;
     while (cur && cur.tagName !== 'SECTION') {
       if (cur.hasAttribute && cur.hasAttribute('data-rv-src') &&
-          (hasCls(cur, 'region') || hasCls(cur, 'column') || hasCls(cur, 'rv-card') ||
-           hasCls(cur, 'rv-cell') || hasCls(cur, 'rv-layer'))) return cur;
+          (F.hasCls(cur, 'region') || F.hasCls(cur, 'column') || F.hasCls(cur, 'rv-card') ||
+           F.hasCls(cur, 'rv-cell') || F.hasCls(cur, 'rv-layer'))) return cur;
       cur = cur.parentElement;
     }
     return null;
@@ -1834,18 +1645,18 @@
     var mine = mappedChildren(parent);
     var i = mine.indexOf(el);
     var target = mine[i + dir];
-    if (!target) { toast('Already at the ' + (dir < 0 ? 'top' : 'bottom')); return; }
+    if (!target) { F.toast('Already at the ' + (dir < 0 ? 'top' : 'bottom')); return; }
     var container = containerOf(el);
-    var cSpan = container ? [srcOf(container), srcEndOf(container)]
-                          : [srcOf(el), srcEndOf(target)];
-    var kindC = container && hasCls(container, 'column') ? 'column' : 'col';
-    var construct = constructOf(el);
+    var cSpan = container ? [F.srcOf(container), F.srcEndOf(container)]
+                          : [F.srcOf(el), F.srcEndOf(target)];
+    var kindC = container && F.hasCls(container, 'column') ? 'column' : 'col';
+    var construct = F.constructOf(el);
     rvPostEdit([{
       op: 'move_block',
-      src: [srcOf(el), srcEndOf(el)],
-      construct: MOVABLE[construct] ? construct : 'paragraph',
+      src: [F.srcOf(el), F.srcEndOf(el)],
+      construct: RV.MOVABLE[construct] ? construct : 'paragraph',
       dest: {
-        insert_before: dir < 0 ? srcOf(target) : srcEndOf(target) + 1,
+        insert_before: dir < 0 ? F.srcOf(target) : F.srcEndOf(target) + 1,
         container: cSpan,
         container_kind: kindC,
       },
@@ -1853,17 +1664,17 @@
   }
 
   function deleteSelected(el) {
-    var construct = constructOf(el);
+    var construct = F.constructOf(el);
     if (!el.hasAttribute('data-rv-src') || el.tagName === 'SECTION') {
-      toast('Select a block inside the slide to delete it');
+      F.toast('Select a block inside the slide to delete it');
       return;
     }
-    toast('Deleted ' + kindOf(el) + ' — Ctrl+Z to undo');
+    F.toast('Deleted ' + F.kindOf(el) + ' — Ctrl+Z to undo');
     S.sel = null;
     rvPostEdit([{
       op: 'delete_block',
-      src: [srcOf(el), srcEndOf(el)],
-      construct: MOVABLE[construct] ? construct : 'paragraph',
+      src: [F.srcOf(el), F.srcEndOf(el)],
+      construct: RV.MOVABLE[construct] ? construct : 'paragraph',
     }]);
   }
 
@@ -1880,7 +1691,7 @@
       tag.id = 'rv-ed-hovertag';
       document.body.appendChild(tag);
     }
-    tag.textContent = kindOf(S.hover);
+    tag.textContent = F.kindOf(S.hover);
     tag.style.display = 'block';
     tag.style.left = (ev.clientX + 14) + 'px';
     tag.style.top = (ev.clientY + 16) + 'px';
@@ -1898,7 +1709,7 @@
     var testArm = function () {
       setTimeout(function () {
         try { rvPostEdit(JSON.parse(params.get('rv-test-edit'))); }
-        catch (e) { toast('bad rv-test-edit'); }
+        catch (e) { F.toast('bad rv-test-edit'); }
       }, 200);
     };
     if (Reveal.isReady && Reveal.isReady()) testArm();
@@ -1936,4 +1747,10 @@
   }
 
   connect();
+
+  /* transitional exports — still-unextracted functions consumed by
+     already-extracted modules; each moves out as the split proceeds. */
+  F.setEdit = setEdit;
+  F.syncChrome = syncChrome;
+  F.toggleDrawer = toggleDrawer;
 })();

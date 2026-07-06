@@ -49,6 +49,7 @@ DEV_PREFIX = "/__rv__"
 # per entry, and _dev_asset serves exactly these names (plus the CSS).
 # The P3a decomposition grows this list; order is load order.
 EDITOR_JS: tuple[str, ...] = (
+    "editor/core.js",
     "editor.js",
 )
 _DEV_ASSETS = frozenset(EDITOR_JS) | {"editor.css"}
