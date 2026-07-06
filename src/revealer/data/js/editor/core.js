@@ -169,6 +169,50 @@
     return m ? m.getAttribute('content') : '';
   }
 
+  /* --- multi-file source table (P8) ------------------------------------------
+     Dev builds emit <meta rv-src-files> — a JSON array [{path, sha256}, …]
+     indexed by data-rv-f (index 0 = the main .pres). Parsed once at boot so
+     an include edit can post THAT file's own line numbers and per-file sha.
+     Main-file elements carry data-rv-src with no data-rv-f; fileOf() maps
+     back to "" for them (and "" is what the /src|/inspect|/edit endpoints
+     treat as the main file). */
+  var srcFiles = (function () {
+    var m = document.querySelector('meta[name="rv-src-files"]');
+    if (!m) return [];
+    try { return JSON.parse(m.getAttribute('content')) || []; }
+    catch (e) { return []; }
+  })();
+
+  // filePath(idx): the include path for a data-rv-f index, "" for the main.
+  function filePath(idx) {
+    var i = parseInt(idx, 10);
+    if (!i) return '';                 // 0, NaN, or "" → the main file
+    var fe = srcFiles[i];
+    return (fe && fe.path) || '';
+  }
+
+  // fileSha(pathOrIdx): the authoritative sha of a file at boot. "" / 0 map
+  // to the main file's live sha; a numeric index or a path both resolve.
+  function fileSha(pathOrIdx) {
+    if (pathOrIdx == null || pathOrIdx === '') return curSha();
+    if (typeof pathOrIdx === 'number' || /^\d+$/.test(String(pathOrIdx))) {
+      var fe = srcFiles[parseInt(pathOrIdx, 10)];
+      return (fe && fe.sha256) || '';
+    }
+    for (var i = 0; i < srcFiles.length; i++) {
+      if (srcFiles[i] && srcFiles[i].path === pathOrIdx) return srcFiles[i].sha256 || '';
+    }
+    return '';
+  }
+
+  // fileOf(el): the owning file of an emitted element — its data-rv-f path,
+  // or "" for the main .pres. srcOf/srcEndOf stay file-local (unchanged).
+  function fileOf(el) {
+    if (!el || !el.getAttribute) return '';
+    var f = el.getAttribute('data-rv-f');
+    return f ? filePath(f) : '';
+  }
+
   function toast(msg, ms) {
     var el = document.getElementById('rv-ed-toast');
     if (!el) {
@@ -240,6 +284,9 @@
   F.escapeHtml = escapeHtml;
   F.saveStateAndReload = saveStateAndReload;
   F.curSha = curSha;
+  F.fileOf = fileOf;
+  F.fileSha = fileSha;
+  F.filePath = filePath;
   F.toast = toast;
   F.kindOf = kindOf;
   F.hasCls = hasCls;

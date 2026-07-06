@@ -18,10 +18,14 @@
      edit clears the queue: the deck state is the truth, resync to it. */
   var STRUCTURAL_OPS = { move_block: 1, delete_block: 1, insert_media: 1,
                          insert_lines: 1, replace_lines: 1, set_grid_gap: 1 };
-  var editQueue = [];        // waiting line-preserving batches
-  var nextStructural = null; // at most one structural batch, runs next
+  var editQueue = [];        // waiting line-preserving batches {edits, file}
+  var nextStructural = null; // at most one structural batch {edits, file}, runs next
   var editInFlight = false;
-  var freshSha = null;       // sha from the last response (meta lags until reload)
+  // P8: fresh shas tracked PER FILE ("" = main). A queued include edit must
+  // chain on ITS OWN file's response sha, never on a main-file edit's — the
+  // main sha (F.curSha) is meaningless for an include and would 409 or, worse,
+  // steer the write to the wrong file. Cleared with the queue on any reject.
+  var freshShaByFile = {};
 
   function editsBusy() {
     return editInFlight || editQueue.length > 0 || nextStructural !== null;
@@ -30,31 +34,40 @@
   function clearEditQueue() {
     editQueue.length = 0;
     nextStructural = null;
-    freshSha = null;
+    freshShaByFile = {};
   }
 
-  function rvPostEdit(edits) {
+  // The sha to open a file's edit chain with, before any response for it.
+  function initialShaFor(file) {
+    return file ? F.fileSha(file) : F.curSha();
+  }
+
+  function rvPostEdit(edits, file) {
+    file = file || '';
     var structural = edits.some(function (e) { return STRUCTURAL_OPS[e.op] === 1; });
-    if (!editsBusy()) return sendEdit(edits);
+    if (!editsBusy()) return sendEdit(edits, file);
+    var entry = { edits: edits, file: file };
     if (structural) {
       if (editQueue.length) F.toast('Dropped ' + editQueue.length + ' pending edit(s) — layout changed');
       editQueue.length = 0;
-      nextStructural = edits;
+      nextStructural = entry;
     } else if (nextStructural) {
       F.toast('Edit dropped — the layout is about to change');
     } else {
-      editQueue.push(edits);
+      editQueue.push(entry);
     }
     return Promise.resolve(true);
   }
 
-  function sendEdit(edits) {
+  function sendEdit(edits, file) {
+    file = file || '';
     editInFlight = true;
-    F.rvStatus('saving', 'Saving to ' + RV.PRES_NAME + '…');
+    F.rvStatus('saving', 'Saving to ' + (file || RV.PRES_NAME) + '…');
+    var baseSha = freshShaByFile[file] != null ? freshShaByFile[file] : initialShaFor(file);
     return fetch('/__rv__/edit', {
       method: 'POST',
       headers: { 'X-RV-Token': TOKEN, 'Content-Type': 'application/json' },
-      body: JSON.stringify({ sha256: freshSha || F.curSha(), edits: edits }),
+      body: JSON.stringify({ sha256: baseSha, edits: edits, file: file }),
     }).then(function (r) {
       return r.json().catch(function () { return {}; }).then(function (j) {
         editInFlight = false;
@@ -69,10 +82,11 @@
           else maybeReload();  // a deferred reload must not stay stuck
           return false;
         }
-        freshSha = j.sha256 || null;
+        // Chain the NEXT edit for this same file on this response's sha.
+        freshShaByFile[file] = j.sha256 || null;
         var next = nextStructural || editQueue.shift() || null;
         nextStructural = (next === nextStructural) ? null : nextStructural;
-        if (next) sendEdit(next);
+        if (next) sendEdit(next.edits, next.file);
         else maybeReload();
         return true;  // the rebuild's SSE reload refreshes everything
       });
@@ -127,14 +141,15 @@
   var srcEpoch = 0;
   var srcCtl = null;
 
-  function fetchSrc(start, end, cb) {
+  function fetchSrc(start, end, cb, file) {
     srcEpoch += 1;
     var epoch = srcEpoch;
     if (srcCtl) { try { srcCtl.abort(); } catch (e) {} }
     var ctl = window.AbortController ? new AbortController() : null;
     srcCtl = ctl;
     fetch('/__rv__/src?start=' + start + '&end=' + end +
-          '&token=' + encodeURIComponent(TOKEN),
+          '&token=' + encodeURIComponent(TOKEN) +
+          (file ? '&file=' + encodeURIComponent(file) : ''),
           ctl ? { signal: ctl.signal } : undefined)
       .then(function (r) { return r.json(); })
       .then(function (j) {
