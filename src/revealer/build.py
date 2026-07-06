@@ -2000,6 +2000,7 @@ def _build(pfile: str, dev: bool) -> str:
         "katex",
         "macros",
         "macro",
+        "pdfSeparateFragments",
     }
 
     # Backwards-compatibility aliases for common option names in .pres files

@@ -201,6 +201,11 @@ the `img2pdf` command); each slide is captured at the presentation resolution
 and the pages are assembled losslessly. This avoids the blank pages produced by
 the stock reveal.js `?print-pdf` route with Revealer's fitted layout.
 
+By default every slide becomes one page with all fragments shown. Set
+`> pdfSeparateFragments: true` in the `.pres` settings block to get one page
+per fragment state instead (the pre-fragment state, then each step), matching
+what the audience sees during the talk.
+
 ## How updating works
 
 reveal.js and its plugins are **not** bundled inside the repository. Instead,

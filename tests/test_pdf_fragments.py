@@ -1,0 +1,73 @@
+"""P4d: pdfSeparateFragments — routes, fragment step counts, shot lists."""
+
+from __future__ import annotations
+
+from pathlib import Path
+
+from revealer import build as build_mod
+from revealer.pdf import (
+    _SEPARATE_RE,
+    _count_fragment_steps,
+    _route_segments,
+    _routes,
+    _shot_list,
+)
+
+PRES = """> title: Frag deck
+> pdfSeparateFragments: true
+
+=== One
+always visible
+> frag +
+second
+> end: frag
+> frag +
+third
+> end: frag
+
+=== Two
+
+no fragments here
+
+--- Stacked
+> frag +3
+explicit
+> end: frag
+"""
+
+
+def test_setting_regex():
+    assert _SEPARATE_RE.search("> pdfSeparateFragments: true\n")
+    assert _SEPARATE_RE.search(">  pdfseparatefragments:  YES\n")
+    assert not _SEPARATE_RE.search("> pdfSeparateFragments: false\n")
+
+
+def test_count_fragment_steps_mixed():
+    seg = ('<section><p class="fragment">a</p>'
+           '<p class="fragment" data-fragment-index="2">b</p>'
+           '<p class="fragment" data-fragment-index="2">c</p>'
+           '<div class="x fragment y">d</div></section>')
+    # 2 implicit (one step each) + one distinct explicit index
+    assert _count_fragment_steps(seg) == 3
+    assert _count_fragment_steps("<section><p>plain</p></section>") == 0
+
+
+def test_routes_and_shots_on_built_deck(deck):
+    pdir = deck(PRES, name="pf")
+    out = build_mod.build(str(pdir / "pf.pres"))
+    html = Path(out).read_text(encoding="utf-8")
+
+    segs = _route_segments(html)
+    assert _routes(html) == [(0, 0), (1, 0), (1, 1)]
+    steps = {(h, v): _count_fragment_steps(seg) for h, v, seg in segs}
+    assert steps[(0, 0)] == 2      # two implicit fragments
+    assert steps[(1, 0)] == 0
+    assert steps[(1, 1)] == 1      # one explicit index
+
+    flat = _shot_list(html, separate=False)
+    assert flat == ["#/0/0", "#/1/0", "#/1/1"]
+
+    sep = _shot_list(html, separate=True)
+    assert sep == ["#/0/0", "#/0/0/0", "#/0/0/1",
+                   "#/1/0",
+                   "#/1/1", "#/1/1/0"]
