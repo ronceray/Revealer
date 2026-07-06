@@ -22,6 +22,7 @@
     drag: null,         // active drag (kind, el, x0/y0, r0, scale, extras)
     dropState: null,    // block-move / OS-file drop targets + active slot
     splitPref: false,   // split-view preference (seeded from localStorage below)
+    nudgeFlush: null,   // pending nudge commit fn (flushNudge runs it early)
     panelFor: null,     // element the side panel currently renders
     nudgeTimer: null,   // debounce timer for arrow-key nudges
   };
@@ -273,6 +274,7 @@
     if (!el) return;
     ev.preventDefault();
     ev.stopPropagation();
+    if (el !== S.sel) flushNudge();
     S.sel = el;
     syncChrome();
   }
@@ -316,20 +318,40 @@
     syncChrome();
   }
 
+  /* ONE document-level keydown handler for all editor shortcuts. A single
+     typing guard keeps every shortcut away from inputs/textareas — arrows
+     must not nudge and Ctrl+Z must stay the field's own undo. */
+  function isTypingTarget(t) {
+    return !!(t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.isContentEditable));
+  }
+
   document.addEventListener('keydown', function (ev) {
-    var t = ev.target;
-    if (t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.isContentEditable)) return;
-    if (ev.key === 'e' && !ev.ctrlKey && !ev.metaKey && !ev.altKey) {
+    if (isTypingTarget(ev.target)) return;
+    if (ev.ctrlKey || ev.metaKey) {
+      if (S.on && !ev.altKey && (ev.key === 'z' || ev.key === 'Z')) {
+        rvUndoRedo(ev.shiftKey ? 'redo' : 'undo');
+        ev.preventDefault();
+      }
+      return;
+    }
+    if (ev.altKey) return;
+    if (ev.key === 'e') {
       setEdit(!S.on);
+      ev.preventDefault();
+    } else if (S.on && ev.key === 'f') {
+      toggleDrawer();
       ev.preventDefault();
     } else if (S.on && ev.key === 'Escape') {
       selectParent();
       ev.preventDefault();
       ev.stopPropagation();
     } else if (S.on && S.sel && (ev.key === 'Delete' || ev.key === 'Backspace')) {
+      flushNudge();
       deleteSelected(S.sel);
       ev.preventDefault();
       ev.stopPropagation();
+    } else if (S.on && S.sel && NUDGE_ARROWS[ev.key]) {
+      nudgeSelected(ev);
     }
   }, true);
 
@@ -346,7 +368,11 @@
   window.addEventListener('load', hookFit);
   window.addEventListener('resize', syncChrome);
   if (window.Reveal && Reveal.on) {
-    Reveal.on('slidechanged', function () { S.sel = S.hover = null; syncChrome(); });
+    Reveal.on('slidechanged', function () {
+      flushNudge();
+      S.sel = S.hover = null;
+      syncChrome();
+    });
   }
 
   /* --- editing machinery: POST plumbing, toasts, undo ----------------------- */
@@ -369,31 +395,106 @@
     el._t = setTimeout(function () { el.classList.remove('rv-on'); }, ms || 2600);
   }
 
-  var postPending = false;
+  /* --- edit POST plumbing: a FIFO queue for line-preserving ops --------------
+     Rapid line-preserving edits (drag + nudge storms) queue and chain on the
+     previous response's sha — nothing is silently dropped. Structural ops
+     renumber lines, so they never queue behind anything: issuing one drops
+     whatever is still waiting (with a toast) and runs next. Any rejected
+     edit clears the queue: the deck state is the truth, resync to it. */
+  var STRUCTURAL_OPS = { move_block: 1, delete_block: 1, insert_media: 1,
+                         replace_lines: 1, set_grid_gap: 1 };
+  var editQueue = [];        // waiting line-preserving batches
+  var nextStructural = null; // at most one structural batch, runs next
+  var editInFlight = false;
+  var freshSha = null;       // sha from the last response (meta lags until reload)
+
+  function editsBusy() {
+    return editInFlight || editQueue.length > 0 || nextStructural !== null;
+  }
+
+  function clearEditQueue() {
+    editQueue.length = 0;
+    nextStructural = null;
+    freshSha = null;
+  }
 
   function rvPostEdit(edits) {
-    if (postPending) return Promise.resolve(false);
-    postPending = true;
+    var structural = edits.some(function (e) { return STRUCTURAL_OPS[e.op] === 1; });
+    if (!editsBusy()) return sendEdit(edits);
+    if (structural) {
+      if (editQueue.length) toast('Dropped ' + editQueue.length + ' pending edit(s) — layout changed');
+      editQueue.length = 0;
+      nextStructural = edits;
+    } else if (nextStructural) {
+      toast('Edit dropped — the layout is about to change');
+    } else {
+      editQueue.push(edits);
+    }
+    return Promise.resolve(true);
+  }
+
+  function sendEdit(edits) {
+    editInFlight = true;
     if (typeof rvStatus === 'function') rvStatus('saving', 'Saving to ' + PRES_NAME + '…');
     return fetch('/__rv__/edit', {
       method: 'POST',
       headers: { 'X-RV-Token': TOKEN, 'Content-Type': 'application/json' },
-      body: JSON.stringify({ sha256: curSha(), edits: edits }),
+      body: JSON.stringify({ sha256: freshSha || curSha(), edits: edits }),
     }).then(function (r) {
       return r.json().catch(function () { return {}; }).then(function (j) {
-        postPending = false;
+        editInFlight = false;
         if (!r.ok) {
+          clearEditQueue();
           if (typeof rvStatus === 'function') rvStatus('error', 'Not saved ✗');
           try { sessionStorage.removeItem('rv-ed-lastsave'); } catch (e2) {}
           toast(j.error === 'sha_mismatch'
             ? 'Deck changed on disk — resyncing'
             : 'Edit rejected: ' + (j.error || r.status));
           if (j.error === 'sha_mismatch') saveStateAndReload();
+          else maybeReload();  // a deferred reload must not stay stuck
           return false;
         }
-        return true;  // the rebuild's SSE reload will refresh everything
+        freshSha = j.sha256 || null;
+        var next = nextStructural || editQueue.shift() || null;
+        nextStructural = (next === nextStructural) ? null : nextStructural;
+        if (next) sendEdit(next);
+        else maybeReload();
+        return true;  // the rebuild's SSE reload refreshes everything
       });
-    }).catch(function () { postPending = false; toast('Edit failed: server unreachable'); return false; });
+    }).catch(function () {
+      editInFlight = false;
+      clearEditQueue();
+      toast('Edit failed: server unreachable');
+      maybeReload();
+      return false;
+    });
+  }
+
+  /* --- reload deferral: never yank the DOM mid-interaction -------------------
+     SSE reloads wait for the edit queue and any active drag/drop to finish,
+     with a 5 s force-fire so a wedged state can't suppress reloads forever. */
+  var pendingReload = false;
+  var reloadForceTimer = null;
+
+  function maybeReload() {
+    if (!pendingReload) return;
+    if (editsBusy() || S.drag || S.dropState) return;
+    pendingReload = false;
+    if (reloadForceTimer) { clearTimeout(reloadForceTimer); reloadForceTimer = null; }
+    hideError();
+    saveStateAndReload();
+  }
+
+  function scheduleReload() {
+    flushNudge();  // an uncommitted nudge would be lost by the reload
+    pendingReload = true;
+    if (!reloadForceTimer) {
+      reloadForceTimer = setTimeout(function () {
+        reloadForceTimer = null;
+        if (pendingReload) { pendingReload = false; hideError(); saveStateAndReload(); }
+      }, 5000);
+    }
+    maybeReload();
   }
 
   function rvUndoRedo(which) {
@@ -405,13 +506,6 @@
       }); });
   }
 
-  document.addEventListener('keydown', function (ev) {
-    if (!S.on) return;
-    if ((ev.ctrlKey || ev.metaKey) && (ev.key === 'z' || ev.key === 'Z')) {
-      rvUndoRedo(ev.shiftKey ? 'redo' : 'undo');
-      ev.preventDefault();
-    }
-  }, true);
 
   /* --- construct model -------------------------------------------------------- */
 
@@ -528,6 +622,7 @@
   function startDrag(ev, kind, el, extra) {
     ev.preventDefault();
     ev.stopPropagation();
+    flushNudge();
     var r = el.getBoundingClientRect();
     S.drag = Object.assign({
       kind: kind, el: el, x0: ev.clientX, y0: ev.clientY,
@@ -613,6 +708,7 @@
       commitBlockMove(d, ev);
     }
     syncChrome();
+    maybeReload();
   }
 
   /* --- column split commit --------------------------------------------------------- */
@@ -649,15 +745,15 @@
       }
     } else {
       // Coarse: redistribute integer weights within the pair, preserving their sum.
-      var S = Math.round(d.g0 + d.g1);
-      if (S < 2 || Math.abs(S - (d.g0 + d.g1)) > 0.01) {
+      var sum = Math.round(d.g0 + d.g1);
+      if (sum < 2 || Math.abs(sum - (d.g0 + d.g1)) > 0.01) {
         toast('These columns use sizes I can’t redistribute — edit the source');
         saveStateAndReload();
         return;
       }
-      var ai = Math.min(S - 1, Math.max(1, Math.round(ratio * S)));
+      var ai = Math.min(sum - 1, Math.max(1, Math.round(ratio * sum)));
       opA = String(ai);
-      opB = String(S - ai);
+      opB = String(sum - ai);
     }
     rvPostEdit([
       { op: 'set_col_size', line: lineA, new: opA },
@@ -667,11 +763,33 @@
 
   /* --- keyboard nudging --------------------------------------------------------------- */
 
+  // Arrow nudges debounce their POST; anything that retargets, drags,
+  // deletes, or reloads must flush the pending commit first so it is
+  // neither lost nor applied to the wrong element.
+  function queueNudge(fn) {
+    clearTimeout(S.nudgeTimer);
+    S.nudgeFlush = fn;
+    S.nudgeTimer = setTimeout(function () {
+      S.nudgeTimer = null;
+      S.nudgeFlush = null;
+      fn();
+    }, 450);
+  }
 
-  document.addEventListener('keydown', function (ev) {
-    if (!S.on || !S.sel) return;
-    var arrows = { ArrowLeft: [-1, 0], ArrowRight: [1, 0], ArrowUp: [0, -1], ArrowDown: [0, 1] };
-    var v = arrows[ev.key];
+  function flushNudge() {
+    if (!S.nudgeFlush) return;
+    clearTimeout(S.nudgeTimer);
+    S.nudgeTimer = null;
+    var fn = S.nudgeFlush;
+    S.nudgeFlush = null;
+    fn();
+  }
+
+
+  var NUDGE_ARROWS = { ArrowLeft: [-1, 0], ArrowRight: [1, 0], ArrowUp: [0, -1], ArrowDown: [0, 1] };
+
+  function nudgeSelected(ev) {
+    var v = NUDGE_ARROWS[ev.key];
     if (!v) return;
     var el = S.sel, kind = constructOf(el);
     ev.preventDefault();
@@ -684,15 +802,14 @@
       el._nx = (el._nx === undefined ? 0 : el._nx) + v[0] * mult * pr.width / 100;
       el._ny = (el._ny === undefined ? 0 : el._ny) + v[1] * mult * pr.height / 100;
       el.style.transform = 'translate(-50%, -50%) translate(' + el._nx + 'px,' + el._ny + 'px)';
-      clearTimeout(S.nudgeTimer);
-      S.nudgeTimer = setTimeout(function () {
+      queueNudge(function () {
         var r = el.getBoundingClientRect();
         var cx = Math.round((r.left + r.width / 2 - pr.left) / pr.width * 200) / 2;
         var cy = Math.round((r.top + r.height / 2 - pr.top) / pr.height * 200) / 2;
         var op = { op: 'set_pin', line: srcOf(el), x: cx + '%', y: cy + '%' };
         if (el.style.width && el.style.width.indexOf('%') !== -1) op.w = el.style.width;
         rvPostEdit([op]);
-      }, 450);
+      });
     } else if (kind === 'media' || kind === 'row' || kind === 'stack') {
       var target = (kind === 'media' && el.tagName === 'FIGURE') ? el.querySelector('img,video') : el;
       if (!target) return;
@@ -700,16 +817,15 @@
       if (v[1] === 0) return;
       if (kind === 'media') { target.style.height = h + 'px'; target.style.width = 'auto'; }
       else { el.style.flex = '0 0 ' + h + 'px'; el.style.height = h + 'px'; }
-      clearTimeout(S.nudgeTimer);
-      S.nudgeTimer = setTimeout(function () {
+      queueNudge(function () {
         var hpx = Math.round(target.getBoundingClientRect().height / rvScale());
         rvPostEdit([kind === 'media'
           ? { op: 'set_media_size', line: srcOf(el), dim: 'h', value: hpx + 'px' }
           : { op: (kind === 'row' ? 'set_row_height' : 'set_stack_height'), line: srcOf(el), value: hpx }]);
-      }, 450);
+      });
     }
     syncChrome();
-  }, true);
+  }
 
   /* --- block move: ghost, drop targets, commit ------------------------------------------ */
 
@@ -747,6 +863,7 @@
     var ghost = document.getElementById('rv-ed-ghost');
     if (ghost) ghost.remove();
     S.dropState = null;
+    maybeReload();
   }
 
   function moveGhost(ev) {
@@ -885,14 +1002,6 @@
     }]);
   }
 
-  document.addEventListener('keydown', function (ev) {
-    var t = ev.target;
-    if (t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.isContentEditable)) return;
-    if (S.on && ev.key === 'f' && !ev.ctrlKey && !ev.metaKey && !ev.altKey) {
-      toggleDrawer();
-      ev.preventDefault();
-    }
-  }, true);
 
   /* --- OS file drag-drop --------------------------------------------------------------------- */
 
@@ -1075,6 +1184,29 @@
     return chain;
   }
 
+  /* Panel /src loads: only the newest render may fill the box. Older
+     in-flight requests are aborted and epoch-guarded (an abort alone can't
+     protect against a response already in the microtask queue). */
+  var srcEpoch = 0;
+  var srcCtl = null;
+
+  function fetchSrc(start, end, cb) {
+    srcEpoch += 1;
+    var epoch = srcEpoch;
+    if (srcCtl) { try { srcCtl.abort(); } catch (e) {} }
+    var ctl = window.AbortController ? new AbortController() : null;
+    srcCtl = ctl;
+    fetch('/__rv__/src?start=' + start + '&end=' + end +
+          '&token=' + encodeURIComponent(TOKEN),
+          ctl ? { signal: ctl.signal } : undefined)
+      .then(function (r) { return r.json(); })
+      .then(function (j) {
+        if (epoch !== srcEpoch) return;
+        cb(j);
+      })
+      .catch(function () { /* aborted or unreachable — nothing to fill */ });
+  }
+
   function renderPanel() {
     var p = panelEl();
     var el = S.sel;
@@ -1128,19 +1260,24 @@
 
     var slot1 = p.querySelector('.rv-fmt-slot');
     if (slot1) slot1.appendChild(formatBar(p.querySelector('.rv-pn-src')));
-    // Source box + parameter fields need the actual .pres lines.
-    fetch('/__rv__/src?start=' + s + '&end=' + e + '&token=' + encodeURIComponent(TOKEN))
-      .then(function (r) { return r.json(); })
-      .then(function (j) {
-        if (!j.lines) return;
-        var ta = p.querySelector('.rv-pn-src');
-        if (ta) ta.value = j.lines.join('\n');
-        buildFields(p.querySelector('.rv-pn-fields'), kind, el, j.lines, s, e);
-      });
-
-    p.querySelector('.rv-pn-apply').addEventListener('click', function () {
+    // Source box + parameter fields need the actual .pres lines. Apply stays
+    // disabled until they arrive, and commits exactly the span it displays.
+    var applyBtn = p.querySelector('.rv-pn-apply');
+    applyBtn.disabled = true;
+    var bounds = null;
+    fetchSrc(s, e, function (j) {
+      if (!j.lines) return;
       var ta = p.querySelector('.rv-pn-src');
-      rvPostEdit([{ op: 'replace_lines', start: s, end: e, text: ta.value.split('\n') }]);
+      if (ta) ta.value = j.lines.join('\n');
+      buildFields(p.querySelector('.rv-pn-fields'), kind, el, j.lines, s, e);
+      bounds = { start: j.start, end: j.end };
+      applyBtn.disabled = false;
+    });
+
+    applyBtn.addEventListener('click', function () {
+      if (!bounds) return;
+      var ta = p.querySelector('.rv-pn-src');
+      rvPostEdit([{ op: 'replace_lines', start: bounds.start, end: bounds.end, text: ta.value.split('\n') }]);
     });
   }
 
@@ -1157,15 +1294,21 @@
       '<div class="rv-pn-foot">Changes save automatically to the .pres — no save button needed.</div>';
     var slot0 = p.querySelector('.rv-fmt-slot');
     if (slot0) slot0.appendChild(formatBar(p.querySelector('.rv-pn-src')));
-    fetch('/__rv__/src?start=' + s0 + '&end=' + e0 + '&token=' + encodeURIComponent(TOKEN))
-      .then(function (r) { return r.json(); })
-      .then(function (j) {
-        var ta = p.querySelector('.rv-pn-src');
-        if (j.lines && ta) ta.value = j.lines.join('\n');
-      });
-    p.querySelector('.rv-pn-apply').addEventListener('click', function () {
+    var applyBtn0 = p.querySelector('.rv-pn-apply');
+    applyBtn0.disabled = true;
+    var bounds0 = null;
+    fetchSrc(s0, e0, function (j) {
       var ta = p.querySelector('.rv-pn-src');
-      rvPostEdit([{ op: 'replace_lines', start: s0, end: e0, text: ta.value.split('\n') }]);
+      if (j.lines && ta) ta.value = j.lines.join('\n');
+      if (j.lines) {
+        bounds0 = { start: j.start, end: j.end };
+        applyBtn0.disabled = false;
+      }
+    });
+    applyBtn0.addEventListener('click', function () {
+      if (!bounds0) return;
+      var ta = p.querySelector('.rv-pn-src');
+      rvPostEdit([{ op: 'replace_lines', start: bounds0.start, end: bounds0.end, text: ta.value.split('\n') }]);
     });
     appendCheatsheet(p);
   }
@@ -1611,7 +1754,7 @@
           '&token=' + encodeURIComponent(TOKEN))
       .then(function (r) { return r.json(); })
       .then(function (j) {
-        if (!j.lines) return;
+        if (!j.lines || !document.contains(box)) return;  // panel re-rendered
         var base = srcOf(sec);
         var rel = svgLine - base;           // index of `> svg:` in j.lines
         var end = rel;
@@ -1786,7 +1929,7 @@
     es.onmessage = function (msg) {
       var ev;
       try { ev = JSON.parse(msg.data); } catch (e) { return; }
-      if (ev.type === 'reload') { hideError(); saveStateAndReload(); }
+      if (ev.type === 'reload') { scheduleReload(); }
       else if (ev.type === 'build-error') { showError(ev); }
     };
     // EventSource reconnects on its own; nothing else to do.
