@@ -393,3 +393,23 @@ body.rv-split #rv-ed-drawer { right: calc(var(--rv-pw) + 10px); }
   color: #d7e0f5;
   white-space: pre-wrap;
 }
+
+/* --- split view v2: slide fitted with controls off the canvas ---------------- */
+
+body.rv-split .reveal {
+  position: fixed !important;
+  top: 58px;
+  left: 10px;
+  width: calc(100vw - var(--rv-pw) - 20px) !important;
+  height: calc(100vh - 106px) !important; /* strips above (toolbar) and below (hints) */
+}
+body.rv-split #rv-ed-toolbar {
+  top: 10px;
+  left: 10px;
+  box-shadow: none;
+}
+body.rv-split #rv-editor-layer .rv-ed-bar {
+  bottom: 8px;
+  left: calc((100vw - var(--rv-pw)) / 2);
+}
+body.rv-split #rv-ed-panel { padding-top: 12px; }
