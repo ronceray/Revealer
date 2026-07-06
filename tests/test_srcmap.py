@@ -272,3 +272,21 @@ def test_svg_hide_and_provenance(deck):
     assert '<rect id="a" width="5" height="5"/>' in dev
     i = dev.index('class="revealer-svg"')
     assert 'data-rv-src="2"' in dev[i:i + 60]
+
+
+def test_size_directive_consumed_on_fill_slides(deck):
+    """Regression: `> size:` on a `> fill` slide used to leak as literal text."""
+    html = build_deck(deck(
+        "=== F\n> fill\n> size: lede\nSome text\n> row\n> col\nx\n> end: row\n"))
+    assert "> size" not in html
+    assert "font-size:1.2500em" in html  # the lede role applied to the fill body
+    assert "Some text" in html
+
+
+def test_parent_wrapper_carries_stack_span(deck):
+    dev = build_deck(deck(
+        "=== Parent\n\ntop\n\n--- Child\n\nsub\n"), dev=True)
+    m = re.search(
+        r'<section data-transition="none" data-rv-src="(\d+)" data-rv-src-end="(\d+)">', dev)
+    assert m, "wrapper section lacks provenance"
+    assert int(m.group(1)) == 1 and int(m.group(2)) >= 5

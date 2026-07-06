@@ -25,6 +25,7 @@ import subprocess
 from pathlib import Path
 
 from . import assets
+from . import grammar as _grammar
 
 
 class _SimpleBibBase:
@@ -295,9 +296,17 @@ _TABLE_END_RE = re.compile(r"^>\s*end\s*:\s*table\s*$")
 # Block macros of the layout DSL (grid / pin / row / callouts / eq / frag /
 # stack): their whole `> xxx` .. `> end: xxx` span is kept atomic through
 # block / paragraph splitting, like code blocks and tables.
-_MACRO_OPEN_RE = re.compile(
-    r"^>\s*(?:grid\(\s*\d+\s*,\s*\d+\s*\)|pin\s*:|(?:row|info|warn|good|eq|frag|stack)\b)"
-)
+_MACRO_OPEN_RE = re.compile(_grammar.macro_open_pattern())
+
+# Legacy-renderer dispatch order/patterns derive from the registry. `box`
+# uses a capturing variant group so the handler learns which callout kind.
+_DISPATCH: list[tuple[str, re.Pattern]] = [
+    (name, re.compile(r"^>\s*(info|warn|good)\b" if name == "box"
+                      else _grammar.dispatch_pattern(name)))
+    for name, spec in _grammar.REGISTRY.items()
+    if spec.terminator is _grammar.Terminator.END_PAIRED
+    and spec.name != "code"
+]
 _BLOCK_END_RE = re.compile(r"^>\s*end\s*:\s*\w+\s*$")
 
 
@@ -684,7 +693,29 @@ def contentify(html, base_size=1.0, base_align=None, paragraph_spacing=0.5, fill
         # `> fill` slides use the flex layout DSL (rows / cols / stacks): render
         # the whole body with the line renderer, without block / paragraph
         # wrappers, so the flex chain resolves heights against the canvas.
-        return _contentify_legacy("\n".join(lines), src=src)
+        # Scoped directives are consumed here (they used to leak as literal
+        # text): `size` applies to the whole slide body, the rest is inert.
+        fill_size = None
+        kept_lines, kept_src = [], []
+        for line, ln in zip(lines, src):
+            m = _SCOPED_DIRECTIVE_RE.match(line.strip())
+            if m and _grammar.DIRECTIVES.get(m.group(1).replace("_", "-"),
+                                             None) is not None:
+                key = m.group(1).replace("_", "-")
+                if key == "size":
+                    fill_size = _parse_scale(m.group(2).strip(), None)
+                # align is handled by the legacy renderer; keep it in-stream
+                if key == "align":
+                    kept_lines.append(line)
+                    kept_src.append(ln)
+                continue
+            kept_lines.append(line)
+            kept_src.append(ln)
+        body = _contentify_legacy("\n".join(kept_lines), src=kept_src)
+        if fill_size is not None and abs(fill_size - 1.0) > 1e-6:
+            body = '<div class="rv-fillsize" style="font-size:{:.4f}em;display:contents">{}</div>'.format(
+                fill_size, body)
+        return body
 
     preamble, blocks = _split_into_blocks(lines, src)
 
@@ -1297,6 +1328,12 @@ def _contentify_legacy(html: str, src: list | None = None) -> str:
             sa=_src_attr(src[start_index], src[index - 1]), st=style, inner=inner)
         return out, index
 
+    _PARSERS = {
+        "table": _parse_table, "grid": _parse_grid, "pin": _parse_pin,
+        "row": _parse_row, "eq": _parse_eq, "stack": _parse_stack,
+        "frag": _parse_frag,
+    }
+
     index = 0
     while index < len(lines):
         line = lines[index]
@@ -1331,62 +1368,22 @@ def _contentify_legacy(html: str, src: list | None = None) -> str:
                 index += 1
                 continue
 
-            # --- Table blocks
+            # --- Block constructs: registry-driven dispatch (REGISTRY order)
 
-            if re.match(r"^>\s*table\(\s*\d+\s*,\s*\d+\s*\)\s*$", line):
+            dispatched = False
+            for _name, _pat in _DISPATCH:
+                m = _pat.match(line)
+                if not m:
+                    continue
                 _close_lists()
-                table_html, index = _parse_table(index)
-                html += table_html
-                continue
-
-            # --- Grid blocks (declarative card grid; like a table but with
-            #     card styling and optional per-card fragment reveal `+`)
-
-            if re.match(r"^>\s*grid\(\s*\d+\s*,\s*\d+\s*\)\s*(?:compact)?\s*$", line):
-                _close_lists()
-                grid_html, index = _parse_grid(index)
-                html += grid_html
-                continue
-
-            # --- Pin overlay block (absolute % overlay, optional `+` fragment)
-
-            if re.match(r"^>\s*pin\s*:", line):
-                _close_lists()
-                pin_html, index = _parse_pin(index)
-                html += pin_html
-                continue
-
-            # --- Layout row/col, callout boxes, framed equation, fragment wrapper
-
-            if re.match(r"^>\s*row\b", line):
-                _close_lists()
-                row_html, index = _parse_row(index)
-                html += row_html
-                continue
-
-            box = re.match(r"^>\s*(info|warn|good)\b", line)
-            if box:
-                _close_lists()
-                box_html, index = _parse_box(index, box.group(1))
-                html += box_html
-                continue
-
-            if re.match(r"^>\s*eq\b", line):
-                _close_lists()
-                eq_html, index = _parse_eq(index)
-                html += eq_html
-                continue
-
-            if re.match(r"^>\s*stack\b", line):
-                _close_lists()
-                stack_html, index = _parse_stack(index)
-                html += stack_html
-                continue
-
-            if re.match(r"^>\s*frag\b", line):
-                _close_lists()
-                frag_html, index = _parse_frag(index)
-                html += frag_html
+                if _name == "box":
+                    out_html, index = _parse_box(index, m.group(1))
+                else:
+                    out_html, index = _PARSERS[_name](index)
+                html += out_html
+                dispatched = True
+                break
+            if dispatched:
                 continue
 
             if re.match(r"^>\s*end\s*:\s*\w+\s*$", line):
@@ -2006,7 +2003,14 @@ def _build(pfile: str, dev: bool) -> str:
         if S["type"] != "biblio":
 
             if S["type"] == "parent":
-                content += '<section data-transition="none">'
+                stack_end = S.get("src_end")
+                for T in slide[k + 1:]:
+                    if T["type"] in ("child", "lastchild"):
+                        stack_end = T.get("src_end", stack_end)
+                    else:
+                        break
+                content += '<section data-transition="none"{0}>'.format(
+                    _src_attr(S.get("src"), stack_end))
 
             opt = 'data-transition="none" data-state="slide_{:d}"'.format(k) + _src_attr(S.get("src"), S.get("src_end"))
 
