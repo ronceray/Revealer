@@ -50,6 +50,7 @@ DEV_PREFIX = "/__rv__"
 # The P3a decomposition grows this list; order is load order.
 EDITOR_JS: tuple[str, ...] = (
     "editor/core.js",
+    "editor/net.js",
     "editor.js",
 )
 _DEV_ASSETS = frozenset(EDITOR_JS) | {"editor.css"}

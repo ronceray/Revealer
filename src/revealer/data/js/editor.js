@@ -189,7 +189,7 @@
     if (isTypingTarget(ev.target)) return;
     if (ev.ctrlKey || ev.metaKey) {
       if (S.on && !ev.altKey && (ev.key === 'z' || ev.key === 'Z')) {
-        rvUndoRedo(ev.shiftKey ? 'redo' : 'undo');
+        F.rvUndoRedo(ev.shiftKey ? 'redo' : 'undo');
         ev.preventDefault();
       }
       return;
@@ -233,120 +233,6 @@
       S.sel = S.hover = null;
       syncChrome();
     });
-  }
-
-  /* --- editing machinery: POST plumbing, toasts, undo ----------------------- */
-
-
-  /* --- edit POST plumbing: a FIFO queue for line-preserving ops --------------
-     Rapid line-preserving edits (drag + nudge storms) queue and chain on the
-     previous response's sha — nothing is silently dropped. Structural ops
-     renumber lines, so they never queue behind anything: issuing one drops
-     whatever is still waiting (with a toast) and runs next. Any rejected
-     edit clears the queue: the deck state is the truth, resync to it. */
-  var STRUCTURAL_OPS = { move_block: 1, delete_block: 1, insert_media: 1,
-                         replace_lines: 1, set_grid_gap: 1 };
-  var editQueue = [];        // waiting line-preserving batches
-  var nextStructural = null; // at most one structural batch, runs next
-  var editInFlight = false;
-  var freshSha = null;       // sha from the last response (meta lags until reload)
-
-  function editsBusy() {
-    return editInFlight || editQueue.length > 0 || nextStructural !== null;
-  }
-
-  function clearEditQueue() {
-    editQueue.length = 0;
-    nextStructural = null;
-    freshSha = null;
-  }
-
-  function rvPostEdit(edits) {
-    var structural = edits.some(function (e) { return STRUCTURAL_OPS[e.op] === 1; });
-    if (!editsBusy()) return sendEdit(edits);
-    if (structural) {
-      if (editQueue.length) F.toast('Dropped ' + editQueue.length + ' pending edit(s) — layout changed');
-      editQueue.length = 0;
-      nextStructural = edits;
-    } else if (nextStructural) {
-      F.toast('Edit dropped — the layout is about to change');
-    } else {
-      editQueue.push(edits);
-    }
-    return Promise.resolve(true);
-  }
-
-  function sendEdit(edits) {
-    editInFlight = true;
-    if (typeof rvStatus === 'function') rvStatus('saving', 'Saving to ' + PRES_NAME + '…');
-    return fetch('/__rv__/edit', {
-      method: 'POST',
-      headers: { 'X-RV-Token': TOKEN, 'Content-Type': 'application/json' },
-      body: JSON.stringify({ sha256: freshSha || F.curSha(), edits: edits }),
-    }).then(function (r) {
-      return r.json().catch(function () { return {}; }).then(function (j) {
-        editInFlight = false;
-        if (!r.ok) {
-          clearEditQueue();
-          if (typeof rvStatus === 'function') rvStatus('error', 'Not saved ✗');
-          try { sessionStorage.removeItem('rv-ed-lastsave'); } catch (e2) {}
-          F.toast(j.error === 'sha_mismatch'
-            ? 'Deck changed on disk — resyncing'
-            : 'Edit rejected: ' + (j.error || r.status));
-          if (j.error === 'sha_mismatch') F.saveStateAndReload();
-          else maybeReload();  // a deferred reload must not stay stuck
-          return false;
-        }
-        freshSha = j.sha256 || null;
-        var next = nextStructural || editQueue.shift() || null;
-        nextStructural = (next === nextStructural) ? null : nextStructural;
-        if (next) sendEdit(next);
-        else maybeReload();
-        return true;  // the rebuild's SSE reload refreshes everything
-      });
-    }).catch(function () {
-      editInFlight = false;
-      clearEditQueue();
-      F.toast('Edit failed: server unreachable');
-      maybeReload();
-      return false;
-    });
-  }
-
-  /* --- reload deferral: never yank the DOM mid-interaction -------------------
-     SSE reloads wait for the edit queue and any active drag/drop to finish,
-     with a 5 s force-fire so a wedged state can't suppress reloads forever. */
-  var pendingReload = false;
-  var reloadForceTimer = null;
-
-  function maybeReload() {
-    if (!pendingReload) return;
-    if (editsBusy() || S.drag || S.dropState) return;
-    pendingReload = false;
-    if (reloadForceTimer) { clearTimeout(reloadForceTimer); reloadForceTimer = null; }
-    hideError();
-    F.saveStateAndReload();
-  }
-
-  function scheduleReload() {
-    flushNudge();  // an uncommitted nudge would be lost by the reload
-    pendingReload = true;
-    if (!reloadForceTimer) {
-      reloadForceTimer = setTimeout(function () {
-        reloadForceTimer = null;
-        if (pendingReload) { pendingReload = false; hideError(); F.saveStateAndReload(); }
-      }, 5000);
-    }
-    maybeReload();
-  }
-
-  function rvUndoRedo(which) {
-    fetch('/__rv__/' + which, { method: 'POST', headers: { 'X-RV-Token': TOKEN } })
-      .then(function (r) { return r.json().catch(function () { return {}; }).then(function (j) {
-        if (!r.ok) F.toast(j.error === 'external_edit'
-          ? 'File changed outside the editor — use your editor’s undo'
-          : 'Nothing to ' + which);
-      }); });
   }
 
 
@@ -504,14 +390,14 @@
       } else if (w && w.indexOf('%') !== -1) {
         op.w = w;
       }
-      rvPostEdit([op]);
+      F.rvPostEdit([op]);
     } else if (d.kind === 'media-size') {
       var target = el.tagName === 'FIGURE' ? el.querySelector('img,video') : el;
       var hpx = Math.round(target.getBoundingClientRect().height / d.scale);
-      rvPostEdit([{ op: 'set_media_size', line: line, dim: 'h', value: hpx + 'px' }]);
+      F.rvPostEdit([{ op: 'set_media_size', line: line, dim: 'h', value: hpx + 'px' }]);
     } else if (d.kind === 'row-height' || d.kind === 'stack-height') {
       var hh = Math.round(el.getBoundingClientRect().height / d.scale);
-      rvPostEdit([{ op: (d.kind === 'row-height' ? 'set_row_height' : 'set_stack_height'),
+      F.rvPostEdit([{ op: (d.kind === 'row-height' ? 'set_row_height' : 'set_stack_height'),
                     line: line, value: hh }]);
     } else if (d.kind === 'col-split') {
       commitColSplit(d);
@@ -519,7 +405,7 @@
       commitBlockMove(d, ev);
     }
     syncChrome();
-    maybeReload();
+    F.maybeReload();
   }
 
   /* --- column split commit --------------------------------------------------------- */
@@ -566,7 +452,7 @@
       opA = String(ai);
       opB = String(sum - ai);
     }
-    rvPostEdit([
+    F.rvPostEdit([
       { op: 'set_col_size', line: lineA, new: opA },
       { op: 'set_col_size', line: lineB, new: opB },
     ]);
@@ -619,7 +505,7 @@
         var cy = Math.round((r.top + r.height / 2 - pr.top) / pr.height * 200) / 2;
         var op = { op: 'set_pin', line: F.srcOf(el), x: cx + '%', y: cy + '%' };
         if (el.style.width && el.style.width.indexOf('%') !== -1) op.w = el.style.width;
-        rvPostEdit([op]);
+        F.rvPostEdit([op]);
       });
     } else if (kind === 'media' || kind === 'row' || kind === 'stack') {
       var target = (kind === 'media' && el.tagName === 'FIGURE') ? el.querySelector('img,video') : el;
@@ -630,7 +516,7 @@
       else { el.style.flex = '0 0 ' + h + 'px'; el.style.height = h + 'px'; }
       queueNudge(function () {
         var hpx = Math.round(target.getBoundingClientRect().height / rvScale());
-        rvPostEdit([kind === 'media'
+        F.rvPostEdit([kind === 'media'
           ? { op: 'set_media_size', line: F.srcOf(el), dim: 'h', value: hpx + 'px' }
           : { op: (kind === 'row' ? 'set_row_height' : 'set_stack_height'), line: F.srcOf(el), value: hpx }]);
       });
@@ -674,7 +560,7 @@
     var ghost = document.getElementById('rv-ed-ghost');
     if (ghost) ghost.remove();
     S.dropState = null;
-    maybeReload();
+    F.maybeReload();
   }
 
   function moveGhost(ev) {
@@ -723,7 +609,7 @@
     if (!choice) { syncChrome(); return; }
     var construct = F.constructOf(el);
     if (construct === 'region') construct = 'paragraph';
-    rvPostEdit([{
+    F.rvPostEdit([{
       op: 'move_block',
       src: [F.srcOf(el), F.srcEndOf(el)],
       construct: RV.MOVABLE[construct] ? construct : 'paragraph',
@@ -805,7 +691,7 @@
     if (mapped.length !== order.length) {
       F.toast('Some fragments are raw HTML — their order can’t be rewritten');
     }
-    rvPostEdit([{
+    F.rvPostEdit([{
       op: 'reorder_fragments',
       order: mapped.map(function (el) {
         return { line: F.srcOf(el), construct: fragConstruct(el) };
@@ -836,7 +722,7 @@
       method: 'PUT', headers: { 'X-RV-Token': TOKEN }, body: file,
     }).then(function (r) { return r.json(); }).then(function (j) {
       if (!j.ok) { F.toast('Upload rejected: ' + (j.error || '?')); return; }
-      rvPostEdit([{
+      F.rvPostEdit([{
         op: 'insert_media',
         at: { insert_before: choice.slot.line,
               container: [F.srcOf(choice.target.el), F.srcEndOf(choice.target.el)],
@@ -890,8 +776,8 @@
       '<button class="rv-tb-help" title="Help">?</button>';
     document.body.appendChild(tb);
     tb.querySelector('.rv-tb-edit').addEventListener('click', function () { setEdit(!S.on); });
-    tb.querySelector('.rv-tb-undo').addEventListener('click', function () { rvUndoRedo('undo'); });
-    tb.querySelector('.rv-tb-redo').addEventListener('click', function () { rvUndoRedo('redo'); });
+    tb.querySelector('.rv-tb-undo').addEventListener('click', function () { F.rvUndoRedo('undo'); });
+    tb.querySelector('.rv-tb-redo').addEventListener('click', function () { F.rvUndoRedo('redo'); });
     tb.querySelector('.rv-tb-frag').addEventListener('click', function () {
       if (!S.on) setEdit(true);
       toggleDrawer();
@@ -995,28 +881,6 @@
     return chain;
   }
 
-  /* Panel /src loads: only the newest render may fill the box. Older
-     in-flight requests are aborted and epoch-guarded (an abort alone can't
-     protect against a response already in the microtask queue). */
-  var srcEpoch = 0;
-  var srcCtl = null;
-
-  function fetchSrc(start, end, cb) {
-    srcEpoch += 1;
-    var epoch = srcEpoch;
-    if (srcCtl) { try { srcCtl.abort(); } catch (e) {} }
-    var ctl = window.AbortController ? new AbortController() : null;
-    srcCtl = ctl;
-    fetch('/__rv__/src?start=' + start + '&end=' + end +
-          '&token=' + encodeURIComponent(TOKEN),
-          ctl ? { signal: ctl.signal } : undefined)
-      .then(function (r) { return r.json(); })
-      .then(function (j) {
-        if (epoch !== srcEpoch) return;
-        cb(j);
-      })
-      .catch(function () { /* aborted or unreachable — nothing to fill */ });
-  }
 
   function renderPanel() {
     var p = panelEl();
@@ -1076,7 +940,7 @@
     var applyBtn = p.querySelector('.rv-pn-apply');
     applyBtn.disabled = true;
     var bounds = null;
-    fetchSrc(s, e, function (j) {
+    F.fetchSrc(s, e, function (j) {
       if (!j.lines) return;
       var ta = p.querySelector('.rv-pn-src');
       if (ta) ta.value = j.lines.join('\n');
@@ -1088,7 +952,7 @@
     applyBtn.addEventListener('click', function () {
       if (!bounds) return;
       var ta = p.querySelector('.rv-pn-src');
-      rvPostEdit([{ op: 'replace_lines', start: bounds.start, end: bounds.end, text: ta.value.split('\n') }]);
+      F.rvPostEdit([{ op: 'replace_lines', start: bounds.start, end: bounds.end, text: ta.value.split('\n') }]);
     });
   }
 
@@ -1108,7 +972,7 @@
     var applyBtn0 = p.querySelector('.rv-pn-apply');
     applyBtn0.disabled = true;
     var bounds0 = null;
-    fetchSrc(s0, e0, function (j) {
+    F.fetchSrc(s0, e0, function (j) {
       var ta = p.querySelector('.rv-pn-src');
       if (j.lines && ta) ta.value = j.lines.join('\n');
       if (j.lines) {
@@ -1119,7 +983,7 @@
     applyBtn0.addEventListener('click', function () {
       if (!bounds0) return;
       var ta = p.querySelector('.rv-pn-src');
-      rvPostEdit([{ op: 'replace_lines', start: bounds0.start, end: bounds0.end, text: ta.value.split('\n') }]);
+      F.rvPostEdit([{ op: 'replace_lines', start: bounds0.start, end: bounds0.end, text: ta.value.split('\n') }]);
     });
     appendCheatsheet(p);
   }
@@ -1372,7 +1236,7 @@
         at = spanDest(sec, 'slide');
       }
       if (!at) { F.toast('Uploaded to ' + j.path + ' — add a “! ' + j.path + '” line'); return; }
-      rvPostEdit([{ op: 'insert_media', at: at, kind: isVideo ? 'video' : 'img',
+      F.rvPostEdit([{ op: 'insert_media', at: at, kind: isVideo ? 'video' : 'img',
                     path: j.path, flags: flags }]);
     }).catch(function () { F.toast('Upload failed'); });
   }
@@ -1536,7 +1400,7 @@
       var def = defs[parseInt(input.parentElement.getAttribute('data-i'), 10)];
       function commit() {
         var op = def.apply(input.value.trim());
-        if (op) rvPostEdit([op]);
+        if (op) F.rvPostEdit([op]);
       }
       input.addEventListener('keydown', function (ev) {
         if (ev.key === 'Enter') { commit(); ev.preventDefault(); }
@@ -1612,7 +1476,7 @@
             chosen.forEach(function (c) { block.push('> animate: #' + c.id + ' opacity:1'); });
           }
           preserved.forEach(function (ln) { block.push(ln); });
-          rvPostEdit([{ op: 'replace_lines', start: svgLine, end: base + end, text: block }]);
+          F.rvPostEdit([{ op: 'replace_lines', start: svgLine, end: base + end, text: block }]);
         });
       });
   }
@@ -1651,7 +1515,7 @@
                           : [F.srcOf(el), F.srcEndOf(target)];
     var kindC = container && F.hasCls(container, 'column') ? 'column' : 'col';
     var construct = F.constructOf(el);
-    rvPostEdit([{
+    F.rvPostEdit([{
       op: 'move_block',
       src: [F.srcOf(el), F.srcEndOf(el)],
       construct: RV.MOVABLE[construct] ? construct : 'paragraph',
@@ -1671,7 +1535,7 @@
     }
     F.toast('Deleted ' + F.kindOf(el) + ' — Ctrl+Z to undo');
     S.sel = null;
-    rvPostEdit([{
+    F.rvPostEdit([{
       op: 'delete_block',
       src: [F.srcOf(el), F.srcEndOf(el)],
       construct: RV.MOVABLE[construct] ? construct : 'paragraph',
@@ -1708,7 +1572,7 @@
     // Headless smoke hook: POST the given ops through the real pipeline.
     var testArm = function () {
       setTimeout(function () {
-        try { rvPostEdit(JSON.parse(params.get('rv-test-edit'))); }
+        try { F.rvPostEdit(JSON.parse(params.get('rv-test-edit'))); }
         catch (e) { F.toast('bad rv-test-edit'); }
       }, 200);
     };
@@ -1740,7 +1604,7 @@
     es.onmessage = function (msg) {
       var ev;
       try { ev = JSON.parse(msg.data); } catch (e) { return; }
-      if (ev.type === 'reload') { scheduleReload(); }
+      if (ev.type === 'reload') { F.scheduleReload(); }
       else if (ev.type === 'build-error') { showError(ev); }
     };
     // EventSource reconnects on its own; nothing else to do.
@@ -1753,4 +1617,8 @@
   F.setEdit = setEdit;
   F.syncChrome = syncChrome;
   F.toggleDrawer = toggleDrawer;
+  F.hideError = hideError;
+  F.flushNudge = flushNudge;
+  F.rvStatus = rvStatus;
+  RV.PRES_NAME = PRES_NAME;
 })();
