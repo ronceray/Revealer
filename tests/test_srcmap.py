@@ -229,3 +229,35 @@ def test_card_title(deck):
         "=== G\n> grid(1,2) compact\n> card accent | My *title*\nBody\n> end: grid\n"))
     assert '<div class="card-title">My <i>title</i></div>' in html
     assert "rv-card accent" in html
+
+
+import shutil as _shutil
+
+# A minimal one-page PDF (blank A4) — enough for pdftocairo to convert.
+_MINI_PDF = (b"%PDF-1.1\n1 0 obj<</Type/Catalog/Pages 2 0 R>>endobj\n"
+             b"2 0 obj<</Type/Pages/Kids[3 0 R]/Count 1>>endobj\n"
+             b"3 0 obj<</Type/Page/Parent 2 0 R/MediaBox[0 0 200 100]>>endobj\n"
+             b"trailer<</Root 1 0 R>>\n%%EOF\n")
+
+
+@pytest.mark.skipif(_shutil.which("pdftocairo") is None, reason="needs poppler")
+def test_pdf_figure_converts(deck):
+    d = deck("=== F\n\n! Media/fig.pdf h=200px | From PDF\n",
+             media={"Media/fig.pdf": _MINI_PDF})
+    html = build_deck(d)
+    assert 'src="Media/.rv-cache/fig.svg"' in html
+    assert (d / "Media" / ".rv-cache" / "fig.svg").is_file()
+    # cache: second build must not reconvert (mtime unchanged)
+    m1 = (d / "Media" / ".rv-cache" / "fig.svg").stat().st_mtime
+    build_deck(d)
+    assert (d / "Media" / ".rv-cache" / "fig.svg").stat().st_mtime == m1
+
+
+def test_build_hook_runs_and_fails_loudly(deck):
+    d = deck("> build: printf 'x' > Media/gen.txt\n\n=== S\n\nhi\n",
+             media={"Media/keep.txt": b"k"})
+    build_deck(d)
+    assert (d / "Media" / "gen.txt").read_text() == "x"
+    bad = deck("> build: false\n\n=== S\n\nhi\n", name="bad")
+    with pytest.raises(RuntimeError):
+        build_deck(bad, name="bad")

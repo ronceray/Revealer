@@ -20,6 +20,8 @@ import hashlib
 import io
 import os
 import re
+import shutil
+import subprocess
 from pathlib import Path
 
 from . import assets
@@ -300,6 +302,64 @@ _BLOCK_END_RE = re.compile(r"^>\s*end\s*:\s*\w+\s*$")
 
 
 _MARKDOWN = True  # set per-build from `> markdown:` (default on)
+
+_PDIR = ""  # deck folder of the build in progress (set per-build)
+
+
+def _figure_src(path: str) -> str:
+    """Media path hook: PDF figures are converted to cached SVGs.
+
+    ``fig.pdf`` → ``Media/.rv-cache/fig.svg`` via ``pdftocairo -svg``,
+    reconverted only when the PDF is newer than the cache. Non-PDF paths
+    pass through untouched.
+    """
+    if not path.lower().endswith(".pdf") or not _PDIR:
+        return path
+    src = os.path.join(_PDIR, path)
+    if not os.path.isfile(src):
+        return path  # broken path: let the browser show the missing image
+    cache_dir = os.path.join(_PDIR, "Media", ".rv-cache")
+    stem = os.path.splitext(os.path.basename(path))[0]
+    dest = os.path.join(cache_dir, stem + ".svg")
+    if not os.path.isfile(dest) or os.path.getmtime(dest) < os.path.getmtime(src):
+        if shutil.which("pdftocairo") is None:
+            raise RuntimeError(
+                "PDF figure {0} needs 'pdftocairo' (install poppler-utils)".format(path))
+        os.makedirs(cache_dir, exist_ok=True)
+        proc = subprocess.run(
+            ["pdftocairo", "-svg", src, dest],
+            capture_output=True, text=True, timeout=60)
+        if proc.returncode != 0:
+            raise RuntimeError(
+                "pdftocairo failed on {0}: {1}".format(path, proc.stderr.strip()[-400:]))
+    return "Media/.rv-cache/{0}.svg".format(stem)
+
+
+_BUILD_HOOK_RE = re.compile(r"^>\s*build\s*:\s*(.+?)\s*$")
+_SLIDE_MARKER_RE = re.compile(r"^(>>> first:|>>> biblio|=== |--- |%%% )")
+
+
+def _run_build_hooks(pdir: str, pres_text: str) -> None:
+    """Run `> build: <command>` hooks (settings block) before compiling.
+
+    Commands run in the deck folder, so figure-generation scripts and
+    Makefiles regenerate media before it is read. A failing hook aborts the
+    build with the command's output (surfaced in the dev-server overlay).
+    """
+    for line in pres_text.split("\n"):
+        if _SLIDE_MARKER_RE.match(line):
+            break
+        m = _BUILD_HOOK_RE.match(line)
+        if not m:
+            continue
+        cmd = m.group(1)
+        proc = subprocess.run(
+            cmd, shell=True, cwd=pdir, capture_output=True, text=True, timeout=300)
+        if proc.returncode != 0:
+            raise RuntimeError(
+                "build hook failed ({0}):\n{1}".format(
+                    cmd, (proc.stderr or proc.stdout).strip()[-800:]))
+
 
 _MD_PROTECT_RE = re.compile(r"(\$\$.+?\$\$|\$[^$\n]+\$|<[^>]*>)")
 _MD_SPAN_RE = re.compile(r"\[([^\[\]]+)\]\{([^{}]+)\}")
@@ -1543,7 +1603,7 @@ def _media_shortcut(kind: str, rest: str, lineno: int | None = None) -> str:
         objfit = "cover" if fill else "contain"
     pos = "top" if "top" in flags else "center"
 
-    p = _escape_attr(path)
+    p = _escape_attr(_figure_src(path) if kind == "img" else path)
     cap_html = '<div class="rv-cap">{0}</div>'.format(_inline_md(caption)) if caption else ""
     fig_cls = "rv-fig" + frag_cls
 
@@ -1647,8 +1707,10 @@ def _build(pfile: str, dev: bool) -> str:
     block_depth = 0
 
     pres_text, pres_sha = _read_pres(pfile)
-    global _MARKDOWN
+    global _MARKDOWN, _PDIR
     _MARKDOWN = True
+    _PDIR = pdir
+    _run_build_hooks(pdir, pres_text)
 
     with io.StringIO(pres_text) as fid:
         for lineno, line in enumerate(fid, 1):
@@ -1886,6 +1948,7 @@ def _build(pfile: str, dev: bool) -> str:
         "event",
         "slideNumber",
         "markdown",
+        "build",
         "photo",
         "rounded_photos",
         "size",
@@ -2210,7 +2273,7 @@ def _build_svg(S, pdir, default_duration):
     if "svg" not in S["param"]:
         return ""
 
-    svg_path = os.path.join(pdir, S["param"]["svg"])
+    svg_path = os.path.join(pdir, _figure_src(S["param"]["svg"]))
     try:
         svg = Path(svg_path).read_text()
     except OSError:
