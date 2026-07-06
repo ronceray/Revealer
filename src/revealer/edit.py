@@ -400,6 +400,23 @@ def _op_insert_media(lines, op):
     return [Insert(before, [text], pad=pad)]
 
 
+def _op_wrap_span(lines, op):
+    """Wrap a column range of one line — the selection bubble's primitive.
+
+    Columns are 0-based, end-exclusive, validated against the current line
+    (the sha precondition guarantees the line is what the client saw).
+    """
+    line_no = int(op["line"])
+    line = _line(lines, line_no)
+    s, e = int(op["start_col"]), int(op["end_col"])
+    if not (0 <= s < e <= len(line)):
+        raise _err(422, "line_out_of_range", line=line_no)
+    before, after = str(op.get("before", "")), str(op.get("after", ""))
+    if "\n" in before or "\n" in after or not (before or after):
+        raise _err(422, "bad_value", value="before/after")
+    return [Replace(line_no, line[:s] + before + line[s:e] + after + line[e:])]
+
+
 def _op_insert_lines(lines, op):
     """Insert verbatim lines — the outline's add/duplicate primitive."""
     at = op["at"]
@@ -450,6 +467,7 @@ _OPS = {
     "delete_block": _op_delete_block,
     "replace_lines": _op_replace_lines,
     "insert_lines": _op_insert_lines,
+    "wrap_span": _op_wrap_span,
     "insert_media": _op_insert_media,
     "reorder_fragments": _op_reorder_fragments,
 }

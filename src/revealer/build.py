@@ -462,6 +462,117 @@ def _inline_md(text: str) -> str:
     return "".join(parts)
 
 
+# --- inline source map (P7): source columns -> rendered text ------------------
+#
+# `inline_segments(line)` mirrors the `_inline_md` pipeline as a tokenizer
+# and reports, per source-column range, what it renders to:
+#   kind "text"        visible characters (escapes resolved)
+#   kind "markup"      marker chars that render to tags (contribute no text)
+#   kind "math-opaque" $...$ spans (atomic; KaTeX replaces them client-side)
+#   kind "tag-opaque"  raw HTML tags (atomic)
+# The map is SELF-VALIDATING: if concatenating the rendered pieces does not
+# byte-match `_inline_md(line)`, the whole line is refused (None) — the
+# selection bubble then simply hides. A wrong map is impossible by
+# construction; only coverage can be lost.
+
+_MD_ESCAPES = {"\\*": "\x00\x1a", "\\`": "\x00\x1b", "\\[": "\x00\x1c"}
+_MD_UNESCAPE = {"\x00\x1a": "*", "\x00\x1b": "`", "\x00\x1c": "["}
+
+
+def _seg_text(raw: str) -> str:
+    for sent, ch in _MD_UNESCAPE.items():
+        raw = raw.replace(sent, ch)
+    return raw
+
+
+def _md_tokenize(seg: str, base: int, out: list) -> None:
+    """Tokenize a non-protected stretch; columns are absolute via *base*.
+
+    *seg* has escape pairs replaced by 2-char sentinels (length-preserving),
+    so marker regexes cannot match escaped characters.
+    """
+    pos = 0
+    while pos < len(seg):
+        matches = []
+        for name, regex in (("code", _MD_CODE_RE), ("span", _MD_SPAN_RE),
+                            ("link", _MD_LINK_RE), ("bold", _MD_BOLD_RE),
+                            ("ital", _MD_ITAL_RE)):
+            m = regex.search(seg, pos)
+            if m:
+                matches.append((m.start(), ("code", "span", "link", "bold",
+                                            "ital").index(name), name, m))
+        if not matches:
+            out.append([base + pos, base + len(seg), _seg_text(seg[pos:]), "text"])
+            return
+        matches.sort()
+        _st, _prec, name, m = matches[0]
+        if m.start() > pos:
+            out.append([base + pos, base + m.start(),
+                        _seg_text(seg[pos:m.start()]), "text"])
+        a, b = m.start(), m.end()
+        if name == "code":
+            out.append([base + a, base + a + 1, "<code>", "markup"])
+            _md_tokenize(seg[a + 1:b - 1], base + a + 1, out)
+            out.append([base + b - 1, base + b, "</code>", "markup"])
+        elif name == "span":
+            rendered = _md_span_sub(m)
+            if rendered == m.group(0):
+                # unrecognized role: stays literal, inner markers still apply
+                out.append([base + a, base + a + 1, "[", "text"])
+                _md_tokenize(m.group(1), base + a + 1, out)
+                tail = a + 1 + len(m.group(1))
+                out.append([base + tail, base + b,
+                            _seg_text(seg[tail:b]), "text"])
+            else:
+                open_tag = rendered[:rendered.index(">") + 1]
+                out.append([base + a, base + a + 1, open_tag, "markup"])
+                _md_tokenize(m.group(1), base + a + 1, out)
+                out.append([base + a + 1 + len(m.group(1)), base + b,
+                            "</span>", "markup"])
+        elif name == "link":
+            open_tag = '<a href="{0}" target="_blank">'.format(m.group(2))
+            out.append([base + a, base + a + 1, open_tag, "markup"])
+            _md_tokenize(m.group(1), base + a + 1, out)
+            out.append([base + a + 1 + len(m.group(1)), base + b, "</a>", "markup"])
+        elif name == "bold":
+            out.append([base + a, base + a + 2, "<b>", "markup"])
+            _md_tokenize(m.group(1), base + a + 2, out)
+            out.append([base + b - 2, base + b, "</b>", "markup"])
+        else:  # ital
+            out.append([base + a, base + a + 1, "<i>", "markup"])
+            _md_tokenize(m.group(1), base + a + 1, out)
+            out.append([base + b - 1, base + b, "</i>", "markup"])
+        pos = b
+
+
+def inline_segments(text: str):
+    """The per-line source map for rendered inline text (or None if refused)."""
+    if not text:
+        return []
+    if not _MARKDOWN or ("*" not in text and "`" not in text and "[" not in text
+                         and "$" not in text and "<" not in text):
+        return [[0, len(text), text, "text"]]
+    segs: list = []
+    last = 0
+    for m in _MD_PROTECT_RE.finditer(text):
+        if m.start() > last:
+            stretch = text[last:m.start()]
+            for esc, sent in _MD_ESCAPES.items():
+                stretch = stretch.replace(esc, sent)
+            _md_tokenize(stretch, last, segs)
+        kind = "math-opaque" if m.group().startswith("$") else "tag-opaque"
+        segs.append([m.start(), m.end(), m.group(), kind])
+        last = m.end()
+    if last < len(text):
+        stretch = text[last:]
+        for esc, sent in _MD_ESCAPES.items():
+            stretch = stretch.replace(esc, sent)
+        _md_tokenize(stretch, last, segs)
+    if "".join(s2[2] for s2 in segs) != _inline_md(text):
+        return None  # tokenizer/renderer disagreement: refuse, never lie
+    return segs
+
+
 _SIZE_ROLES = {"title": 1.6, "lede": 1.25, "body": 1.0, "sm": 0.8, "fine": 0.65}
 
 
