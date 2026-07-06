@@ -51,6 +51,7 @@ DEV_PREFIX = "/__rv__"
 EDITOR_JS: tuple[str, ...] = (
     "editor/core.js",
     "editor/net.js",
+    "editor/chrome.js",
     "editor.js",
 )
 _DEV_ASSETS = frozenset(EDITOR_JS) | {"editor.css"}
