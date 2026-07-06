@@ -1890,7 +1890,7 @@ def _build(pfile: str, dev: bool) -> str:
 
     # === Output ==============================================================
 
-    with open(os.path.join(rdir, "index.html"), "r") as tfile:
+    with open(os.path.join(rdir, "index.html"), "r", encoding="utf-8") as tfile:
         out = tfile.read()
 
     # --- Path fixing
@@ -1915,11 +1915,11 @@ def _build(pfile: str, dev: bool) -> str:
     def _to_js_literal(val, key=None):
         if isinstance(val, bool):
             return "true" if val else "false"
+        s = str(val).strip()
         try:
             # numeric?
             if isinstance(val, (int, float)):
                 return str(val)
-            s = str(val).strip()
             ls = s.lower()
             if key and key.lower().endswith("transition") and ls == "false":
                 return "'none'"
@@ -2262,7 +2262,7 @@ def _build(pfile: str, dev: bool) -> str:
         ofile = os.path.join(pdir, stem + ".dev.html")
     else:
         ofile = os.path.join(pdir, stem + ".html")
-    with open(ofile, "w") as fid:
+    with open(ofile, "w", encoding="utf-8") as fid:
         fid.write(out)
 
     return ofile
@@ -2276,7 +2276,7 @@ def _build_svg(S, pdir, default_duration):
 
     svg_path = os.path.join(pdir, _figure_src(S["param"]["svg"]))
     try:
-        svg = Path(svg_path).read_text()
+        svg = Path(svg_path).read_text(encoding="utf-8")
     except OSError:
         return '<div class="svg-error">SVG not found: {:s}</div>'.format(S["param"]["svg"])
 

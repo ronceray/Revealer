@@ -231,7 +231,7 @@ def generate_index_html(reveal_dir: str, extensions: list[str]) -> None:
 </html>
 """.format(css=css_html, scripts=scripts_html, plugins=plugins_html, deps=deps_html)
 
-    Path(reveal_dir, "index.html").write_text(html)
+    Path(reveal_dir, "index.html").write_text(html, encoding="utf-8")
 
 
 # --- Revealer asset injection ------------------------------------------------

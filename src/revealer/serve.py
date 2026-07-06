@@ -30,6 +30,7 @@ import re
 import secrets
 import shutil
 import subprocess
+import tempfile
 import threading
 import time
 import traceback
@@ -49,8 +50,11 @@ ASSET_SCAN_INTERVAL_S = 1.0
 # Media extensions considered "asset only" (reload without rebuild).
 _MEDIA_EXT = {".png", ".jpg", ".jpeg", ".gif", ".webp", ".svg", ".mp4", ".webm",
               ".ogg", ".ogv", ".mov", ".mp3", ".wav", ".pdf"}
-# Extensions whose change requires a rebuild (referenced at build time).
-_REBUILD_EXT = {".bib", ".svg"}
+# Extensions whose change requires a rebuild (referenced/converted at build
+# time): .pdf figures reconvert through Media/.rv-cache, .svg may be inlined.
+_REBUILD_EXT = {".bib", ".svg", ".pdf"}
+# Directories never scanned by the asset watcher.
+_SKIP_DIRS = {"reveal.js", ".git", ".rv-history", ".rv-cache", "__pycache__"}
 
 
 @dataclass
@@ -68,6 +72,7 @@ class DevSession:
     # undo/redo journals: full before-images (sha_before, text_before, sha_after)
     journal: list[tuple[str, str, str]] = field(default_factory=list)
     redo: list[tuple[str, str, str]] = field(default_factory=list)
+    previews: set = field(default_factory=set)  # generated .rv-preview-* artifacts
 
 
 def _sha_bytes(data: bytes) -> str:
@@ -124,7 +129,7 @@ def _watch(sess: DevSession, stop: threading.Event, log=print) -> None:
         rebuild = reload_ = False
         first = not asset_state
         for root, dirs, files in os.walk(sess.pdir):
-            dirs[:] = [d for d in dirs if d not in ("reveal.js", ".git")]
+            dirs[:] = [d for d in dirs if d not in _SKIP_DIRS]
             for name in files:
                 ext = os.path.splitext(name)[1].lower()
                 if ext not in _MEDIA_EXT and ext not in _REBUILD_EXT:
@@ -248,18 +253,33 @@ def _history_show(pdir: Path, pres: Path, commit: str) -> str | None:
 
 
 def _open_in_editor(pres: Path, line: int, log=print) -> bool:
-    """Open the .pres at a line in the user's editor (best effort)."""
+    """Open the .pres at a line in the user's editor (best effort).
+
+    ``$REVEALER_EDITOR`` may be a command line with ``{file}`` / ``{line}``
+    placeholders (e.g. ``"emacsclient -n +{line} {file}"``); without
+    placeholders, ``<file>:<line>`` is appended (VS Code-style ``-g`` syntax
+    is used automatically for ``code``).
+    """
+    import shlex
+
     line = int(line)
     candidates: list[list[str]] = []
     env_editor = os.environ.get("REVEALER_EDITOR")
     if env_editor:
-        candidates.append([env_editor, "-g", "{0}:{1}".format(pres, line)])
+        parts = shlex.split(env_editor)
+        if any("{file}" in p or "{line}" in p for p in parts):
+            candidates.append([
+                p.replace("{file}", str(pres)).replace("{line}", str(line))
+                for p in parts
+            ])
+        else:
+            candidates.append(parts + ["{0}:{1}".format(pres, line)])
     if shutil.which("code"):
         candidates.append(["code", "-g", "{0}:{1}".format(pres, line)])
     for var in ("VISUAL", "EDITOR"):
         ed = os.environ.get(var)
         if ed:
-            candidates.append([ed, "+{0}".format(line), str(pres)])
+            candidates.append(shlex.split(ed) + ["+{0}".format(line), str(pres)])
     for argv in candidates:
         try:
             subprocess.Popen(argv, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
@@ -288,6 +308,12 @@ class _Handler(http.server.SimpleHTTPRequestHandler):
         super().__init__(*args, directory=str(sess.pdir), **kwargs)
 
     # --- helpers ----------------------------------------------------------
+
+    _HOST_RE = re.compile(r"^(127\.0\.0\.1|localhost)(:\d+)?$")
+
+    def _check_host(self) -> bool:
+        host = self.headers.get("Host", "")
+        return bool(self._HOST_RE.match(host))
 
     def _check_token(self) -> bool:
         origin = self.headers.get("Origin")
@@ -325,7 +351,15 @@ class _Handler(http.server.SimpleHTTPRequestHandler):
 
     # --- routes -----------------------------------------------------------
 
+    def do_HEAD(self):  # noqa: N802
+        if not self._check_host():
+            self.send_error(403)
+            return
+        super().do_HEAD()
+
     def do_GET(self):  # noqa: N802
+        if not self._check_host():
+            return self._send_json(403, {"error": "bad host"})
         path = self._path_only()
 
         if path == DEV_PREFIX + "/events":
@@ -364,6 +398,8 @@ class _Handler(http.server.SimpleHTTPRequestHandler):
         return self._serve_static()
 
     def do_POST(self):  # noqa: N802
+        if not self._check_host():
+            return self._send_json(403, {"error": "bad host"})
         if not self._check_token():
             return self._send_json(403, {"error": "forbidden"})
         path = self._path_only()
@@ -384,6 +420,8 @@ class _Handler(http.server.SimpleHTTPRequestHandler):
         return self._send_json(404, {"error": "not found"})
 
     def do_PUT(self):  # noqa: N802
+        if not self._check_host():
+            return self._send_json(403, {"error": "bad host"})
         if not self._check_token():
             return self._send_json(403, {"error": "forbidden"})
         if self._path_only() == DEV_PREFIX + "/upload":
@@ -410,7 +448,7 @@ class _Handler(http.server.SimpleHTTPRequestHandler):
         if not isinstance(edits, list) or not edits:
             return self._send_json(400, {"error": "no edits"})
         with sess.lock:
-            before_text = sess.pres.read_text()
+            before_text = sess.pres.read_text(encoding="utf-8")
             try:
                 result = edit_mod.apply_edits(sess.pres, sha, edits)
             except edit_mod.EditError as exc:
@@ -423,7 +461,7 @@ class _Handler(http.server.SimpleHTTPRequestHandler):
             if sess.build_error:
                 # The edit produced an unbuildable deck — engine bug or bad op.
                 # Roll it back so the user is never stuck on a broken file.
-                sess.pres.write_text(before_text)
+                sess.pres.write_text(before_text, encoding="utf-8")
                 sess.journal.pop()
                 _rebuild(sess, log=self._log)
                 return self._send_json(422, {
@@ -458,7 +496,8 @@ class _Handler(http.server.SimpleHTTPRequestHandler):
         except ValueError:
             req = {}
         msg = str(req.get("message") or "manual snapshot")[:200]
-        ok = _history_commit(self.sess.pdir, self.sess.pres, msg, auto=False)
+        with self.sess.lock:
+            ok = _history_commit(self.sess.pdir, self.sess.pres, msg, auto=False)
         return self._send_json(200, {"ok": True, "committed": ok})
 
     def _history_restore(self) -> None:
@@ -471,13 +510,13 @@ class _Handler(http.server.SimpleHTTPRequestHandler):
         if text is None:
             return self._send_json(422, {"error": "unknown_version"})
         with sess.lock:
-            before = sess.pres.read_text()
+            before = sess.pres.read_text(encoding="utf-8")
             if before == text:
                 return self._send_json(200, {"ok": True, "unchanged": True})
             # the current state is snapshotted first, so a restore never loses work
             _history_commit(sess.pdir, sess.pres, "before restore", auto=True)
             before_sha = _sha_bytes(before.encode("utf-8"))
-            sess.pres.write_text(text)
+            sess.pres.write_text(text, encoding="utf-8")
             new_sha = _sha_bytes(text.encode("utf-8"))
             sess.journal.append((new_sha, before, before_sha))
             del sess.journal[:-200]
@@ -496,10 +535,15 @@ class _Handler(http.server.SimpleHTTPRequestHandler):
         text = _history_show(sess.pdir, sess.pres, str(req.get("hash", "")))
         if text is None:
             return self._send_json(422, {"error": "unknown_version"})
-        tmp = sess.pdir / ".rv-preview.pres"
+        fd, tmp_name = tempfile.mkstemp(prefix=".rv-preview-", suffix=".pres",
+                                        dir=str(sess.pdir))
+        tmp = Path(tmp_name)
         try:
-            tmp.write_text(text)
-            out = build_mod.build(str(tmp))
+            with os.fdopen(fd, "w", encoding="utf-8") as f:
+                f.write(text)
+            with sess.lock:
+                out = build_mod.build(str(tmp))
+            sess.previews.add(out)
         except Exception as exc:
             return self._send_json(500, {"error": str(exc)[:300]})
         finally:
@@ -511,14 +555,26 @@ class _Handler(http.server.SimpleHTTPRequestHandler):
                                      "url": "/" + Path(out).name})
 
     def _export(self) -> None:
-        """Export the deck: kind=html (prod build) or kind=pdf."""
+        """Export the deck: kind=html (prod build) or kind=pdf.
+
+        The build happens under the session lock; the (slow) Chrome render
+        loop for PDFs runs outside it so editing stays responsive, reporting
+        per-slide progress over SSE.
+        """
+        sess = self.sess
         kind = self._query().get("kind", "html")
         try:
-            if kind == "pdf":
-                from . import pdf as pdf_mod
-                out = pdf_mod.export_pdf(str(self.sess.pres), log=lambda *a: None)
-            else:
-                out = build_mod.build(str(self.sess.pres))
+            with sess.lock:
+                html = build_mod.build(str(sess.pres))
+            if kind != "pdf":
+                return self._send_json(200, {"ok": True, "path": html})
+            from . import pdf as pdf_mod
+
+            def progress(done, total):
+                _broadcast(sess, {"type": "export-progress",
+                                  "done": done, "total": total})
+
+            out = pdf_mod.export_pdf(html, log=lambda *a: None, progress=progress)
         except Exception as exc:
             return self._send_json(500, {"error": str(exc)})
         return self._send_json(200, {"ok": True, "path": out})
@@ -540,7 +596,7 @@ class _Handler(http.server.SimpleHTTPRequestHandler):
                 })
             stack.pop()
             current_text = data.decode("utf-8")
-            sess.pres.write_text(restore_text)
+            sess.pres.write_text(restore_text, encoding="utf-8")
             other.append((restore_sha, current_text, current_sha))
             _rebuild(sess, log=self._log)
             return self._send_json(200, {"ok": True, "sha256": sess.sha})
@@ -550,6 +606,15 @@ class _Handler(http.server.SimpleHTTPRequestHandler):
         "Movies": {".mp4", ".webm", ".ogv", ".mov"},
         "Audio": {".mp3", ".wav", ".ogg"},
     }
+
+    _IMAGE_MAGIC = {
+        ".png": (b"\x89PNG",),
+        ".jpg": (b"\xff\xd8\xff",),
+        ".jpeg": (b"\xff\xd8\xff",),
+        ".gif": (b"GIF8",),
+        ".webp": (b"RIFF",),
+    }
+    _IMAGE_CAP = 50 * 1024 * 1024
 
     def _upload(self) -> None:
         sess = self.sess
@@ -562,20 +627,33 @@ class _Handler(http.server.SimpleHTTPRequestHandler):
             body = self._read_body()
         except ValueError:
             return self._send_json(413, {"error": "too large"})
+        magic = self._IMAGE_MAGIC.get(ext)
+        if magic is not None:
+            if len(body) > self._IMAGE_CAP:
+                return self._send_json(413, {"error": "too large"})
+            if not any(body.startswith(m) for m in magic):
+                return self._send_json(400, {"error": "content does not match extension"})
         media = sess.pdir / "Media"
         dest_dir = media
         for sub, exts in self._UPLOAD_ROUTES.items():
-            if ext in exts and (media / sub).is_dir():
+            if ext in exts:
+                # Subdirectory routing now always applies (created on demand) —
+                # a documented behavior change from the exists-only routing.
                 dest_dir = media / sub
                 break
-        dest_dir.mkdir(parents=True, exist_ok=True)
-        stem, suffix = os.path.splitext(name)
-        dest = dest_dir / name
-        n = 1
-        while dest.exists():
-            dest = dest_dir / "{0}-{1}{2}".format(stem, n, suffix)
-            n += 1
-        dest.write_bytes(body)
+        with sess.lock:
+            dest_dir.mkdir(parents=True, exist_ok=True)
+            stem, suffix = os.path.splitext(name)
+            dest = dest_dir / name
+            n = 1
+            while True:
+                try:
+                    with open(dest, "xb") as f:  # O_EXCL: no TOCTOU
+                        f.write(body)
+                    break
+                except FileExistsError:
+                    dest = dest_dir / "{0}-{1}{2}".format(stem, n, suffix)
+                    n += 1
         rel = dest.relative_to(sess.pdir).as_posix()
         return self._send_json(200, {"ok": True, "path": rel})
 
@@ -585,7 +663,7 @@ class _Handler(http.server.SimpleHTTPRequestHandler):
         sess = self.sess
         if sess.html_path is None or not sess.html_path.is_file():
             return self._send_html(_BUILDING_PAGE, 200)
-        html = sess.html_path.read_text()
+        html = sess.html_path.read_text(encoding="utf-8")
         self._send_html(_inject_dev(html, sess))
 
     def _dev_asset(self, name: str) -> None:
@@ -677,8 +755,11 @@ class _Handler(http.server.SimpleHTTPRequestHandler):
         pass
 
 
-def serve(pres: Path, port: int = 8000, open_browser: bool = True, log=print) -> None:
-    """Entry point: build once, then serve with watch + live reload."""
+def create_server(pres: Path, port: int = 8000, watch: bool = True, log=print):
+    """Build once and construct the HTTP server (test seam; does not block).
+
+    Returns ``(httpd, sess, stop_event)``. ``port=0`` binds an ephemeral port.
+    """
     pres = Path(pres).resolve()
     sess = DevSession(pres=pres, pdir=pres.parent,
                       token=secrets.token_urlsafe(24))
@@ -687,10 +768,10 @@ def serve(pres: Path, port: int = 8000, open_browser: bool = True, log=print) ->
 
     handler = partial(_Handler, sess=sess, log=log)
     httpd = None
-    for p in range(port, port + 21):
+    ports = [0] if port == 0 else range(port, port + 21)
+    for p in ports:
         try:
             httpd = http.server.ThreadingHTTPServer(("127.0.0.1", p), handler)
-            port = p
             break
         except OSError:
             continue
@@ -699,8 +780,16 @@ def serve(pres: Path, port: int = 8000, open_browser: bool = True, log=print) ->
     httpd.daemon_threads = True
 
     stop = threading.Event()
-    watcher = threading.Thread(target=_watch, args=(sess, stop, log), daemon=True)
-    watcher.start()
+    if watch:
+        watcher = threading.Thread(target=_watch, args=(sess, stop, log), daemon=True)
+        watcher.start()
+    return httpd, sess, stop
+
+
+def serve(pres: Path, port: int = 8000, open_browser: bool = True, log=print) -> None:
+    """Entry point: build once, then serve with watch + live reload."""
+    httpd, sess, stop = create_server(pres, port=port, watch=True, log=log)
+    port = httpd.server_address[1]
 
     url = "http://127.0.0.1:{0}/".format(port)
     log("serving {0}".format(pres.name))
@@ -716,9 +805,9 @@ def serve(pres: Path, port: int = 8000, open_browser: bool = True, log=print) ->
     finally:
         stop.set()
         httpd.server_close()
-        for stray in (sess.pdir / ".rv-preview.html", sess.pdir / ".rv-preview.pres"):
+        for stray in list(sess.previews) + [str(p) for p in sess.pdir.glob(".rv-preview*")]:
             try:
-                stray.unlink()
+                Path(stray).unlink()
             except OSError:
                 pass
         if sess.html_path is not None and sess.html_path.is_file():

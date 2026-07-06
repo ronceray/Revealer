@@ -36,16 +36,23 @@ def _find_chrome() -> str | None:
     return None
 
 
+_INIT_RE = re.compile(r"Reveal\.initialize\(\{")
+
+
 def _make_variant(html_path: Path) -> Path:
     """Write a sibling HTML with fragment gating disabled (all content shown)."""
-    h = html_path.read_text()
-    h = h.replace("center: false,", "center: false, fragments: false,")
+    h = html_path.read_text(encoding="utf-8")
+    if not _INIT_RE.search(h):
+        raise RuntimeError(
+            "cannot locate Reveal.initialize() in the built HTML — "
+            "the PDF variant injection anchor is gone")
+    h = _INIT_RE.sub("Reveal.initialize({ fragments: false,", h, count=1)
     h = h.replace(
         "</head>",
         "<style>.fragment{opacity:1!important;visibility:visible!important;}</style></head>",
     )
-    variant = html_path.with_name("._pdf_variant.html")
-    variant.write_text(h)
+    variant = html_path.with_name("._pdf_variant-{0}.html".format(os.getpid()))
+    variant.write_text(h, encoding="utf-8")
     return variant
 
 
@@ -80,7 +87,8 @@ def _routes(html: str) -> list[tuple[int, int]]:
     return routes or [(0, 0)]
 
 
-def export_pdf(pres_or_html: str, out: str | None = None, width: int = 1920, height: int = 1080, log=print) -> str:
+def export_pdf(pres_or_html: str, out: str | None = None, width: int = 1920,
+               height: int = 1080, log=print, progress=None) -> str:
     """Export a presentation to PDF. Accepts a ``.pres`` (built first) or ``.html``."""
     chrome = _find_chrome()
     if chrome is None:
@@ -104,6 +112,8 @@ def export_pdf(pres_or_html: str, out: str | None = None, width: int = 1920, hei
     try:
         with tempfile.TemporaryDirectory() as td:
             for i, (hh, vv) in enumerate(routes):
+                if progress is not None:
+                    progress(i, len(routes))
                 png = os.path.join(td, "slide_{0:03d}.png".format(i))
                 url = "file://{0}#/{1}/{2}".format(variant, hh, vv)
                 subprocess.run(

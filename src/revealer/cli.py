@@ -115,6 +115,18 @@ def _resolve_pres_dir(target: str | None) -> Path:
     return Path(choice)
 
 
+def _resolve_target(target: str | None, suffixes: tuple = (".pres",)) -> Path:
+    """Resolve a CLI target (a file path, a folder, or None) to the file."""
+    if target and Path(target).suffix in suffixes:
+        return Path(target).expanduser().resolve()
+    pdir = _resolve_pres_dir(target)
+    pres = _find_pres(pdir)
+    if pres is None:
+        console.print("[red]No .pres file found in {0}.[/red]".format(pdir))
+        raise typer.Exit(1)
+    return pres
+
+
 def _open_in_browser(html: Path) -> None:
     try:
         webbrowser.open(html.resolve().as_uri())
@@ -159,9 +171,9 @@ def _action_new(name: str, here: bool) -> None:
 
     extensions = _choose_extensions(assets.DEFAULT_EXTENSIONS)
 
-    template = (assets.DATA / "pres" / "template.pres").read_text()
+    template = (assets.DATA / "pres" / "template.pres").read_text(encoding="utf-8")
     pres = pdir / "{0}.pres".format(name)
-    pres.write_text(template.format(title=name))
+    pres.write_text(template.format(title=name, encoding="utf-8"))
 
     console.print("Setting up reveal.js in [bold]{0}[/bold]...".format(pdir))
     assets.setup_revealjs(str(pdir), extensions, log=console.print)
@@ -377,9 +389,7 @@ def new(
 def select():
     """Interactively select an existing presentation and build it."""
 
-    pdir = _resolve_pres_dir(None)
-    pres = _find_pres(pdir)
-    _action_build(pres)
+    _action_build(_resolve_target(None))
 
 
 @app.command(name="open")
@@ -413,14 +423,7 @@ def update(
 def build(target: str = typer.Argument(None, help="Presentation folder or .pres file.")):
     """Build the HTML presentation from a .pres file."""
 
-    if target and Path(target).suffix == ".pres":
-        pres = Path(target).expanduser().resolve()
-    else:
-        pdir = _resolve_pres_dir(target)
-        pres = _find_pres(pdir)
-        if pres is None:
-            console.print("[red]No .pres file found.[/red]")
-            raise typer.Exit(1)
+    pres = _resolve_target(target)
     _action_build(pres)
 
 
@@ -432,14 +435,7 @@ def serve(
 ):
     """Serve a presentation with rebuild-on-save and live browser reload."""
 
-    if target and Path(target).suffix == ".pres":
-        pres = Path(target).expanduser().resolve()
-    else:
-        pdir = _resolve_pres_dir(target)
-        pres = _find_pres(pdir)
-        if pres is None:
-            console.print("[red]No .pres file found.[/red]")
-            raise typer.Exit(1)
+    pres = _resolve_target(target)
     config.add_recent(pres.parent)
     from . import serve as serve_mod
     serve_mod.serve(pres, port=port, open_browser=not no_open, log=console.print)
@@ -454,15 +450,7 @@ def export(
 
     from . import pdf as pdf_module
 
-    if target and Path(target).suffix in (".pres", ".html"):
-        src = Path(target).expanduser().resolve()
-    else:
-        pdir = _resolve_pres_dir(target)
-        pres = _find_pres(pdir)
-        if pres is None:
-            console.print("[red]No .pres file found.[/red]")
-            raise typer.Exit(1)
-        src = pres
+    src = _resolve_target(target, suffixes=(".pres", ".html"))
     try:
         out_path = pdf_module.export_pdf(str(src), out, log=console.print)
     except RuntimeError as exc:
