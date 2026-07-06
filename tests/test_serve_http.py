@@ -168,3 +168,13 @@ def test_concurrency_hammer(server):
     text = (pdir / "srv.pres").read_text()
     assert text.count("> col ") == 1 and text.count("> end: row") == 1
     assert _req(port, "GET", "/")[0] == 200
+
+
+def test_schema_endpoint(server):
+    port, sess, pdir = server
+    assert _req(port, "GET", "/__rv__/schema")[0] == 403
+    status, data = _req(port, "GET", "/__rv__/schema?token=" + sess.token)
+    assert status == 200
+    sch = json.loads(data)
+    assert "constructs" in sch and "classMap" in sch
+    assert sch["constructs"]["pin"]["movable"] is True

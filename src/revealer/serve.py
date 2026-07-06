@@ -41,6 +41,7 @@ from pathlib import Path
 
 from . import build as build_mod
 from . import edit as edit_mod
+from . import grammar as grammar_mod
 
 DEV_PREFIX = "/__rv__"
 SSE_KEEPALIVE_S = 15
@@ -379,6 +380,10 @@ class _Handler(http.server.SimpleHTTPRequestHandler):
             if not self._check_token():
                 return self._send_json(403, {"error": "forbidden"})
             return self._send_json(200, {"entries": _history_list(self.sess.pdir)})
+        if path == DEV_PREFIX + "/schema":
+            if not self._check_token():
+                return self._send_json(403, {"error": "forbidden"})
+            return self._send_json(200, grammar_mod.schema())
         if path == DEV_PREFIX + "/src":
             if not self._check_token():
                 return self._send_json(403, {"error": "forbidden"})

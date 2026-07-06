@@ -27,43 +27,48 @@ import tempfile
 from dataclasses import dataclass
 from pathlib import Path
 
-# --- construct grammar (kept in sync with the parsers in build.py) -----------
+# --- construct grammar: derived from the registry (grammar.py) ----------------
+from . import grammar as _grammar  # noqa: E402
 
-RE_COL_LINE = re.compile(r"^(?P<head>\s*>\s*col\b)(?P<flags>.*)$")
-RE_ROW_LINE = re.compile(r"^(?P<head>\s*>\s*row\b)(?P<flags>.*)$")
-RE_STACK_LINE = re.compile(r"^(?P<head>\s*>\s*stack\b)(?P<flags>.*)$")
-RE_PIN_LINE = re.compile(r"^(?P<head>\s*>\s*pin\s*:)(?P<flags>.*)$")
-RE_MEDIA_LINE = re.compile(r"^(?P<head>\s*!{1,2}\s+)(?P<rest>.*)$")
-RE_SEP_LINE = re.compile(r"^(?P<head>\s*\|{1,2})(?P<width>[^|]*)$")
-RE_FRAG_HEAD = re.compile(r"^(?P<head>\s*>\s*frag\b)(?P<flags>.*)$")
+
+def _anchor(name: str) -> re.Pattern:
+    return re.compile(_grammar.anchor_pattern(name))
+
+
+RE_COL_LINE = _anchor("col")
+RE_ROW_LINE = _anchor("row")
+RE_STACK_LINE = _anchor("stack")
+RE_PIN_LINE = _anchor("pin")
+RE_MEDIA_LINE = _anchor("media")
+RE_SEP_LINE = _anchor("sep")
+RE_FRAG_HEAD = _anchor("frag")
 RE_GAP_OPT = re.compile(r"^\s*>\s*gap\s*:")
-RE_GRID_OPEN = re.compile(r"^\s*>\s*grid\(\s*\d+\s*,\s*\d+\s*\)")
-RE_CARD_LINE = re.compile(r"^(?P<head>\s*>\s*card\b)(?P<flags>[^:]*)(?P<bg>:.*)?$")
-RE_LAYER_LINE = re.compile(r"^(?P<head>\s*>\s*layer\b)(?P<flags>.*)$")
-RE_BOX_LINE = re.compile(r"^(?P<head>\s*>\s*(?:info|warn|good)\b)(?P<flags>.*)$")
-RE_EQ_LINE = re.compile(r"^(?P<head>\s*>\s*eq\b)(?P<flags>.*)$")
-RE_END = re.compile(r"^\s*>\s*end\s*:\s*\w+\s*$")
+RE_GRID_OPEN = re.compile(r"^\s*" + _grammar.REGISTRY["grid"].opener)
+RE_CARD_LINE = _anchor("card")
+RE_LAYER_LINE = _anchor("layer")
+RE_BOX_LINE = _anchor("box")
+RE_EQ_LINE = _anchor("eq")
+RE_END = re.compile(_grammar.end_pattern().replace("^>", r"^\s*>"))
 
-RE_SIZE_TOKEN = re.compile(r"^(?:\d+\s*/\s*\d+|\d+(?:\.\d+)?(?:px|%|em|rem|vh|vw)|\d+)$")
-RE_H_TOKEN = re.compile(r"^h=\d+(?:px)?$", re.IGNORECASE)
-RE_MEDIA_SIZE_TOKEN = re.compile(r"^([hw])=([0-9.]+(?:px|em|rem|vh|vw|%)?)$", re.IGNORECASE)
-RE_FRAG_TOKEN = re.compile(r"^\+(\d+)?$")
+RE_SIZE_TOKEN = re.compile("^" + _grammar.SIZE_TOKEN + "$")
+# NOTE: row/stack heights are case-sensitive to match the builder (a
+# deliberate divergence fix — the old edit-side pattern was IGNORECASE).
+RE_H_TOKEN = _grammar.token_pattern("row", "height")
+RE_MEDIA_SIZE_TOKEN = _grammar.token_pattern("media", "size")
+RE_FRAG_TOKEN = re.compile("^" + _grammar.FRAG_TOKEN + "$")
 
 # Opener regex per movable/deletable construct.
 CONSTRUCT_OPEN = {
-    "row": RE_ROW_LINE,
-    "stack": RE_STACK_LINE,
-    "pin": RE_PIN_LINE,
-    "grid": RE_GRID_OPEN,
-    "table": re.compile(r"^\s*>\s*table\(\s*\d+\s*,\s*\d+\s*\)"),
-    "box": re.compile(r"^\s*>\s*(?:info|warn|good)\b"),
-    "eq": RE_EQ_LINE,
-    "frag": RE_FRAG_HEAD,
-    "media": RE_MEDIA_LINE,
-    "paragraph": None,  # any non-empty span
+    name: re.compile(r"^\s*" + spec.opener)
+    for name, spec in _grammar.REGISTRY.items()
+    if spec.movable
 }
+CONSTRUCT_OPEN["paragraph"] = None  # any non-empty span
 # Constructs whose span ends on a `> end:` line.
-SPAN_CONSTRUCTS = {"row", "stack", "pin", "grid", "table", "box", "eq", "frag"}
+SPAN_CONSTRUCTS = {
+    name for name, spec in _grammar.REGISTRY.items()
+    if spec.movable and spec.end_token is not None
+}
 # Container kinds that use the paragraph model (need blank-line padding).
 PARAGRAPH_CONTAINERS = {"column", "slide"}
 

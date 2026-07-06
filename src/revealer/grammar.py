@@ -210,6 +210,7 @@ REGISTRY: dict[str, ConstructSpec] = {s.name: s for s in [
     _c(ConstructSpec(
         "card", "card",
         opener=r">\s*card\b",
+        opener_parse=r"(?P<head>\s*>\s*card\b)(?P<flags>[^:]*)(?P<bg>:.*)?$",
         terminator=Terminator.SUB_ITEM, frag_target="card",
         head=(_FRAG,
               TokenSpec("keywords", r".+", "keyword", keywords=("plain",))),
