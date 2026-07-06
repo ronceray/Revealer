@@ -155,6 +155,27 @@ html.rv-edit .reveal .slides section * { cursor: crosshair; }
 }
 #rv-editor-layer .rv-ed-grip.rv-ed-col { background: #ffd166; }
 
+/* Touch: a grip / dragzone / divider drag must never scroll or zoom the page
+   (touch-action:none routes the gesture to our PointerEvent state machine). */
+#rv-editor-layer .rv-ed-grip,
+#rv-editor-layer .rv-ed-grip.rv-ed-move,
+#rv-editor-layer .rv-ed-grip.rv-ed-col,
+#rv-editor-layer .rv-ed-dragzone,
+#rv-ed-divider { touch-action: none; }
+
+/* Coarse pointers (finger / stylus): larger grips and chrome hit targets.
+   The fine-pointer look above is untouched — this only widens on touch. */
+@media (pointer: coarse) {
+  #rv-editor-layer .rv-ed-grip { width: 20px; height: 20px; }
+  #rv-ed-toolbar { padding: 8px 12px; gap: 2px; }
+  #rv-ed-toolbar button { padding: 8px 14px; font-size: 15px; }
+  #rv-ed-panel .rv-pn-fld input,
+  #rv-ed-panel .rv-pn-actions button,
+  #rv-ed-panel .rv-pn-apply { min-height: 36px; }
+  #rv-ed-panel .rv-pn-fld input { padding: 7px 9px; }
+  #rv-ed-divider { width: 16px; right: calc(var(--rv-pw) - 8px); }
+}
+
 #rv-ed-toast {
   position: fixed;
   left: 50%;

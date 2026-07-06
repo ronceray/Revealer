@@ -140,6 +140,72 @@
     syncChrome();
   }
 
+  /* --- touch: long-press to select, double-tap to reach the panel ----------
+     A tap already selects via the synthesized click; touch adds two gestures.
+     LONG-PRESS (~500 ms stationary) selects under the finger — the same as a
+     click but reachable without a hover. DOUBLE-TAP on the already-selected
+     element scrolls the side panel into view and focuses its first control.
+     Everything here is guarded on pointerType==='touch', so mouse/pen keep
+     the exact click/hover behavior above. */
+  var LONG_PRESS_MS = 500;
+  var TAP_MOVE = 10;            // px of drift that turns a press into a scroll
+  var DBL_TAP_MS = 320;
+  var touch = { timer: null, x: 0, y: 0, el: null, moved: false,
+                lastT: 0, lastEl: null };
+
+  function clearLongPress() {
+    if (touch.timer) { clearTimeout(touch.timer); touch.timer = null; }
+  }
+
+  function focusPanel() {
+    if (F.rvPanelSync) F.rvPanelSync();
+    var p = document.getElementById('rv-ed-panel');
+    if (!p) return;
+    try { p.scrollIntoView({ block: 'nearest' }); } catch (e) {}
+    var ctl = p.querySelector('input, textarea, select, button');
+    if (ctl && ctl.focus) { try { ctl.focus(); } catch (e) {} }
+  }
+
+  function onTouchDown(ev) {
+    if (ev.pointerType !== 'touch') return;
+    clearLongPress();
+    var el = pickable(ev.target);
+    touch.el = el;
+    touch.x = ev.clientX; touch.y = ev.clientY; touch.moved = false;
+    if (!el) return;
+    touch.timer = setTimeout(function () {
+      touch.timer = null;
+      touch.moved = true;          // the trailing pointerup is not a tap
+      if (el !== S.sel) F.flushNudge();
+      RV.set('sel', el);
+      syncChrome();
+    }, LONG_PRESS_MS);
+  }
+
+  function onTouchMove(ev) {
+    if (ev.pointerType !== 'touch' || !touch.el) return;
+    if (Math.abs(ev.clientX - touch.x) > TAP_MOVE ||
+        Math.abs(ev.clientY - touch.y) > TAP_MOVE) {
+      touch.moved = true;
+      clearLongPress();
+    }
+  }
+
+  function onTouchUp(ev) {
+    if (ev.pointerType !== 'touch') return;
+    clearLongPress();
+    var el = touch.el;
+    touch.el = null;
+    if (touch.moved || !el) { touch.lastT = 0; touch.lastEl = null; return; }
+    var now = Date.now();
+    if (touch.lastEl === el && el === S.sel && now - touch.lastT < DBL_TAP_MS) {
+      focusPanel();               // double-tap on the selection → open panel
+      touch.lastT = 0; touch.lastEl = null;
+    } else {
+      touch.lastT = now; touch.lastEl = el;
+    }
+  }
+
   function setEdit(on) {
     if (on === S.on) return;
     S.on = on;
@@ -152,6 +218,10 @@
       }
       document.addEventListener('mousemove', onMove, true);
       document.addEventListener('click', onClick, true);
+      document.addEventListener('pointerdown', onTouchDown, true);
+      document.addEventListener('pointermove', onTouchMove, true);
+      document.addEventListener('pointerup', onTouchUp, true);
+      document.addEventListener('pointercancel', onTouchUp, true);
     } else {
       if (window.Reveal && S.keyboardWas !== null) {
         Reveal.configure({ keyboard: S.keyboardWas });
@@ -159,6 +229,11 @@
       }
       document.removeEventListener('mousemove', onMove, true);
       document.removeEventListener('click', onClick, true);
+      document.removeEventListener('pointerdown', onTouchDown, true);
+      document.removeEventListener('pointermove', onTouchMove, true);
+      document.removeEventListener('pointerup', onTouchUp, true);
+      document.removeEventListener('pointercancel', onTouchUp, true);
+      clearLongPress();
       RV.set('sel', null);
       S.hover = null;
       el.querySelectorAll('.rv-ed-outline').forEach(function (b) { b.hidden = true; });
