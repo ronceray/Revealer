@@ -101,6 +101,8 @@ class DevSession:
     fallback_undo: bytes | None = None   # single-slot undo when git is unavailable
     history_mode: str = "git"            # "git" | "fallback"
     previews: set = field(default_factory=set)  # generated .rv-preview-* artifacts
+    export_job: str | None = None               # id of the running PDF export, if any
+    export_cancel: threading.Event | None = None  # its cancel flag
 
 
 def _sha_bytes(data: bytes) -> str:
@@ -641,6 +643,8 @@ class _Handler(http.server.SimpleHTTPRequestHandler):
             return self._edit()
         if path == DEV_PREFIX + "/export":
             return self._export()
+        if path == DEV_PREFIX + "/export/cancel":
+            return self._export_cancel()
         if path == DEV_PREFIX + "/history/commit":
             return self._history_snapshot()
         if path == DEV_PREFIX + "/history/restore":
@@ -856,18 +860,23 @@ class _Handler(http.server.SimpleHTTPRequestHandler):
     def _export(self) -> None:
         """Export the deck: kind=html (prod build) or kind=pdf.
 
-        The build happens under the session lock; the (slow) Chrome render
-        loop for PDFs runs outside it so editing stays responsive, reporting
-        per-slide progress over SSE.
+        ``kind=pdf&job=1`` runs the export as a cancellable background job:
+        it returns ``{job}`` immediately and streams ``export-progress`` /
+        ``export-done`` / ``export-cancelled`` / ``export-error`` over SSE.
+        Without ``job=1`` the PDF path stays synchronous (returns ``path``).
         """
         sess = self.sess
-        kind = self._query().get("kind", "html")
+        q = self._query()
+        kind = q.get("kind", "html")
         try:
             with sess.lock:
                 html = build_mod.build(str(sess.pres))
             if kind != "pdf":
                 return self._send_json(200, {"ok": True, "path": html})
             from . import pdf as pdf_mod
+
+            if q.get("job") == "1":
+                return self._start_export_job(html, pdf_mod)
 
             def progress(done, total):
                 _broadcast(sess, {"type": "export-progress",
@@ -877,6 +886,50 @@ class _Handler(http.server.SimpleHTTPRequestHandler):
         except Exception as exc:
             return self._send_json(500, {"error": str(exc)})
         return self._send_json(200, {"ok": True, "path": out})
+
+    def _start_export_job(self, html, pdf_mod) -> None:
+        """Launch the Chrome render loop in a daemon thread (one at a time)."""
+        sess = self.sess
+        with sess.lock:
+            if sess.export_job is not None:
+                return self._send_json(409, {"error": "export_in_progress",
+                                             "job": sess.export_job})
+            job = secrets.token_hex(8)
+            cancel = threading.Event()
+            sess.export_job = job
+            sess.export_cancel = cancel
+
+        def run():
+            def progress(done, total):
+                _broadcast(sess, {"type": "export-progress", "job": job,
+                                  "done": done, "total": total})
+            try:
+                out = pdf_mod.export_pdf(html, log=lambda *a: None,
+                                         progress=progress,
+                                         should_cancel=cancel.is_set)
+                _broadcast(sess, {"type": "export-done", "job": job, "path": out})
+            except pdf_mod.ExportCancelled:
+                _broadcast(sess, {"type": "export-cancelled", "job": job})
+            except Exception as exc:  # noqa: BLE001 - surfaced to the client
+                _broadcast(sess, {"type": "export-error", "job": job,
+                                  "error": str(exc)})
+            finally:
+                with sess.lock:
+                    if sess.export_job == job:
+                        sess.export_job = None
+                        sess.export_cancel = None
+
+        threading.Thread(target=run, daemon=True).start()
+        return self._send_json(200, {"ok": True, "job": job})
+
+    def _export_cancel(self) -> None:
+        sess = self.sess
+        with sess.lock:
+            job, cancel = sess.export_job, sess.export_cancel
+        if cancel is None:
+            return self._send_json(200, {"ok": True, "idle": True})
+        cancel.set()
+        return self._send_json(200, {"ok": True, "job": job})
 
     def _undo_redo(self, undo: bool) -> None:
         """Walk the undo cursor over shadow-git history.

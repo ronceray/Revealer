@@ -178,3 +178,47 @@ def test_schema_endpoint(server):
     sch = json.loads(data)
     assert "constructs" in sch and "classMap" in sch
     assert sch["constructs"]["pin"]["movable"] is True
+
+
+def test_export_job_cancel(server):
+    port, sess, pdir = server
+    # Start an async PDF job with a stubbed slow renderer, then cancel it.
+    import time
+
+    from revealer import pdf as pdf_mod
+    started = threading.Event()
+    released = threading.Event()
+
+    def fake_export(html, log=None, progress=None, should_cancel=None, **kw):
+        started.set()
+        # spin until cancelled (the endpoint sets the flag) or a timeout
+        for _ in range(200):
+            if should_cancel and should_cancel():
+                raise pdf_mod.ExportCancelled("cancelled")
+            released.wait(0.02)
+        raise AssertionError("should have been cancelled")
+
+    orig = pdf_mod.export_pdf
+    pdf_mod.export_pdf = fake_export
+    try:
+        status, data = _req(port, "POST", "/__rv__/export?kind=pdf&job=1",
+                            token=sess.token)
+        assert status == 200
+        assert json.loads(data)["job"]
+        assert started.wait(2)
+        # second job refused while one runs
+        assert _req(port, "POST", "/__rv__/export?kind=pdf&job=1",
+                    token=sess.token)[0] == 409
+        # cancel it
+        status, data = _req(port, "POST", "/__rv__/export/cancel",
+                            token=sess.token)
+        assert status == 200
+        # the job slot frees up
+        for _ in range(100):
+            if sess.export_job is None:
+                break
+            time.sleep(0.02)
+        assert sess.export_job is None
+    finally:
+        released.set()
+        pdf_mod.export_pdf = orig
