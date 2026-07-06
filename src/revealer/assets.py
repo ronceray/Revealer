@@ -82,7 +82,7 @@ PLUGINS: dict[str, dict] = {
     "chalkboard": {
         "official": False,
         "repo": "rajgoel/reveal.js-plugins",
-        "ref": "master",
+        "ref": "5e5375a830eb8101836c10c1f3b56c71066c458e",  # master @ 2026-07-06
         "src": "chalkboard",
         "dest": "plugin/chalkboard",
         "css": ["plugin/chalkboard/style.css"],
@@ -93,7 +93,7 @@ PLUGINS: dict[str, dict] = {
     "customcontrols": {
         "official": False,
         "repo": "rajgoel/reveal.js-plugins",
-        "ref": "master",
+        "ref": "5e5375a830eb8101836c10c1f3b56c71066c458e",  # master @ 2026-07-06
         "src": "customcontrols",
         "dest": "plugin/customcontrols",
         "css": ["plugin/customcontrols/style.css"],
@@ -104,7 +104,7 @@ PLUGINS: dict[str, dict] = {
     "anything": {
         "official": False,
         "repo": "rajgoel/reveal.js-plugins",
-        "ref": "master",
+        "ref": "5e5375a830eb8101836c10c1f3b56c71066c458e",  # master @ 2026-07-06
         "src": "anything",
         "dest": "plugin/anything",
         "scripts": ["plugin/anything/plugin.js"],
@@ -113,7 +113,7 @@ PLUGINS: dict[str, dict] = {
     "embed-video": {
         "official": False,
         "repo": "ThomasWeinert/reveal-embed-video",
-        "ref": "master",
+        "ref": "cadbc8d1d769b59e03d3514fc16fc9aed3bec797",  # master @ 2026-07-06
         "src": ".",
         "dest": "plugin/webcam",
         "css": ["plugin/webcam/reveal-embed-video.css"],
@@ -129,22 +129,32 @@ CONFIG_FILE = ".revealer.toml"
 
 # --- Per-presentation parameters --------------------------------------------
 
-def read_presentation_extensions(pdir: str) -> list[str]:
-    """Return the list of enabled extensions for the presentation in *pdir*."""
+def read_presentation_config(pdir: str) -> dict:
+    """The raw .revealer.toml contents ({} when absent or unreadable)."""
 
     cfg = Path(pdir) / CONFIG_FILE
     if not cfg.exists():
-        return list(DEFAULT_EXTENSIONS)
+        return {}
 
     import tomllib
 
-    with open(cfg, "rb") as fid:
-        data = tomllib.load(fid)
+    try:
+        with open(cfg, "rb") as fid:
+            return tomllib.load(fid)
+    except (OSError, tomllib.TOMLDecodeError):
+        return {}
+
+
+def read_presentation_extensions(pdir: str) -> list[str]:
+    """Return the list of enabled extensions for the presentation in *pdir*."""
+    data = read_presentation_config(pdir)
     return list(data.get("presentation", {}).get("extensions", DEFAULT_EXTENSIONS))
 
 
-def write_presentation_config(pdir: str, extensions: list[str], reveal_version: str | None = None) -> None:
-    """Persist the chosen extensions (and reveal.js version) for a presentation."""
+def write_presentation_config(pdir: str, extensions: list[str],
+                              reveal_version: str | None = None,
+                              plugin_refs: dict[str, str] | None = None) -> None:
+    """Persist extensions, the reveal.js version, and plugin pins."""
 
     import tomli_w
 
@@ -154,6 +164,8 @@ def write_presentation_config(pdir: str, extensions: list[str], reveal_version: 
             "revealjs_version": reveal_version or REVEALJS_VERSION,
         }
     }
+    if plugin_refs:
+        data["plugins"] = dict(plugin_refs)
     with open(Path(pdir) / CONFIG_FILE, "wb") as fid:
         tomli_w.dump(data, fid)
 
@@ -325,9 +337,19 @@ def setup_revealjs(pdir: str, extensions: list[str], force: bool = False, log=pr
 
     reveal_dir = os.path.join(pdir, "reveal.js")
 
-    if force or not os.path.isdir(reveal_dir):
-        _download_revealjs_core(reveal_dir, REVEALJS_VERSION, log=log)
+    # Reproducibility: an implicit setup re-installs exactly what the deck
+    # recorded in .revealer.toml (reveal.js version + plugin commit pins);
+    # `revealer update --force` re-pins to the current PLUGINS table and
+    # rewrites the record.
+    cfg = read_presentation_config(pdir)
+    recorded = {} if force else cfg.get("presentation", {})
+    recorded_refs = {} if force else dict(cfg.get("plugins", {}))
+    version = str(recorded.get("revealjs_version") or REVEALJS_VERSION)
 
+    if force or not os.path.isdir(reveal_dir):
+        _download_revealjs_core(reveal_dir, version, log=log)
+
+    used_refs: dict[str, str] = {}
     for ext in extensions:
         spec = PLUGINS.get(ext)
         if spec is None:
@@ -335,10 +357,13 @@ def setup_revealjs(pdir: str, extensions: list[str], force: bool = False, log=pr
             continue
         if spec.get("official"):
             continue  # already in the core tarball
+        ref = str(recorded_refs.get(ext) or spec["ref"])
+        used_refs[ext] = ref
         dest = Path(reveal_dir) / spec["dest"]
         if force or not dest.exists():
-            _download_plugin(reveal_dir, spec, log=log)
+            _download_plugin(reveal_dir, {**spec, "ref": ref}, log=log)
 
     inject_revealer_assets(reveal_dir)
     generate_index_html(reveal_dir, extensions)
-    write_presentation_config(pdir, extensions)
+    write_presentation_config(pdir, extensions, reveal_version=version,
+                              plugin_refs=used_refs)
