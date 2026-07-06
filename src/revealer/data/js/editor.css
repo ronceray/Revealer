@@ -413,3 +413,10 @@ body.rv-split #rv-editor-layer .rv-ed-bar {
   left: calc((100vw - var(--rv-pw)) / 2);
 }
 body.rv-split #rv-ed-panel { padding-top: 12px; }
+
+/* --- format bar --------------------------------------------------------------- */
+#rv-ed-panel .rv-fmt { display: flex; gap: 4px; align-items: center; margin-bottom: 4px; flex-wrap: wrap; }
+#rv-ed-panel .rv-fmt button { padding: 1px 7px; font-size: 12px; }
+#rv-ed-panel .rv-fmt .rv-fmt-sw { width: 18px; height: 18px; padding: 0; border-radius: 50%; border: 1px solid #666; }
+#rv-ed-panel .rv-fmt input[type=color] { width: 24px; height: 20px; padding: 0; border: none; background: none; cursor: pointer; }
+#rv-ed-panel .rv-fmt select { font: 11px system-ui; background: #2a3350; color: #fff; border: 1px solid #4a5580; border-radius: 4px; }

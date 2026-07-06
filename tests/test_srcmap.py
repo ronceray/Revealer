@@ -209,3 +209,23 @@ def test_sections_carry_marker_lines(full_deck):
     for src in sections:
         line = pres_lines[int(src) - 1]
         assert re.match(r"^(>>> first:|===|---|%%%|>>> biblio)", line), line
+
+
+def test_inline_markdown_renders(deck):
+    html = build_deck(deck(
+        "=== T\n\nThe **bold** *ital* `c` [l](http://x) [r]{.accent} \\*esc\\* $a^* b^*$\n"))
+    assert "<b>bold</b>" in html and "<i>ital</i>" in html and "<code>c</code>" in html
+    assert '<span class="accent">r</span>' in html
+    assert "*esc*" in html and "$a^* b^*$" in html
+
+
+def test_markdown_optout(deck):
+    html = build_deck(deck("> markdown: false\n\n=== T\n\n**not bold**\n"))
+    assert "<b>" not in html and "**not bold**" in html
+
+
+def test_card_title(deck):
+    html = build_deck(deck(
+        "=== G\n> grid(1,2) compact\n> card accent | My *title*\nBody\n> end: grid\n"))
+    assert '<div class="card-title">My <i>title</i></div>' in html
+    assert "rv-card accent" in html

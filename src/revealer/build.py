@@ -299,9 +299,69 @@ _MACRO_OPEN_RE = re.compile(
 _BLOCK_END_RE = re.compile(r"^>\s*end\s*:\s*\w+\s*$")
 
 
+_MARKDOWN = True  # set per-build from `> markdown:` (default on)
+
+_MD_PROTECT_RE = re.compile(r"(\$\$.+?\$\$|\$[^$\n]+\$|<[^>]*>)")
+_MD_SPAN_RE = re.compile(r"\[([^\[\]]+)\]\{([^{}]+)\}")
+_MD_LINK_RE = re.compile(r"\[([^\[\]]+)\]\(([^()\s]+)\)")
+_MD_CODE_RE = re.compile(r"`([^`]+)`")
+_MD_BOLD_RE = re.compile(r"\*\*(\S(?:[^*]*?\S)?)\*\*")
+_MD_ITAL_RE = re.compile(r"(?<![\w*])\*(\S(?:[^*]*?\S)?)\*(?![\w*])")
+
+
+def _md_span_sub(m):
+    classes, styles = [], []
+    for a in m.group(2).split():
+        if re.match(r"^\.[A-Za-z][\w-]*$", a):
+            classes.append(a[1:])
+        elif a.startswith("color="):
+            styles.append("color:" + _escape_attr(a[6:]))
+        elif a.startswith("size="):
+            styles.append("font-size:" + _escape_attr(a[5:]))
+    attr = ""
+    if classes:
+        attr += ' class="{0}"'.format(" ".join(classes))
+    if styles:
+        attr += ' style="{0}"'.format(";".join(styles))
+    if not attr:
+        return m.group(0)
+    return "<span{0}>{1}</span>".format(attr, m.group(1))
+
+
+def _md_segment(seg: str) -> str:
+    seg = seg.replace("\\*", "\x00").replace("\\`", "\x01").replace("\\[", "\x02")
+    seg = _MD_CODE_RE.sub(r"<code>\1</code>", seg)
+    seg = _MD_SPAN_RE.sub(_md_span_sub, seg)
+    seg = _MD_LINK_RE.sub(r'<a href="\2" target="_blank">\1</a>', seg)
+    seg = _MD_BOLD_RE.sub(r"<b>\1</b>", seg)
+    seg = _MD_ITAL_RE.sub(r"<i>\1</i>", seg)
+    return seg.replace("\x00", "*").replace("\x01", "`").replace("\x02", "[")
+
+
+def _inline_md(text: str) -> str:
+    """Inline formatting: **bold**, *italic*, `code`, [text](url), [text]{.role}.
+
+    Math spans ($…$ / $$…$$) and HTML tags are left untouched; \* \` \[
+    escape the markers. Disabled per deck with ``> markdown: false``.
+    """
+    if not _MARKDOWN or not text:
+        return text
+    if "*" not in text and "`" not in text and "[" not in text:
+        return text
+    parts = _MD_PROTECT_RE.split(text)
+    for i in range(0, len(parts), 2):
+        parts[i] = _md_segment(parts[i])
+    return "".join(parts)
+
+
+_SIZE_ROLES = {"title": 1.6, "lede": 1.25, "body": 1.0, "sm": 0.8, "fine": 0.65}
+
+
 def _parse_scale(value, default=1.0):
-    """Parse a relative size such as ``0.8`` or ``80%`` into a float multiplier."""
+    """Parse a relative size: ``0.8``, ``80%``, or a role name (``lede``, ``sm``)."""
     text = str(value).strip()
+    if text.lower() in _SIZE_ROLES:
+        return _SIZE_ROLES[text.lower()]
     percent = text.endswith("%")
     try:
         number = float(text.rstrip("%").strip())
@@ -805,6 +865,10 @@ def _contentify_legacy(html: str, src: list | None = None) -> str:
             card = re.match(r"^>\s*card\b(.*)$", line)
             if card:
                 spec = card.group(1).strip()
+                title = None
+                if "|" in spec:
+                    spec, title = spec.split("|", 1)
+                    title = title.strip() or None
                 bg = None
                 if ":" in spec:
                     spec, bg = spec.split(":", 1)
@@ -814,7 +878,7 @@ def _contentify_legacy(html: str, src: list | None = None) -> str:
                 plain = "plain" in parts
                 extra = [p for p in parts if p != "plain"]  # any other tokens = extra classes
                 current = {"frag": bool(cf), "fattr": ca, "plain": plain, "bg": bg, "classes": extra,
-                           "content": [], "src": [], "head": src[index]}
+                           "title": title, "content": [], "src": [], "head": src[index]}
                 cards.append(current)
                 index += 1
                 continue
@@ -864,6 +928,8 @@ def _contentify_legacy(html: str, src: list | None = None) -> str:
             out += '<div class="{cls}" style="{style}"{fa}{sa}>'.format(
                 cls=cls, style=style, fa=c.get("fattr", ""),
                 sa=_src_attr(c.get("head"), card_lns[-1] if card_lns else None))
+            if c.get("title"):
+                out += '<div class="card-title">{0}</div>'.format(_inline_md(c["title"]))
             out += _contentify_legacy("\n".join(c["content"]), src=c["src"]) if c["content"] else ""
             out += "</div>"
         out += "</div></div>"
@@ -1053,7 +1119,7 @@ def _contentify_legacy(html: str, src: list | None = None) -> str:
             content_src.append(src[index])
             index += 1
         body = _contentify_legacy("\n".join(content), src=content_src) if content else ""
-        title_html = '<div class="box-title">{0}</div>'.format(title) if title else ""
+        title_html = '<div class="box-title">{0}</div>'.format(_inline_md(title)) if title else ""
         out = '<div class="{bc}{fcls}"{fattr}{sa}>{title}{body}</div>'.format(
             bc=box_cls, fcls=fcls, fattr=fattr,
             sa=_src_attr(src[start_index], src[index - 1]), title=title_html, body=body
@@ -1286,6 +1352,7 @@ def _contentify_legacy(html: str, src: list | None = None) -> str:
                 # Current open level
                 cur = len(ul_stack)
 
+                text = _inline_md(text)
                 if level > cur:
                     # Open new nested uls
                     for L in range(cur + 1, level + 1):
@@ -1373,9 +1440,9 @@ def _contentify_legacy(html: str, src: list | None = None) -> str:
                 index += 1
                 continue
 
-            # --- Default: add line
+            # --- Default: add line (with inline markdown)
 
-            html += line
+            html += _inline_md(line)
 
         if not line.startswith("<pre>"):
             html += "\n"
@@ -1477,7 +1544,7 @@ def _media_shortcut(kind: str, rest: str, lineno: int | None = None) -> str:
     pos = "top" if "top" in flags else "center"
 
     p = _escape_attr(path)
-    cap_html = '<div class="rv-cap">{0}</div>'.format(caption) if caption else ""
+    cap_html = '<div class="rv-cap">{0}</div>'.format(_inline_md(caption)) if caption else ""
     fig_cls = "rv-fig" + frag_cls
 
     if kind == "img":
@@ -1580,6 +1647,8 @@ def _build(pfile: str, dev: bool) -> str:
     block_depth = 0
 
     pres_text, pres_sha = _read_pres(pfile)
+    global _MARKDOWN
+    _MARKDOWN = True
 
     with io.StringIO(pres_text) as fid:
         for lineno, line in enumerate(fid, 1):
@@ -1747,6 +1816,8 @@ def _build(pfile: str, dev: bool) -> str:
     setting.setdefault("codeTheme", "zenburn")
     setting.setdefault("notesSize", "1em")
     setting.setdefault("svgDuration", "0.5s")
+    if str(setting.get("markdown", "true")).strip().lower() in ("false", "no", "0", "off"):
+        _MARKDOWN = False
     setting["maxRefsPerPage"] = int(setting.get("maxRefsPerPage", 5))
 
     # Presentation-scope content defaults (size / align / paragraph spacing).
@@ -1814,6 +1885,7 @@ def _build(pfile: str, dev: bool) -> str:
         "affiliation",
         "event",
         "slideNumber",
+        "markdown",
         "photo",
         "rounded_photos",
         "size",

@@ -837,3 +837,30 @@ h1.relief {
 /* Title slide: affiliation line (between authors and event) */
 #affiliation { color: var(--rv-muted-color); font-size: 0.7em; line-height: 1.4;
   margin-top: 0.5em; }
+
+/* --- Inline typography: color roles + size scale + card titles --------------
+   Written by the inline markdown layer ([text]{.accent}, [x]{.sm}) and the
+   browser editor's palette. Themes recolor/resize via the variables. */
+
+:root {
+  --rv-size-title: 1.6em;
+  --rv-size-lede: 1.25em;
+  --rv-size-sm: 0.8em;
+  --rv-size-fine: 0.65em;
+}
+.accent { color: var(--rv-accent); }
+.warn   { color: var(--rv-warn); }
+.good   { color: var(--rv-good); }
+.muted  { color: var(--rv-muted-color); }
+.title { font-size: var(--rv-size-title); }
+.lede  { font-size: var(--rv-size-lede); }
+.sm    { font-size: var(--rv-size-sm); }
+.fine  { font-size: var(--rv-size-fine); }
+
+.card-title {
+  font-weight: 700;
+  font-size: 0.75em;
+  color: var(--rv-accent);
+  text-align: center;
+  line-height: 1.2;
+}

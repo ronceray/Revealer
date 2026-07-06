@@ -1024,6 +1024,7 @@
       '<button class="rv-pn-del" title="Delete this block from the .pres (Del)">🗑 Delete</button>' +
       '</div>' +
       '<div class="rv-pn-srctitle">Source (editable)</div>' +
+      '<div class="rv-fmt-slot"></div>' +
       '<textarea class="rv-pn-src" spellcheck="false"></textarea>' +
       '<button class="rv-pn-apply">Apply source</button>' +
       '<div class="rv-pn-foot">Changes save automatically to the .pres — no save button needed.</div>';
@@ -1041,6 +1042,8 @@
     p.querySelector('.rv-pn-down').addEventListener('click', function () { moveSibling(el, 1); });
     p.querySelector('.rv-pn-del').addEventListener('click', function () { deleteSelected(el); });
 
+    var slot1 = p.querySelector('.rv-fmt-slot');
+    if (slot1) slot1.appendChild(formatBar(p.querySelector('.rv-pn-src')));
     // Source box + parameter fields need the actual .pres lines.
     fetch('/__rv__/src?start=' + s + '&end=' + e + '&token=' + encodeURIComponent(TOKEN))
       .then(function (r) { return r.json(); })
@@ -1064,9 +1067,12 @@
       ' <span class="rv-pn-sub">' + PRES_NAME + ' : ' + s0 + '–' + e0 + '</span></div>' +
       '<div class="rv-pn-hint">Click an element for its parameters, or edit the whole slide here.</div>' +
       '<div class="rv-pn-srctitle">Slide source (editable)</div>' +
+      '<div class="rv-fmt-slot"></div>' +
       '<textarea class="rv-pn-src rv-pn-src-slide" spellcheck="false"></textarea>' +
       '<button class="rv-pn-apply">Apply source</button>' +
       '<div class="rv-pn-foot">Changes save automatically to the .pres — no save button needed.</div>';
+    var slot0 = p.querySelector('.rv-fmt-slot');
+    if (slot0) slot0.appendChild(formatBar(p.querySelector('.rv-pn-src')));
     fetch('/__rv__/src?start=' + s0 + '&end=' + e0 + '&token=' + encodeURIComponent(TOKEN))
       .then(function (r) { return r.json(); })
       .then(function (j) {
@@ -1078,6 +1084,50 @@
       rvPostEdit([{ op: 'replace_lines', start: s0, end: e0, text: ta.value.split('\n') }]);
     });
     appendCheatsheet(p);
+  }
+
+  function wrapSel(ta, before, after) {
+    var a = ta.selectionStart, b = ta.selectionEnd;
+    var mid = ta.value.slice(a, b) || 'text';
+    ta.value = ta.value.slice(0, a) + before + mid + after + ta.value.slice(b);
+    ta.focus();
+    ta.selectionStart = a + before.length;
+    ta.selectionEnd = a + before.length + mid.length;
+  }
+
+  var PALETTE = [['accent', '--rv-accent'], ['warn', '--rv-warn'],
+                 ['good', '--rv-good'], ['muted', '--rv-muted-color']];
+
+  function formatBar(ta) {
+    var bar = document.createElement('div');
+    bar.className = 'rv-fmt';
+    var root = getComputedStyle(document.documentElement);
+    bar.innerHTML =
+      '<button data-b="**" data-a="**" title="bold"><b>B</b></button>' +
+      '<button data-b="*" data-a="*" title="italic"><i>I</i></button>' +
+      '<button data-b="\`" data-a="\`" title="code">&lt;&gt;</button>' +
+      PALETTE.map(function (c) {
+        return '<button class="rv-fmt-sw" data-b="[" data-a="]{.' + c[0] + '}" title="' + c[0] +
+          '" style="background:' + (root.getPropertyValue(c[1]).trim() || '#888') + '"></button>';
+      }).join('') +
+      '<input type="color" title="custom color" value="#1a4fd6">' +
+      '<select title="size"><option value="">size…</option>' +
+      ['title', 'lede', 'sm', 'fine'].map(function (r) {
+        return '<option value="' + r + '">' + r + '</option>';
+      }).join('') + '</select>';
+    bar.querySelectorAll('button').forEach(function (b) {
+      b.addEventListener('click', function () {
+        wrapSel(ta, b.getAttribute('data-b'), b.getAttribute('data-a'));
+      });
+    });
+    bar.querySelector('input[type=color]').addEventListener('change', function (ev) {
+      wrapSel(ta, '[', ']{color=' + ev.target.value + '}');
+    });
+    bar.querySelector('select').addEventListener('change', function (ev) {
+      if (ev.target.value) wrapSel(ta, '[', ']{.' + ev.target.value + '}');
+      ev.target.value = '';
+    });
+    return bar;
   }
 
   var CHEATSHEET = [
@@ -1092,6 +1142,10 @@
                     '> pin: 50% 50% 20% +', '> frag 2 … > end: frag', '> table(2,3)']],
     ['Text & math', ['* bullet (2 spaces = nested)', '[ highlighted line ]',
                      '$inline$  $$display$$', '@@ python … @@']],
+    ['Inline format', ['**bold**  *italic*  \`code\`', '[text](https://url)',
+                       '[text]{.accent}  [x]{color=#f00}', '[big]{.lede}  [small]{.sm}',
+                       '> size: lede   (paragraph scope)', '> align: center',
+                       'escape: \\* \\\` \\[']],
   ];
 
   function appendCheatsheet(p) {
