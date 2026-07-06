@@ -53,6 +53,10 @@
       try { ev = JSON.parse(msg.data); } catch (e) { return; }
       if (ev.type === 'reload') { F.scheduleReload(); }
       else if (ev.type === 'build-error') { F.showError(ev); }
+      else if (ev.type === 'export-progress') { F.onExportProgress(ev); }
+      else if (ev.type === 'export-done') { F.onExportDone(ev); }
+      else if (ev.type === 'export-cancelled') { F.onExportCancelled(ev); }
+      else if (ev.type === 'export-error') { F.onExportError(ev); }
     };
     // EventSource reconnects on its own; nothing else to do.
   }

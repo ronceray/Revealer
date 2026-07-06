@@ -24,6 +24,99 @@
     } catch (e) {}
   }
 
+  /* --- deck export -----------------------------------------------------------
+     HTML export is one synchronous build. PDF export runs as a cancellable
+     background job: POST kind=pdf&job=1 returns {job} at once, then the server
+     streams export-progress / -done / -cancelled / -error over SSE. boot.js's
+     connect() dispatches those to the F.onExport* handlers below; this module
+     owns the progress box (title + live slide counter + a Cancel button). */
+
+  function exportHtml() {
+    F.toast('Exporting HTML…', 60000);
+    fetch('/__rv__/export?kind=html', { method: 'POST', headers: { 'X-RV-Token': TOKEN } })
+      .then(function (r) { return r.json(); })
+      .then(function (j) {
+        F.toast(j.ok ? 'Exported → ' + j.path : 'Export failed: ' + (j.error || '?'), 6000);
+      })
+      .catch(function () { F.toast('Export failed', 4000); });
+  }
+
+  var exportJob = null;   // id of the running PDF export, if any
+
+  function exportBoxMsg() {
+    var b = document.getElementById('rv-ed-export');
+    return b && b.querySelector('.rv-xp-msg');
+  }
+
+  function closeExportBox() {
+    var b = document.getElementById('rv-ed-export');
+    if (b) b.remove();
+    exportJob = null;
+  }
+
+  function showExportBox(text) {
+    var w = RV.ui.box({
+      id: 'rv-ed-export', replace: true, close: false,
+      title: 'Exporting PDF',
+      buttons: [{ label: 'Cancel', cls: 'rv-xp-cancel',
+                  title: 'Stop the export', onClick: cancelExport }],
+    });
+    w.body.innerHTML = '<div class="rv-xp-msg"></div>';
+    w.body.querySelector('.rv-xp-msg').textContent = text;
+  }
+
+  function startPdfExport() {
+    showExportBox('Starting PDF export…');
+    fetch('/__rv__/export?kind=pdf&job=1', { method: 'POST', headers: { 'X-RV-Token': TOKEN } })
+      .then(function (r) {
+        return r.json().then(function (j) { return { status: r.status, j: j }; });
+      })
+      .then(function (res) {
+        if (res.status === 409) {
+          closeExportBox();
+          F.toast('A PDF export is already running', 4000);
+        } else if (res.j && res.j.ok && res.j.job) {
+          exportJob = res.j.job;
+        } else {
+          closeExportBox();
+          F.toast('Export failed: ' + ((res.j && res.j.error) || '?'), 6000);
+        }
+      })
+      .catch(function () { closeExportBox(); F.toast('Export failed', 4000); });
+  }
+
+  function cancelExport() {
+    var msg = exportBoxMsg();
+    if (msg) msg.textContent = 'Cancelling…';
+    fetch('/__rv__/export/cancel', { method: 'POST', headers: { 'X-RV-Token': TOKEN } })
+      .catch(function () {});
+  }
+
+  // SSE handlers (dispatched from boot.js). Ignore events for a stale job.
+  function onExportProgress(ev) {
+    if (exportJob && ev.job !== exportJob) return;
+    var msg = exportBoxMsg();
+    if (msg) msg.textContent = 'Exporting slide ' + ev.done + '/' + ev.total;
+  }
+
+  function onExportDone(ev) {
+    if (exportJob && ev.job !== exportJob) return;
+    closeExportBox();
+    F.toast('Exported → ' + ev.path, 6000);
+  }
+
+  function onExportCancelled(ev) {
+    if (exportJob && ev.job !== exportJob) return;
+    closeExportBox();
+    F.toast('Export cancelled', 3000);
+  }
+
+  function onExportError(ev) {
+    if (exportJob && ev.job !== exportJob) return;
+    closeExportBox();
+    F.toast('Export failed: ' + (ev.error || '?'), 6000);
+  }
+
   function buildToolbar() {
     if (document.getElementById('rv-ed-toolbar')) return;
     var tb = document.createElement('div');
@@ -51,16 +144,7 @@
     });
     tb.querySelector('.rv-tb-outline').addEventListener('click', F.toggleOutline);
     tb.querySelector('.rv-tb-help').addEventListener('click', toggleHelp);
-    function doExport(kind) {
-      F.toast(kind === 'pdf' ? 'Exporting PDF… (can take a minute)' : 'Exporting HTML…', 60000);
-      fetch('/__rv__/export?kind=' + kind, { method: 'POST', headers: { 'X-RV-Token': TOKEN } })
-        .then(function (r) { return r.json(); })
-        .then(function (j) {
-          F.toast(j.ok ? 'Exported → ' + j.path : 'Export failed: ' + (j.error || '?'), 6000);
-        })
-        .catch(function () { F.toast('Export failed', 4000); });
-    }
-    tb.querySelector('.rv-tb-xhtml').addEventListener('click', function () { doExport('html'); });
+    tb.querySelector('.rv-tb-xhtml').addEventListener('click', exportHtml);
     if (window.__RV_DEV__.history === 'fallback') {
       var hb = tb.querySelector('.rv-tb-hist');
       hb.disabled = true;
@@ -73,7 +157,7 @@
     } else {
       tb.querySelector('.rv-tb-hist').addEventListener('click', F.toggleHistory);
     }
-    tb.querySelector('.rv-tb-xpdf').addEventListener('click', function () { doExport('pdf'); });
+    tb.querySelector('.rv-tb-xpdf').addEventListener('click', startPdfExport);
     tb.querySelector('.rv-tb-media').addEventListener('click', function () {
       if (!S.on) F.setEdit(true);
       importMedia();
@@ -164,5 +248,9 @@
   // exports (what other editor/ modules call):
   F.rvStatus = rvStatus;
   F.buildToolbar = buildToolbar;
+  F.onExportProgress = onExportProgress;
+  F.onExportDone = onExportDone;
+  F.onExportCancelled = onExportCancelled;
+  F.onExportError = onExportError;
   RV.PRES_NAME = PRES_NAME;
 })();

@@ -7,6 +7,7 @@
     9700 #rv-ed-toolbar
     9810 #rv-ed-help       9820 #rv-ed-history (mutually exclusive, distinct z)
     9850 #rv-ed-bubble (selection bubble: above panel/help, below hovertag)
+    9860 #rv-ed-export (PDF export progress + Cancel)
     9900 #rv-ed-hovertag
    10000 #rv-ed-peek
    10050 #rv-dev-error (a broken build must outrank the peek overlay)
@@ -192,6 +193,20 @@ html.rv-edit .reveal .slides section * { cursor: crosshair; }
   z-index: 10060;
 }
 #rv-ed-toast.rv-on { opacity: 1; transform: translateX(-50%) translateY(0); }
+
+/* PDF export progress box (cancellable background job) */
+#rv-ed-export {
+  position: fixed; top: 60px; left: 50%; transform: translateX(-50%);
+  min-width: 240px; background: #1c1c2e; color: #fff; border-radius: 10px;
+  font: 13px system-ui, sans-serif;
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.4); z-index: 9860;
+}
+#rv-ed-export .rv-xp-msg { font-variant-numeric: tabular-nums; }
+#rv-ed-export .rv-box-head button {
+  font: 12px system-ui; background: #7a2d2d; color: #fff;
+  border: 1px solid #a04545; border-radius: 5px; padding: 2px 10px; cursor: pointer;
+}
+#rv-ed-export .rv-box-head button:hover { background: #984242; }
 
 #rv-ed-ghost {
   position: fixed;
