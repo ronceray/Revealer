@@ -24,7 +24,7 @@ import hashlib
 import os
 import re
 import tempfile
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from pathlib import Path
 
 # --- construct grammar (kept in sync with the parsers in build.py) -----------

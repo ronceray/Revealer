@@ -4,8 +4,7 @@ import shutil
 
 import pytest
 
-from revealer.serve import (_history_commit, _history_init, _history_list,
-                            _history_show, HISTORY_DIR)
+from revealer.serve import HISTORY_DIR, _history_commit, _history_init, _history_list, _history_show
 
 pytestmark = pytest.mark.skipif(shutil.which("git") is None, reason="needs git")
 

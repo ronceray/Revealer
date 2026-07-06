@@ -197,26 +197,26 @@ class Bibtex:
     def short_description(self, tag):
         if self.error is not None:
             return ""
-        I = self.item_tag[tag]
-        if "journal-short" in I:
+        item = self.item_tag[tag]
+        if "journal-short" in item:
             return "{:d}. {:s}, <i>{:s}</i> ({:s})".format(
-                I["revealer-number"], I["authors-short"], I["journal-short"], I.get("year", "")
+                item["revealer-number"], item["authors-short"], item["journal-short"], item.get("year", "")
             )
         return "{:d}. {:s} ({:s})".format(
-            I["revealer-number"], I["authors-short"], I.get("year", "")
+            item["revealer-number"], item["authors-short"], item.get("year", "")
         )
 
     def long_description(self, tag):
         if self.error is not None:
             return ""
-        I = self.item_tag[tag]
+        item = self.item_tag[tag]
         return "{:d}. {:s}: {:s} {:s} {:s} {:s}".format(
-            I["revealer-number"],
-            I["authors-short"],
-            "<i>" + I["title"] + "</i>," if "title" in I else "",
-            I.get("journal", ""),
-            "(" + I["year"] + ")" if "year" in I else "",
-            ' - <a class="doi" href="https://doi.org/{0}">{0}</a>'.format(I["doi"]) if "doi" in I else "",
+            item["revealer-number"],
+            item["authors-short"],
+            "<i>" + item["title"] + "</i>," if "title" in item else "",
+            item.get("journal", ""),
+            "(" + item["year"] + ")" if "year" in item else "",
+            ' - <a class="doi" href="https://doi.org/{0}">{0}</a>'.format(item["doi"]) if "doi" in item else "",
         )
 
 
@@ -399,7 +399,7 @@ def _md_segment(seg: str) -> str:
 
 
 def _inline_md(text: str) -> str:
-    """Inline formatting: **bold**, *italic*, `code`, [text](url), [text]{.role}.
+    r"""Inline formatting: **bold**, *italic*, `code`, [text](url), [text]{.role}.
 
     Math spans ($…$ / $$…$$) and HTML tags are left untouched; \* \` \[
     escape the markers. Disabled per deck with ``> markdown: false``.

@@ -269,7 +269,6 @@ def test_replace_lines_shrink_and_revert(pres):
     original = pres.read_text()
     _apply(pres, [{"op": "replace_lines", "start": 12, "end": 15, "text": ["> layer"]}])
     assert "> layer +" not in pres.read_text()
-    lines = pres.read_text().split("\n")
     _apply(pres, [{"op": "replace_lines", "start": 12, "end": 12,
                    "text": ["> layer", "! Media/img.png fill", "> layer +",
                             "! Media/img.png fill"]}])

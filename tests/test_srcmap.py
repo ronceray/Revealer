@@ -11,7 +11,6 @@ from __future__ import annotations
 import re
 
 import pytest
-
 from helpers import build_deck, strip_dev
 
 # A deck exercising every annotated construct. Line numbers are asserted
@@ -231,7 +230,7 @@ def test_card_title(deck):
     assert "rv-card accent" in html
 
 
-import shutil as _shutil
+import shutil as _shutil  # noqa: E402
 
 # A minimal one-page PDF (blank A4) — enough for pdftocairo to convert.
 _MINI_PDF = (b"%PDF-1.1\n1 0 obj<</Type/Catalog/Pages 2 0 R>>endobj\n"

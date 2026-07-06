@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "revealer"
-version = "0.2.0"
+dynamic = ["version"]
 description = "An overlay of reveal.js to easily create scientific presentations."
 readme = "README.md"
 requires-python = ">=3.11"
@@ -20,11 +20,11 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-dev = ["pytest>=8"]
+dev = ["pytest>=8", "ruff>=0.4"]
 
 [project.urls]
-Homepage = "https://github.com/CandelierLab/Revealer"
-Documentation = "https://candelierlab.github.io/Revealer"
+Homepage = "https://github.com/ronceray/Revealer"
+Documentation = "https://github.com/ronceray/Revealer"
 
 [project.scripts]
 revealer = "revealer.cli:main"
@@ -32,3 +32,17 @@ revealer = "revealer.cli:main"
 [tool.hatch.build.targets.wheel]
 packages = ["src/revealer"]
 exclude = ["**/reveal.js", "**/*.pres.html", "**/*.pyc"]
+
+[tool.hatch.version]
+path = "src/revealer/__init__.py"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I"]
+ignore = ["E501"]  # long lines: format strings in emitters are clearer unwrapped

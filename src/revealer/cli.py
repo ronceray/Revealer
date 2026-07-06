@@ -339,9 +339,17 @@ def main() -> None:
 # --- Root callback -----------------------------------------------------------
 
 @app.callback()
-def _main(ctx: typer.Context):
+def _main(
+    ctx: typer.Context,
+    version: bool = typer.Option(False, "--version", help="Show the version and exit."),
+):
     """Open the interactive menu when no sub-command is given."""
 
+    if version:
+        from . import __version__
+
+        console.print("revealer {0}".format(__version__))
+        raise typer.Exit()
     if ctx.invoked_subcommand is None:
         interactive_menu()
 
