@@ -371,6 +371,22 @@ A bare `$$ ... $$` line produces a plain centered equation without the frame.
 Callout and equation boxes accept the `+` / `+N` fragment flag; a title after
 the flag becomes the box title.
 
+### KaTeX macros
+
+Reuse your LaTeX macros in the settings block, either from a `.tex` file of
+`\newcommand` definitions (relative to the deck folder) or inline —
+`> macro:` can be repeated:
+
+```
+> macros: defs.tex
+> macro: \half \frac{1}{2}
+> macro: \R \mathbb{R}
+```
+
+Argument counts (`[2]`) can be declared but are dropped: KaTeX infers arity
+from `#n` in the body. Custom `> katex: { ... }` options merge with the
+bundled-KaTeX config and the macros instead of replacing them.
+
 ## Fragments
 
 Most block shortcuts accept a trailing `+` (reveal as a fragment) or `+N`

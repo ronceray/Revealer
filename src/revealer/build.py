@@ -18,6 +18,7 @@ from __future__ import annotations
 
 import hashlib
 import io
+import json as _json
 import os
 import re
 import shutil
@@ -105,6 +106,45 @@ def _append_setting(target: dict, key: str, value: str) -> None:
         target[key].append(value)
     else:
         target[key] = value
+
+
+def _as_list(value) -> list:
+    if value is None:
+        return []
+    return value if isinstance(value, list) else [value]
+
+
+_NEWCOMMAND_RE = re.compile(
+    r"\\(?:re)?newcommand\*?\s*\{?\\(\w+)\}?\s*(?:\[(\d+)\])?\s*\{")
+
+
+def _parse_tex_macros(text: str) -> dict[str, str]:
+    r"""Extract ``\newcommand``-style macros from LaTeX source.
+
+    Returns ``{"\\name": "body"}`` pairs for KaTeX's ``macros`` option
+    (KaTeX infers the argument count from the highest ``#n`` in the body,
+    so the ``[n]`` declaration can be dropped). Bodies are read with a
+    balanced-brace scan, so nested groups survive.
+    """
+    macros: dict[str, str] = {}
+    for m in _NEWCOMMAND_RE.finditer(text):
+        depth, i = 1, m.end()
+        start = i
+        while i < len(text) and depth:
+            if text[i] == "{" and text[i - 1] != "\\":
+                depth += 1
+            elif text[i] == "}" and text[i - 1] != "\\":
+                depth -= 1
+            i += 1
+        if depth == 0:
+            macros["\\" + m.group(1)] = text[start:i - 1].strip()
+    return macros
+
+
+def _parse_inline_macro(value: str) -> tuple[str, str] | None:
+    """``> macro: \\half \\frac{1}{2}`` -> (``\\half``, ``\\frac{1}{2}``)."""
+    m = re.match(r"\s*(\\\w+)\s+(\S.*)$", value)
+    return (m.group(1), m.group(2).strip()) if m else None
 
 
 def _strip_tags(value: str) -> str:
@@ -1957,6 +1997,9 @@ def _build(pfile: str, dev: bool) -> str:
         "header-margin",
         "column-spacing",
         "column-width",
+        "katex",
+        "macros",
+        "macro",
     }
 
     # Backwards-compatibility aliases for common option names in .pres files
@@ -1976,11 +2019,41 @@ def _build(pfile: str, dev: bool) -> str:
             jsval = _to_js_literal(v, mapped_key)
         opts.append(f"{mapped_key}: {jsval}")
 
-    # Point the math plugin at the locally-bundled KaTeX (copied into
-    # reveal.js/katex by assets.inject_revealer_assets) so equations render
-    # offline instead of depending on the jsdelivr CDN at runtime.
-    if "katex" not in setting and (assets.DATA / "katex" / "dist" / "katex.min.js").is_file():
-        opts.append("katex: { local: 'reveal.js/katex' }")
+    # KaTeX config is assembled from parts and merged — a user-supplied
+    # `> katex:` used to clobber the local-bundle option entirely.
+    katex_parts = []
+    if (assets.DATA / "katex" / "dist" / "katex.min.js").is_file():
+        # locally-bundled KaTeX (copied into reveal.js/katex by
+        # assets.inject_revealer_assets): equations render offline instead
+        # of depending on the jsdelivr CDN at runtime
+        katex_parts.append("local: 'reveal.js/katex'")
+    macros: dict[str, str] = {}
+    for fname in _as_list(setting.get("macros")):
+        fp = Path(pdir) / str(fname).strip()
+        if fp.is_file():
+            macros.update(_parse_tex_macros(fp.read_text(encoding="utf-8")))
+        else:
+            print("Warning: `> macros:` file not found: {0}".format(fname))
+    for v in _as_list(setting.get("macro")):
+        parsed = _parse_inline_macro(str(v))
+        if parsed:
+            macros[parsed[0]] = parsed[1]
+        else:
+            print("Warning: `> macro:` needs `\\name definition`, got: {0}".format(v))
+    if macros:
+        pairs = ", ".join(
+            "{0}: {1}".format(_json.dumps(k), _json.dumps(v))
+            for k, v in macros.items())
+        katex_parts.append("macros: { " + pairs + " }")
+    user_katex = setting.get("katex")
+    if isinstance(user_katex, str) and user_katex.strip():
+        raw = user_katex.strip()
+        if raw.startswith("{") and raw.endswith("}"):
+            raw = raw[1:-1].strip()
+        if raw:
+            katex_parts.append(raw)
+    if katex_parts:
+        opts.append("katex: { " + ", ".join(katex_parts) + " }")
 
     extra = "" if not opts else "\n        " + ",\n        ".join(opts) + ",\n        "
     out = out.replace("__REVEAL_OPTIONS__", extra)
