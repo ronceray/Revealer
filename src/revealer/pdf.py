@@ -28,6 +28,10 @@ _CHROME_NAMES = (
 )
 
 
+class ExportCancelled(RuntimeError):
+    """Raised when a PDF export is cancelled between slides."""
+
+
 def _find_chrome() -> str | None:
     for name in _CHROME_NAMES:
         path = shutil.which(name)
@@ -139,8 +143,14 @@ def _shot_list(html: str, separate: bool) -> list[str]:
 
 def export_pdf(pres_or_html: str, out: str | None = None, width: int = 1920,
                height: int = 1080, log=print, progress=None,
-               separate_fragments: bool | None = None) -> str:
-    """Export a presentation to PDF. Accepts a ``.pres`` (built first) or ``.html``."""
+               separate_fragments: bool | None = None,
+               should_cancel=None) -> str:
+    """Export a presentation to PDF. Accepts a ``.pres`` (built first) or ``.html``.
+
+    ``should_cancel`` (optional) is polled between slides; when it returns
+    true the render aborts with :class:`ExportCancelled` and no file is
+    written.
+    """
     chrome = _find_chrome()
     if chrome is None:
         raise RuntimeError("No Chrome/Chromium found on PATH (needed for PDF export).")
@@ -175,6 +185,9 @@ def export_pdf(pres_or_html: str, out: str | None = None, width: int = 1920,
     try:
         with tempfile.TemporaryDirectory() as td:
             for i, suffix in enumerate(shots):
+                if should_cancel is not None and should_cancel():
+                    raise ExportCancelled("cancelled after {0}/{1} slides".format(
+                        i, len(shots)))
                 if progress is not None:
                     progress(i, len(shots))
                 png = os.path.join(td, "slide_{0:03d}.png".format(i))

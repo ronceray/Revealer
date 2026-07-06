@@ -4,6 +4,8 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import pytest
+
 from revealer import build as build_mod
 from revealer.pdf import (
     _SEPARATE_RE,
@@ -71,3 +73,17 @@ def test_routes_and_shots_on_built_deck(deck):
     assert sep == ["#/0/0", "#/0/0/0", "#/0/0/1",
                    "#/1/0",
                    "#/1/1", "#/1/1/0"]
+
+
+def test_export_cancel_before_render(deck, monkeypatch):
+    """should_cancel firing on the first slide aborts with no output file."""
+    from revealer import pdf as pdf_mod
+    monkeypatch.setattr(pdf_mod, "_find_chrome", lambda: "/usr/bin/true")
+    monkeypatch.setattr(pdf_mod.shutil, "which", lambda name: "/usr/bin/true")
+
+    pdir = deck(PRES, name="pf")
+    out = pdir / "pf.pdf"
+    with pytest.raises(pdf_mod.ExportCancelled):
+        pdf_mod.export_pdf(str(pdir / "pf.pres"), out=str(out),
+                           log=lambda *a: None, should_cancel=lambda: True)
+    assert not out.exists()  # nothing written on cancel
