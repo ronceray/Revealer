@@ -44,6 +44,14 @@ from . import edit as edit_mod
 from . import grammar as grammar_mod
 
 DEV_PREFIX = "/__rv__"
+
+# Ordered editor-script manifest: _inject_dev emits one deferred <script>
+# per entry, and _dev_asset serves exactly these names (plus the CSS).
+# The P3a decomposition grows this list; order is load order.
+EDITOR_JS: tuple[str, ...] = (
+    "editor.js",
+)
+_DEV_ASSETS = frozenset(EDITOR_JS) | {"editor.css"}
 SSE_KEEPALIVE_S = 15
 WATCH_INTERVAL_S = 0.25
 ASSET_SCAN_INTERVAL_S = 1.0
@@ -70,6 +78,7 @@ class DevSession:
     clients: list[queue.SimpleQueue] = field(default_factory=list)
     clients_lock: threading.Lock = field(default_factory=threading.Lock)
     lock: threading.RLock = field(default_factory=threading.RLock)
+    test_mode: bool = False             # unlocks /__rv__/test (never in normal serve)
     # undo/redo = a cursor over the shadow-git first-parent history.
     cursor: str | None = None            # detached position (None = at HEAD)
     dirty_keep: bytes | None = None      # unbuilt working state saved by a dirty undo
@@ -194,9 +203,10 @@ def _inject_dev(html: str, sess: DevSession) -> str:
         boot["buildError"] = sess.build_error
     bootstrap = (
         '<script>window.__RV_DEV__ = {0};</script>\n'
-        '<link rel="stylesheet" href="{1}/editor.css">\n'
-        '<script src="{1}/editor.js" defer></script>\n'.format(
+        '<link rel="stylesheet" href="{1}/editor.css">\n'.format(
             json.dumps(boot).replace("</", "<\\/"), DEV_PREFIX)
+        + "".join('<script src="{0}/{1}" defer></script>\n'.format(
+            DEV_PREFIX, name) for name in EDITOR_JS)
     )
     if "</body>" in html:
         return html.replace("</body>", bootstrap + "</body>", 1)
@@ -473,8 +483,11 @@ class _Handler(http.server.SimpleHTTPRequestHandler):
 
         if path == DEV_PREFIX + "/events":
             return self._sse()
-        if path in (DEV_PREFIX + "/editor.js", DEV_PREFIX + "/editor.css"):
-            return self._dev_asset(path.rsplit("/", 1)[1])
+        if path.startswith(DEV_PREFIX + "/") \
+                and path[len(DEV_PREFIX) + 1:] in _DEV_ASSETS:
+            return self._dev_asset(path[len(DEV_PREFIX) + 1:])
+        if path == DEV_PREFIX + "/test":
+            return self._test_runner()
         if path == DEV_PREFIX + "/history/diff":
             if not self._check_token():
                 return self._send_json(403, {"error": "forbidden"})
@@ -825,9 +838,17 @@ class _Handler(http.server.SimpleHTTPRequestHandler):
         html = sess.html_path.read_text(encoding="utf-8")
         self._send_html(_inject_dev(html, sess))
 
+    def _test_runner(self) -> None:
+        """The in-browser JS test runner page (P3a harness); dev-tests only."""
+        if not self.sess.test_mode:
+            self.send_error(404)
+            return
+        self._send_html("<!doctype html><title>rv tests</title>"
+                        "<p>test harness placeholder</p>")
+
     def _dev_asset(self, name: str) -> None:
         src = Path(__file__).parent / "data" / "js" / name
-        if not src.is_file():
+        if name not in _DEV_ASSETS or not src.is_file():
             self.send_error(404)
             return
         body = src.read_bytes()
@@ -912,6 +933,25 @@ class _Handler(http.server.SimpleHTTPRequestHandler):
 
     def log_message(self, format, *args):  # noqa: A002 — quiet the request spam
         pass
+
+
+def start_for_tests(pres: Path, test_mode: bool = False, log=lambda *a: None):
+    """Start a serving thread on an ephemeral port: no watcher, no browser.
+
+    Returns ``(port, sess, shutdown)``. The pytest seam for HTTP-level and
+    (with ``test_mode=True``) in-browser JS tests.
+    """
+    httpd, sess, stop = create_server(pres, port=0, watch=False, log=log)
+    sess.test_mode = test_mode
+    thread = threading.Thread(target=httpd.serve_forever, daemon=True)
+    thread.start()
+
+    def shutdown():
+        stop.set()
+        httpd.shutdown()
+        thread.join(timeout=5)
+
+    return httpd.server_address[1], sess, shutdown
 
 
 def create_server(pres: Path, port: int = 8000, watch: bool = True, log=print):
