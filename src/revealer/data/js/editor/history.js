@@ -19,13 +19,13 @@
 
   function toggleHistory() {
     var w = RV.ui.box({
-      id: 'rv-ed-history', title: '🕐 Save history',
+      id: 'rv-ed-history', title: RV.t('history.title'),
       closes: ['rv-ed-help'],
       buttons: [{
-        label: 'Snapshot…', cls: 'rv-hi-snap',
-        title: 'Snapshot the current state with a note',
+        label: RV.t('history.snapshot'), cls: 'rv-hi-snap',
+        title: RV.t('history.snapshotTitle'),
         onClick: function () {
-          var msg = window.prompt('Snapshot note:', 'before big rework');
+          var msg = window.prompt(RV.t('history.snapshotPrompt'), RV.t('history.snapshotDefault'));
           if (msg === null) return;
           fetch('/__rv__/history/commit', {
             method: 'POST', headers: { 'X-RV-Token': TOKEN, 'Content-Type': 'application/json' },
@@ -39,10 +39,8 @@
     });
     if (!w) return;
     w.body.innerHTML =
-      '<div class="rv-hi-hint">Every save is committed automatically to a shadow git ' +
-      'repo (.rv-history/) inside the deck folder. Restoring first snapshots the ' +
-      'current state — nothing is ever lost. Ctrl+Z also undoes a restore.</div>' +
-      '<div class="rv-hi-list">loading…</div>';
+      '<div class="rv-hi-hint">' + RV.esc(RV.t('history.hint')) + '</div>' +
+      '<div class="rv-hi-list">' + RV.esc(RV.t('history.loading')) + '</div>';
     loadHistory(w.box);
   }
 
@@ -52,20 +50,20 @@
       .then(function (j) {
         var list = hd.querySelector('.rv-hi-list');
         if (!j.entries || !j.entries.length) {
-          list.innerHTML = '<div class="rv-hi-item">no snapshots yet — save once</div>';
+          list.innerHTML = '<div class="rv-hi-item">' + RV.esc(RV.t('history.empty')) + '</div>';
           return;
         }
         var cur = j.cursor || (j.entries[0] && j.entries[0].hash);
         list.innerHTML = j.entries.map(function (e) {
           return '<div class="rv-hi-item' + (e.hash === cur ? ' rv-hi-current' : '') + '">' +
-            (e.hash === cur ? '<span class="rv-hi-cur">◀ current</span>' : '') +
+            (e.hash === cur ? '<span class="rv-hi-cur">' + RV.esc(RV.t('history.current')) + '</span>' : '') +
             '<span class="rv-hi-badge' + (e.auto ? '' : ' rv-hi-manual') + '">' +
-            (e.auto ? 'auto' : 'save') + '</span>' +
+            (e.auto ? RV.esc(RV.t('history.badgeAuto')) : RV.esc(RV.t('history.badgeSave'))) + '</span>' +
             '<span class="rv-hi-when">' + relTime(e.ts) + '</span>' +
             '<span class="rv-hi-msg">' + F.escapeHtml(e.msg.replace(/^(auto|save): /, '')) + '</span>' +
-            '<button class="rv-hi-diff" data-h="' + e.hash + '">Diff</button>' +
-            '<button class="rv-hi-peek" data-h="' + e.hash + '">Peek</button>' +
-            '<button data-h="' + e.hash + '">Restore</button></div>' +
+            '<button class="rv-hi-diff" data-h="' + e.hash + '">' + RV.esc(RV.t('history.diff')) + '</button>' +
+            '<button class="rv-hi-peek" data-h="' + e.hash + '">' + RV.esc(RV.t('history.peek')) + '</button>' +
+            '<button data-h="' + e.hash + '">' + RV.esc(RV.t('history.restore')) + '</button></div>' +
             '<pre class="rv-hi-diffbox" data-h="' + e.hash + '" hidden></pre>';
         }).join('');
         list.querySelectorAll('.rv-hi-diff').forEach(function (b) {
@@ -76,7 +74,7 @@
                   '&token=' + encodeURIComponent(TOKEN))
               .then(function (r) { return r.json(); })
               .then(function (jj) {
-                box.innerHTML = (jj.diff || '(no diff)').split('\n').map(function (ln) {
+                box.innerHTML = (jj.diff || RV.t('history.noDiff')).split('\n').map(function (ln) {
                   var esc = ln.replace(/&/g, '&amp;').replace(/</g, '&lt;');
                   if (/^\+(?!\+\+)/.test(ln)) return '<span class="rv-d-add">' + esc + '</span>';
                   if (/^-(?!--)/.test(ln)) return '<span class="rv-d-del">' + esc + '</span>';
@@ -92,7 +90,7 @@
               method: 'POST', headers: { 'X-RV-Token': TOKEN, 'Content-Type': 'application/json' },
               body: JSON.stringify({ hash: b.getAttribute('data-h') }),
             }).then(function (r) { return r.json(); }).then(function (jj) {
-              if (!jj.ok) { F.toast('Preview failed: ' + (jj.error || '?')); return; }
+              if (!jj.ok) { F.toast(RV.t('history.previewFailed', { error: jj.error || '?' })); return; }
               openPeek(jj.url, b.getAttribute('data-h'));
             });
           });
@@ -103,9 +101,9 @@
               method: 'POST', headers: { 'X-RV-Token': TOKEN, 'Content-Type': 'application/json' },
               body: JSON.stringify({ hash: b.getAttribute('data-h') }),
             }).then(function (r) { return r.json(); }).then(function (jj) {
-              if (jj.unchanged) F.toast('Already at that version');
-              else if (jj.ok) F.toast('Restored — Ctrl+Z to undo');
-              else F.toast('Restore failed: ' + (jj.error || '?'));
+              if (jj.unchanged) F.toast(RV.t('history.alreadyAt'));
+              else if (jj.ok) F.toast(RV.t('history.restored'));
+              else F.toast(RV.t('history.restoreFailedErr', { error: jj.error || '?' }));
             });
           });
         });
@@ -115,10 +113,10 @@
   function openPeek(url, hash) {
     var w = RV.ui.box({
       id: 'rv-ed-peek', replace: true, headCls: 'rv-pk-bar',
-      title: '🕐 Peek: past version',
-      hint: 'read-only preview — the deck is unchanged',
+      title: RV.t('history.peekTitle'),
+      hint: RV.t('history.peekHint'),
       buttons: [{
-        label: 'Restore this version', cls: 'rv-pk-restore',
+        label: RV.t('history.restoreThis'), cls: 'rv-pk-restore',
         onClick: function () {
           fetch('/__rv__/history/restore', {
             method: 'POST', headers: { 'X-RV-Token': TOKEN, 'Content-Type': 'application/json' },
@@ -126,7 +124,7 @@
           }).then(function (r) { return r.json(); }).then(function (jj) {
             var ov = document.getElementById('rv-ed-peek');
             if (ov) ov.remove();
-            F.toast(jj.ok ? 'Restored — Ctrl+Z to undo' : 'Restore failed');
+            F.toast(jj.ok ? RV.t('history.restored') : RV.t('history.restoreFailed'));
           });
         },
       }],

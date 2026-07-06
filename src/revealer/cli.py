@@ -15,7 +15,7 @@ import typer
 from rich.console import Console
 from rich.table import Table
 
-from . import assets, config
+from . import assets, config, i18n
 from .build import build as build_presentation
 
 app = typer.Typer(
@@ -59,10 +59,7 @@ def _all_presentations() -> list[Path]:
 def _require_root() -> Path:
     root = config.get_root()
     if root is None or not root.exists():
-        console.print(
-            "[red]No presentations root configured.[/red] "
-            "Set one with:  [bold]revealer root <path>[/bold]"
-        )
+        console.print(i18n.t("cli.no_root"))
         raise typer.Exit(1)
     return root
 
@@ -76,7 +73,7 @@ def _browse_for_pres() -> Path | None:
     p = Path(answer).expanduser().resolve()
     pdir = p.parent if p.suffix == ".pres" else p
     if not pdir.is_dir() or _find_pres(pdir) is None:
-        console.print("[red]No .pres file found at {0}.[/red]".format(pdir))
+        console.print(i18n.t("cli.no_pres_at", dir=pdir))
         return None
     config.add_recent(pdir)
     return pdir
@@ -122,7 +119,7 @@ def _resolve_target(target: str | None, suffixes: tuple = (".pres",)) -> Path:
     pdir = _resolve_pres_dir(target)
     pres = _find_pres(pdir)
     if pres is None:
-        console.print("[red]No .pres file found in {0}.[/red]".format(pdir))
+        console.print(i18n.t("cli.no_pres_in", dir=pdir))
         raise typer.Exit(1)
     return pres
 
@@ -131,7 +128,7 @@ def _open_in_browser(html: Path) -> None:
     try:
         webbrowser.open(html.resolve().as_uri())
     except Exception:  # pragma: no cover - environment dependent
-        console.print("[yellow]Could not open a browser; open {0} manually.[/yellow]".format(html))
+        console.print(i18n.t("cli.browser_fail", html=html))
 
 
 def _choose_extensions(default: list[str]) -> list[str]:
@@ -153,19 +150,19 @@ def _action_root(path: str | None) -> None:
     if path is None:
         current = config.get_root()
         if current:
-            console.print("Presentations root: [bold]{0}[/bold]".format(current))
+            console.print(i18n.t("cli.root_is", root=current))
         else:
-            console.print("[yellow]No root configured.[/yellow]")
+            console.print(i18n.t("cli.no_root_configured"))
         return
     resolved = config.set_root(path)
-    console.print("Presentations root set to [bold]{0}[/bold]".format(resolved))
+    console.print(i18n.t("cli.root_set", root=resolved))
 
 
 def _action_new(name: str, here: bool) -> None:
     parent = Path.cwd() if here else _require_root()
     pdir = parent / name
     if pdir.exists():
-        console.print("[red]{0} already exists.[/red]".format(pdir))
+        console.print(i18n.t("cli.already_exists", dir=pdir))
         raise typer.Exit(1)
     pdir.mkdir(parents=True)
 
@@ -175,16 +172,16 @@ def _action_new(name: str, here: bool) -> None:
     pres = pdir / "{0}.pres".format(name)
     pres.write_text(template.replace("__TITLE__", name), encoding="utf-8")
 
-    console.print("Setting up reveal.js in [bold]{0}[/bold]...".format(pdir))
+    console.print(i18n.t("cli.setting_up", dir=pdir))
     assets.setup_revealjs(str(pdir), extensions, log=console.print)
 
     build_presentation(str(pres))
-    console.print("[green]Created[/green] {0}".format(pres))
+    console.print(i18n.t("cli.created", path=pres))
 
 
 def _action_build(pres: Path) -> None:
     out = build_presentation(str(pres))
-    console.print("[green]Built[/green] {0}".format(out))
+    console.print(i18n.t("cli.built", path=out))
 
 
 def _action_open(target: str | None, show: bool = True) -> None:
@@ -193,42 +190,39 @@ def _action_open(target: str | None, show: bool = True) -> None:
     pdir = _resolve_pres_dir(target)
     pres = _find_pres(pdir)
     if pres is None:
-        console.print("[red]No .pres file found in {0}.[/red]".format(pdir))
+        console.print(i18n.t("cli.no_pres_in", dir=pdir))
         raise typer.Exit(1)
     config.add_recent(pdir)
     out = Path(build_presentation(str(pres)))
-    console.print("[green]Loaded[/green] {0}".format(pres))
+    console.print(i18n.t("cli.loaded", path=pres))
     if show:
         _open_in_browser(out)
-        console.print("Opened [bold]{0}[/bold] in your browser.".format(out))
+        console.print(i18n.t("cli.opened", path=out))
 
 
 def _action_plugins(target: str | None) -> None:
     pdir = _resolve_pres_dir(target)
     current = assets.read_presentation_extensions(str(pdir))
     extensions = _choose_extensions(current)
-    console.print("Updating reveal.js extensions...")
+    console.print(i18n.t("cli.updating_exts"))
     assets.setup_revealjs(str(pdir), extensions, log=console.print)
     pres = _find_pres(pdir)
     if pres:
         build_presentation(str(pres))
-    console.print("[green]Extensions updated.[/green]")
+    console.print(i18n.t("cli.exts_updated"))
 
 
 def _action_update(target: str | None, force: bool) -> None:
     pdir = _resolve_pres_dir(target)
     extensions = assets.read_presentation_extensions(str(pdir))
     assets.setup_revealjs(str(pdir), extensions, force=force, log=console.print)
-    console.print("[green]reveal.js updated[/green] ({0}).".format(assets.REVEALJS_VERSION))
+    console.print(i18n.t("cli.revealjs_updated", version=assets.REVEALJS_VERSION))
 
 
 def _action_list() -> None:
     presentations = _all_presentations()
     if not presentations:
-        console.print(
-            "[yellow]No presentations yet.[/yellow] Use [bold]Load a presentation[/bold] to open one, "
-            "or set a root with [bold]revealer root <path>[/bold]."
-        )
+        console.print(i18n.t("cli.no_pres_yet"))
         return
     root = config.get_root()
     table = Table(title="Presentations")
@@ -248,7 +242,7 @@ def _menu_build() -> None:
     pdir = _resolve_pres_dir(None)
     pres = _find_pres(pdir)
     if pres is None:
-        console.print("[red]No .pres file found.[/red]")
+        console.print(i18n.t("cli.no_pres_found"))
         return
     _action_build(pres)
 
@@ -266,7 +260,7 @@ def _menu_serve() -> None:
         return
     pres = _find_pres(Path(pdir))
     if pres is None:
-        console.print("[red]No .pres file found in {0}.[/red]".format(pdir))
+        console.print(i18n.t("cli.no_pres_in", dir=pdir))
         return
     config.add_recent(Path(pdir))
     from . import serve as serve_mod
@@ -279,7 +273,7 @@ def _menu_new() -> None:
         return
     here = not bool(config.get_root())
     if here:
-        console.print("[yellow]No root set; creating in the current directory.[/yellow]")
+        console.print(i18n.t("cli.no_root_creating"))
     _action_new(name, here=here)
 
 
@@ -310,7 +304,7 @@ def interactive_menu() -> None:
         "root": ("Set or show the presentations root", _menu_root),
     }
 
-    console.print("[bold]Revealer[/bold] — reveal.js scientific presentations\n")
+    console.print(i18n.t("cli.banner"))
 
     while True:
         choices = [
@@ -454,9 +448,9 @@ def export(
     try:
         out_path = pdf_module.export_pdf(str(src), out, log=console.print)
     except RuntimeError as exc:
-        console.print("[red]{0}[/red]".format(exc))
+        console.print(i18n.t("cli.export_error", error=exc))
         raise typer.Exit(1)
-    console.print("[green]Exported[/green] {0}".format(out_path))
+    console.print(i18n.t("cli.exported", path=out_path))
 
 
 @app.command("pdf", hidden=True)

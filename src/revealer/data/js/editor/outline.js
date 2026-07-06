@@ -68,7 +68,7 @@
   }
 
   function toggleOutline() {
-    var w = RV.ui.box({ id: 'rv-ed-outline', title: 'Slides' });
+    var w = RV.ui.box({ id: 'rv-ed-outline', title: RV.t('outline.title') });
     if (!w) return;
     w.body.innerHTML = '<div class="rv-ol-list"></div>';
     renderOutline();
@@ -91,21 +91,21 @@
         (kids ? ' <span class="rv-ol-kids">▤ ' + kids + '</span>' : '') +
         '</span>';
       if (span && isInc(sec)) {
-        html += '<span class="rv-ol-unmapped rv-ol-inc">(included)</span>';
+        html += '<span class="rv-ol-unmapped rv-ol-inc">' + RV.esc(RV.t('outline.included')) + '</span>';
       } else if (span) {
         // Cross-file moves are out of scope for v1: a swap with an included
         // neighbour would post file-local line numbers against the main file.
         var canUp = i > 0 && !!spanOf(secs[i - 1]) && !isInc(secs[i - 1]);
         var canDown = i < secs.length - 1 && !!spanOf(secs[i + 1]) && !isInc(secs[i + 1]);
         html += '<span class="rv-ol-acts">' +
-          '<button data-act="add" title="Add a slide after">＋</button>' +
-          '<button data-act="dup" title="Duplicate">⧉</button>' +
-          '<button data-act="up" title="Move up"' + (canUp ? '' : ' disabled') + '>↑</button>' +
-          '<button data-act="down" title="Move down"' + (canDown ? '' : ' disabled') + '>↓</button>' +
-          '<button data-act="del" title="Delete (Ctrl+Z undoes)">🗑</button>' +
+          '<button data-act="add" title="' + RV.esc(RV.t('outline.addTitle')) + '">＋</button>' +
+          '<button data-act="dup" title="' + RV.esc(RV.t('outline.dupTitle')) + '">⧉</button>' +
+          '<button data-act="up" title="' + RV.esc(RV.t('outline.upTitle')) + '"' + (canUp ? '' : ' disabled') + '>↑</button>' +
+          '<button data-act="down" title="' + RV.esc(RV.t('outline.downTitle')) + '"' + (canDown ? '' : ' disabled') + '>↓</button>' +
+          '<button data-act="del" title="' + RV.esc(RV.t('outline.delTitle')) + '">🗑</button>' +
           '</span>';
       } else {
-        html += '<span class="rv-ol-unmapped">(unmapped)</span>';
+        html += '<span class="rv-ol-unmapped">' + RV.esc(RV.t('outline.unmapped')) + '</span>';
       }
       row.innerHTML = html;
       row.addEventListener('click', function () {
@@ -120,7 +120,7 @@
       });
       list.appendChild(row);
     });
-    if (!secs.length) list.innerHTML = '<div class="rv-ol-item">no slides</div>';
+    if (!secs.length) list.innerHTML = '<div class="rv-ol-item">' + RV.esc(RV.t('outline.none')) + '</div>';
   }
 
   /* All actions go through F.rvPostEdit (sha/queue/toasts); the rebuild's

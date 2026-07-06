@@ -32,13 +32,14 @@
      owns the progress box (title + live slide counter + a Cancel button). */
 
   function exportHtml() {
-    F.toast('Exporting HTML…', 60000);
+    F.toast(RV.t('toast.exportingHtml'), 60000);
     fetch('/__rv__/export?kind=html', { method: 'POST', headers: { 'X-RV-Token': TOKEN } })
       .then(function (r) { return r.json(); })
       .then(function (j) {
-        F.toast(j.ok ? 'Exported → ' + j.path : 'Export failed: ' + (j.error || '?'), 6000);
+        F.toast(j.ok ? RV.t('toast.exported', { path: j.path })
+                     : RV.t('toast.exportFailedErr', { error: j.error || '?' }), 6000);
       })
-      .catch(function () { F.toast('Export failed', 4000); });
+      .catch(function () { F.toast(RV.t('toast.exportFailed'), 4000); });
   }
 
   var exportJob = null;   // id of the running PDF export, if any
@@ -57,16 +58,16 @@
   function showExportBox(text) {
     var w = RV.ui.box({
       id: 'rv-ed-export', replace: true, close: false,
-      title: 'Exporting PDF',
-      buttons: [{ label: 'Cancel', cls: 'rv-xp-cancel',
-                  title: 'Stop the export', onClick: cancelExport }],
+      title: RV.t('export.pdfTitle'),
+      buttons: [{ label: RV.t('export.cancel'), cls: 'rv-xp-cancel',
+                  title: RV.t('export.cancelTitle'), onClick: cancelExport }],
     });
     w.body.innerHTML = '<div class="rv-xp-msg"></div>';
     w.body.querySelector('.rv-xp-msg').textContent = text;
   }
 
   function startPdfExport() {
-    showExportBox('Starting PDF export…');
+    showExportBox(RV.t('export.starting'));
     fetch('/__rv__/export?kind=pdf&job=1', { method: 'POST', headers: { 'X-RV-Token': TOKEN } })
       .then(function (r) {
         return r.json().then(function (j) { return { status: r.status, j: j }; });
@@ -74,20 +75,20 @@
       .then(function (res) {
         if (res.status === 409) {
           closeExportBox();
-          F.toast('A PDF export is already running', 4000);
+          F.toast(RV.t('toast.exportRunning'), 4000);
         } else if (res.j && res.j.ok && res.j.job) {
           exportJob = res.j.job;
         } else {
           closeExportBox();
-          F.toast('Export failed: ' + ((res.j && res.j.error) || '?'), 6000);
+          F.toast(RV.t('toast.exportFailedErr', { error: (res.j && res.j.error) || '?' }), 6000);
         }
       })
-      .catch(function () { closeExportBox(); F.toast('Export failed', 4000); });
+      .catch(function () { closeExportBox(); F.toast(RV.t('toast.exportFailed'), 4000); });
   }
 
   function cancelExport() {
     var msg = exportBoxMsg();
-    if (msg) msg.textContent = 'Cancelling…';
+    if (msg) msg.textContent = RV.t('export.cancelling');
     fetch('/__rv__/export/cancel', { method: 'POST', headers: { 'X-RV-Token': TOKEN } })
       .catch(function () {});
   }
@@ -96,25 +97,25 @@
   function onExportProgress(ev) {
     if (exportJob && ev.job !== exportJob) return;
     var msg = exportBoxMsg();
-    if (msg) msg.textContent = 'Exporting slide ' + ev.done + '/' + ev.total;
+    if (msg) msg.textContent = RV.t('export.slide', { done: ev.done, total: ev.total });
   }
 
   function onExportDone(ev) {
     if (exportJob && ev.job !== exportJob) return;
     closeExportBox();
-    F.toast('Exported → ' + ev.path, 6000);
+    F.toast(RV.t('toast.exported', { path: ev.path }), 6000);
   }
 
   function onExportCancelled(ev) {
     if (exportJob && ev.job !== exportJob) return;
     closeExportBox();
-    F.toast('Export cancelled', 3000);
+    F.toast(RV.t('toast.exportCancelled'), 3000);
   }
 
   function onExportError(ev) {
     if (exportJob && ev.job !== exportJob) return;
     closeExportBox();
-    F.toast('Export failed: ' + (ev.error || '?'), 6000);
+    F.toast(RV.t('toast.exportFailedErr', { error: ev.error || '?' }), 6000);
   }
 
   function buildToolbar() {
@@ -122,18 +123,18 @@
     var tb = document.createElement('div');
     tb.id = 'rv-ed-toolbar';
     tb.innerHTML =
-      '<button class="rv-tb-edit" title="Toggle edit mode (E)">✏ Edit</button>' +
-      '<button class="rv-tb-undo" title="Undo (Ctrl+Z)">↶</button>' +
-      '<button class="rv-tb-redo" title="Redo (Ctrl+Shift+Z)">↷</button>' +
-      '<button class="rv-tb-frag" title="Fragments (F)">☰</button>' +
-      '<button class="rv-tb-outline" title="Slide outline (O)">▤</button>' +
-      '<button class="rv-tb-media" title="Import an image / movie into Media/">＋ Media</button>' +
-      '<button class="rv-tb-view" title="Toggle split view">⇔</button>' +
-      '<button class="rv-tb-hist" title="Save history (time machine)">🕐</button>' +
-      '<button class="rv-tb-xhtml" title="Export the final HTML next to the .pres">⬇ HTML</button>' +
-      '<button class="rv-tb-xpdf" title="Export a PDF next to the .pres">⬇ PDF</button>' +
+      '<button class="rv-tb-edit" title="' + RV.esc(RV.t('toolbar.editTitle')) + '">' + RV.t('toolbar.edit') + '</button>' +
+      '<button class="rv-tb-undo" title="' + RV.esc(RV.t('toolbar.undoTitle')) + '">↶</button>' +
+      '<button class="rv-tb-redo" title="' + RV.esc(RV.t('toolbar.redoTitle')) + '">↷</button>' +
+      '<button class="rv-tb-frag" title="' + RV.esc(RV.t('toolbar.fragTitle')) + '">☰</button>' +
+      '<button class="rv-tb-outline" title="' + RV.esc(RV.t('toolbar.outlineTitle')) + '">▤</button>' +
+      '<button class="rv-tb-media" title="' + RV.esc(RV.t('toolbar.mediaTitle')) + '">' + RV.t('toolbar.media') + '</button>' +
+      '<button class="rv-tb-view" title="' + RV.esc(RV.t('toolbar.viewTitle')) + '">⇔</button>' +
+      '<button class="rv-tb-hist" title="' + RV.esc(RV.t('toolbar.histTitle')) + '">🕐</button>' +
+      '<button class="rv-tb-xhtml" title="' + RV.esc(RV.t('toolbar.xhtmlTitle')) + '">' + RV.t('toolbar.xhtml') + '</button>' +
+      '<button class="rv-tb-xpdf" title="' + RV.esc(RV.t('toolbar.xpdfTitle')) + '">' + RV.t('toolbar.xpdf') + '</button>' +
       '<span class="rv-tb-status rv-st-idle">' + F.escapeHtml(PRES_NAME) + '</span>' +
-      '<button class="rv-tb-help" title="Help">?</button>';
+      '<button class="rv-tb-help" title="' + RV.esc(RV.t('toolbar.helpTitle')) + '">?</button>';
     document.body.appendChild(tb);
     tb.querySelector('.rv-tb-edit').addEventListener('click', function () { F.setEdit(!S.on); });
     tb.querySelector('.rv-tb-undo').addEventListener('click', function () { F.rvUndoRedo('undo'); });
@@ -148,11 +149,11 @@
     if (window.__RV_DEV__.history === 'fallback') {
       var hb = tb.querySelector('.rv-tb-hist');
       hb.disabled = true;
-      hb.title = 'Save history needs git on the server\u2019s PATH';
+      hb.title = RV.t('toolbar.histDisabledTitle');
       hb.style.opacity = '0.4';
       if (!window.__rvHistToastShown) {
         window.__rvHistToastShown = true;
-        F.toast('git not found \u2014 undo limited to the last edit, no save history', 6000);
+        F.toast(RV.t('toast.gitMissing'), 6000);
       }
     } else {
       tb.querySelector('.rv-tb-hist').addEventListener('click', F.toggleHistory);
@@ -170,32 +171,17 @@
     try {
       if (sessionStorage.getItem('rv-ed-lastsave') === 'pending') {
         sessionStorage.removeItem('rv-ed-lastsave');
-        rvStatus('saved', 'Saved to ' + PRES_NAME + ' ✓');
+        rvStatus('saved', RV.t('status.saved', { name: PRES_NAME }));
         setTimeout(function () { rvStatus('idle', PRES_NAME); }, 2500);
       }
     } catch (e) {}
   }
 
   function toggleHelp() {
-    var w = RV.ui.box({ id: 'rv-ed-help', title: 'How editing works',
+    var w = RV.ui.box({ id: 'rv-ed-help', title: RV.t('help.title'),
                         closes: ['rv-ed-history'] });
     if (!w) return;
-    w.body.innerHTML =
-      '<p>You are editing <code>' + F.escapeHtml(PRES_NAME) + '</code> — the source text file, ' +
-      'not the HTML. Every change is written to it immediately as a minimal ' +
-      'edit, the deck rebuilds, and this preview reloads in place. There is ' +
-      'no separate save step.</p>' +
-      '<ul>' +
-      '<li><b>✏ Edit / E</b> — toggle edit mode; click any element to select it</li>' +
-      '<li><b>Panel</b> — edit the selection\'s parameters, move it, edit its source lines, or the whole slide when nothing is selected</li>' +
-      '<li><b>⇔</b> — split view (deck left, panel right, draggable divider)</li>' +
-      '<li><b>＋ Media</b> — pick a file: it is copied into Media/ and inserted</li>' +
-      '<li><b>Del</b> — delete the selected block (undo with Ctrl+Z)</li>' +
-      '<li><b>Drag</b> — blue handles resize/move; the square grip drags a block to another column</li>' +
-      '<li><b>↶ ↷ / Ctrl+Z</b> — undo/redo edits made here</li>' +
-      '<li><b>☰ / F</b> — reorder the slide\'s fragments</li>' +
-      '<li><b>Drop a file</b> — insert an image/movie into a column</li>' +
-      '</ul>';
+    w.body.innerHTML = RV.t('help.body', { name: F.escapeHtml(PRES_NAME) });
   }
 
   /* --- media import (file picker) -------------------------------------------------- */
@@ -216,7 +202,7 @@
     fetch('/__rv__/upload?name=' + encodeURIComponent(file.name), {
       method: 'PUT', headers: { 'X-RV-Token': TOKEN }, body: file,
     }).then(function (r) { return r.json(); }).then(function (j) {
-      if (!j.ok) { F.toast('Upload rejected: ' + (j.error || '?')); return; }
+      if (!j.ok) { F.toast(RV.t('toast.uploadRejected', { error: j.error || '?' })); return; }
       var sel = S.sel, at = null, flags = [];
       var sec = window.Reveal && Reveal.getCurrentSlide();
       function spanDest(container, kind) {
@@ -239,10 +225,10 @@
       } else if (sec && sec.hasAttribute('data-rv-src')) {
         at = spanDest(sec, 'slide');
       }
-      if (!at) { F.toast('Uploaded to ' + j.path + ' — add a “! ' + j.path + '” line'); return; }
+      if (!at) { F.toast(RV.t('toast.uploadHint', { path: j.path })); return; }
       F.rvPostEdit([{ op: 'insert_media', at: at, kind: isVideo ? 'video' : 'img',
                     path: j.path, flags: flags }]);
-    }).catch(function () { F.toast('Upload failed'); });
+    }).catch(function () { F.toast(RV.t('toast.uploadFailed')); });
   }
 
   // exports (what other editor/ modules call):

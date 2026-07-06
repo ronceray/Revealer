@@ -54,8 +54,8 @@
         renderSlideSource(p, sec);
       } else {
         p.innerHTML =
-          '<div class="rv-pn-head">Nothing selected</div>' +
-          '<div class="rv-pn-hint">Click an element in the slide to inspect and edit it.</div>';
+          '<div class="rv-pn-head">' + RV.esc(RV.t('panel.nothing')) + '</div>' +
+          '<div class="rv-pn-hint">' + RV.esc(RV.t('panel.nothingHint')) + '</div>';
         appendCheatsheet(p);
       }
       return;
@@ -79,18 +79,18 @@
             : F.escapeHtml(RV.PRES_NAME)) +
       ' : ' + s + (e !== s ? '–' + e : '') + '</div>' +
       (kind === 'paragraph' && !el.querySelector('.katex,pre')
-        ? '<div class="rv-pn-hint">Double-click the paragraph to edit its text in place.</div>' : '') +
+        ? '<div class="rv-pn-hint">' + RV.esc(RV.t('panel.dblclickHint')) + '</div>' : '') +
       '<div class="rv-pn-fields"></div>' +
       '<div class="rv-pn-actions">' +
-      '<button class="rv-pn-up" title="Move before the previous sibling">▲ Up</button>' +
-      '<button class="rv-pn-down" title="Move after the next sibling">▼ Down</button>' +
-      '<button class="rv-pn-del" title="Delete this block from the .pres (Del)">🗑 Delete</button>' +
+      '<button class="rv-pn-up" title="' + RV.esc(RV.t('panel.upTitle')) + '">' + RV.esc(RV.t('panel.up')) + '</button>' +
+      '<button class="rv-pn-down" title="' + RV.esc(RV.t('panel.downTitle')) + '">' + RV.esc(RV.t('panel.down')) + '</button>' +
+      '<button class="rv-pn-del" title="' + RV.esc(RV.t('panel.deleteTitle')) + '">' + RV.esc(RV.t('panel.delete')) + '</button>' +
       '</div>' +
-      '<div class="rv-pn-srctitle">Source (editable)</div>' +
+      '<div class="rv-pn-srctitle">' + RV.esc(RV.t('panel.source')) + '</div>' +
       '<div class="rv-fmt-slot"></div>' +
       '<textarea class="rv-pn-src" spellcheck="false"></textarea>' +
-      '<button class="rv-pn-apply">Apply source</button>' +
-      '<div class="rv-pn-foot">Changes save automatically to the .pres — no save button needed.</div>';
+      '<button class="rv-pn-apply">' + RV.esc(RV.t('panel.apply')) + '</button>' +
+      '<div class="rv-pn-foot">' + RV.esc(RV.t('panel.autosave')) + '</div>';
     appendCheatsheet(p);
 
     p.querySelectorAll('.rv-pn-crumb').forEach(function (c) {
@@ -132,19 +132,18 @@
     var s0 = F.srcOf(sec), e0 = F.srcEndOf(sec);
     var file = F.fileOf(sec);  // an included slide edits its own file (P8)
     p.innerHTML =
-      '<div class="rv-pn-head"><b>' + (F.kindOf(sec) === 'slide' ? 'This slide' : F.kindOf(sec)) + '</b>' +
+      '<div class="rv-pn-head"><b>' + (F.kindOf(sec) === 'slide' ? RV.esc(RV.t('panel.thisSlide')) : F.kindOf(sec)) + '</b>' +
       ' <span class="rv-pn-sub">' +
       (file ? '<span class="rv-pn-file">' + F.escapeHtml(file) + '</span>'
             : F.escapeHtml(RV.PRES_NAME)) +
       ' : ' + s0 + '–' + e0 + '</span></div>' +
-      (file ? '<div class="rv-pn-hint">Included from <code>' + F.escapeHtml(file) +
-              '</code> — edits here save to that file.</div>' : '') +
-      '<div class="rv-pn-hint">Click an element for its parameters, or edit the whole slide here.</div>' +
-      '<div class="rv-pn-srctitle">Slide source (editable)</div>' +
+      (file ? '<div class="rv-pn-hint">' + RV.t('panel.includedFrom', { file: F.escapeHtml(file) }) + '</div>' : '') +
+      '<div class="rv-pn-hint">' + RV.esc(RV.t('panel.slideHint')) + '</div>' +
+      '<div class="rv-pn-srctitle">' + RV.esc(RV.t('panel.slideSource')) + '</div>' +
       '<div class="rv-fmt-slot"></div>' +
       '<textarea class="rv-pn-src rv-pn-src-slide" spellcheck="false"></textarea>' +
-      '<button class="rv-pn-apply">Apply source</button>' +
-      '<div class="rv-pn-foot">Changes save automatically to the .pres — no save button needed.</div>';
+      '<button class="rv-pn-apply">' + RV.esc(RV.t('panel.apply')) + '</button>' +
+      '<div class="rv-pn-foot">' + RV.esc(RV.t('panel.autosave')) + '</div>';
     var slot0 = p.querySelector('.rv-fmt-slot');
     if (slot0) slot0.appendChild(F.formatBar(p.querySelector('.rv-pn-src')));
     var applyBtn0 = p.querySelector('.rv-pn-apply');
@@ -168,18 +167,18 @@
 
 
   var CHEATSHEET = [
-    ['Slides', ['=== Slide title', '--- vertical sub-slide', '%%% Section divider',
+    ['cheat.slides', ['=== Slide title', '--- vertical sub-slide', '%%% Section divider',
                 '>>> first: Deck title', '>>> biblio']],
-    ['Layout', ['> fill', '> row h=400 24px', '> col 2/5 center', '> end: row',
+    ['cheat.layout', ['> fill', '> row h=400 24px', '> col 2/5 center', '> end: row',
                 '|| 40%   (text columns)', '| 55%', '||']],
-    ['Media', ['! img.png fill h=200px +2 | caption', '!! movie.mp4 loop',
+    ['cheat.media', ['! img.png fill h=200px +2 | caption', '!! movie.mp4 loop',
                'flags: fill contain cover top h= w= + +N']],
-    ['Components', ['> info Title … > end: info', '> warn / > good', '> eq +  … > end: eq',
+    ['cheat.components', ['> info Title … > end: info', '> warn / > good', '> eq +  … > end: eq',
                     '> grid(2,2) compact / > card +', '> stack h=300 / > layer + clear',
                     '> pin: 50% 50% 20% +', '> frag 2 … > end: frag', '> table(2,3)']],
-    ['Text & math', ['* bullet (2 spaces = nested)', '[ highlighted line ]',
+    ['cheat.textMath', ['* bullet (2 spaces = nested)', '[ highlighted line ]',
                      '$inline$  $$display$$', '@@ python … @@']],
-    ['Inline format', ['**bold**  *italic*  \`code\`', '[text](https://url)',
+    ['cheat.inlineFormat', ['**bold**  *italic*  \`code\`', '[text](https://url)',
                        '[text]{.accent}  [x]{color=#f00}', '[big]{.lede}  [small]{.sm}',
                        '> size: lede   (paragraph scope)', '> align: center',
                        'escape: \\* \\\` \\[']],
@@ -188,9 +187,9 @@
   function appendCheatsheet(p) {
     var d = document.createElement('details');
     d.className = 'rv-pn-cheat';
-    d.innerHTML = '<summary>📖 Command cheatsheet</summary>' +
+    d.innerHTML = '<summary>' + RV.esc(RV.t('panel.cheatsheet')) + '</summary>' +
       CHEATSHEET.map(function (sec) {
-        return '<div class="rv-cs-sec"><b>' + sec[0] + '</b><pre>' +
+        return '<div class="rv-cs-sec"><b>' + RV.esc(RV.t(sec[0])) + '</b><pre>' +
           sec[1].join('\n') + '</pre></div>';
       }).join('');
     try { d.open = localStorage.getItem('rv-ed-cheat') === '1'; } catch (e) {}
@@ -231,7 +230,7 @@
       var toks = tokensOf(line0, /^\s*>?\s*\S+(.*)$/) ;
       var fm = findToken(toks, /^\+(\d+)?$/);
       defs.push({
-        label: 'fragment #', value: fm ? (fm[1] || '+') : '',
+        label: RV.t('field.fragIndex'), value: fm ? (fm[1] || '+') : '',
         apply: function (v) {
           if (v === '') return null;
           return { op: 'set_fragment_index', line: s, construct: construct,
@@ -243,35 +242,35 @@
     if (kind === 'pin') {
       var nums = (line0.match(/pin\s*:\s*(.*)$/) || ['', ''])[1]
         .replace('+', ' ').trim().split(/\s+/).filter(Boolean);
-      defs.push({ label: 'x', value: nums[0] || '50%', apply: pinApply(0, nums, s) });
-      defs.push({ label: 'y', value: nums[1] || '50%', apply: pinApply(1, nums, s) });
-      defs.push({ label: 'width', value: nums[2] || '', apply: pinApply(2, nums, s) });
+      defs.push({ label: RV.t('field.x'), value: nums[0] || '50%', apply: pinApply(0, nums, s) });
+      defs.push({ label: RV.t('field.y'), value: nums[1] || '50%', apply: pinApply(1, nums, s) });
+      defs.push({ label: RV.t('field.width'), value: nums[2] || '', apply: pinApply(2, nums, s) });
     } else if (kind === 'media') {
       var toks = tokensOf(line0, /^\s*!{1,2}\s+\S+(.*?)(?:\|.*)?$/);
       var h = findToken(toks, /^h=(.+)$/i), w = findToken(toks, /^w=(.+)$/i);
-      defs.push({ label: 'height', value: h ? h[1] : '',
+      defs.push({ label: RV.t('field.height'), value: h ? h[1] : '',
         apply: function (v) { return { op: 'set_media_size', line: s, dim: 'h', value: v || null }; } });
-      defs.push({ label: 'width', value: w ? w[1] : '',
+      defs.push({ label: RV.t('field.width'), value: w ? w[1] : '',
         apply: function (v) { return { op: 'set_media_size', line: s, dim: 'w', value: v || null }; } });
       fragDef('media');
     } else if (kind === 'row') {
       var toks2 = tokensOf(line0, /^\s*>\s*row\b(.*)$/);
       var h2 = findToken(toks2, /^h=(\d+)/i);
       var gap = toks2.filter(function (t) { return !/^h=/i.test(t) && !/^\+\d*$/.test(t); })[0];
-      defs.push({ label: 'height px', value: h2 ? h2[1] : '',
+      defs.push({ label: RV.t('field.heightPx'), value: h2 ? h2[1] : '',
         apply: function (v) { return { op: 'set_row_height', line: s, value: v ? parseInt(v, 10) : null }; } });
-      defs.push({ label: 'gap', value: gap || '',
+      defs.push({ label: RV.t('field.gap'), value: gap || '',
         apply: function (v) { return v ? { op: 'set_row_gap', line: s, value: v } : null; } });
     } else if (kind === 'stack') {
       var h3 = findToken(tokensOf(line0, /^\s*>\s*stack\b(.*)$/), /^h=(\d+)/i);
-      defs.push({ label: 'height px', value: h3 ? h3[1] : '',
+      defs.push({ label: RV.t('field.heightPx'), value: h3 ? h3[1] : '',
         apply: function (v) { return { op: 'set_stack_height', line: s, value: v ? parseInt(v, 10) : null }; } });
     } else if (kind === 'region') {
       var toks3 = tokensOf(line0, /^\s*>\s*col\b(.*)$/);
       var size = toks3.filter(function (t) {
         return !/^\+\d*$/.test(t) && ['center', 'relative', 'clip'].indexOf(t.toLowerCase()) === -1;
       })[0];
-      defs.push({ label: 'size (2/5, 40%, 300px)', value: size || '',
+      defs.push({ label: RV.t('field.colSize'), value: size || '',
         apply: function (v) { return { op: 'set_col_size', line: s, new: v || null }; } });
       fragDef('col');
     } else if (kind === 'grid') {
@@ -280,7 +279,7 @@
         var gm = lines[i].match(/^\s*>\s*gap\s*:\s*(.*)$/);
         if (gm) { gapLine = gm[1]; break; }
       }
-      defs.push({ label: 'gap', value: gapLine || '',
+      defs.push({ label: RV.t('field.gap'), value: gapLine || '',
         apply: function (v) { return v ? { op: 'set_grid_gap', line: s, end: e, value: v } : null; } });
     } else if (kind === 'card') {
       fragDef('card');
@@ -297,13 +296,13 @@
       return;
     } else if (kind === 'column') {
       var wm = line0.match(/^\s*\|{1,2}\s*(.*)$/);
-      defs.push({ label: 'width', value: wm ? wm[1] : '',
+      defs.push({ label: RV.t('field.width'), value: wm ? wm[1] : '',
         apply: function (v) { return { op: 'set_block_width', line: s, new: v || null }; } });
     }
 
     box.innerHTML = defs.length
       ? defs.map(function (d, i) { return fld(d.label, d.value).replace('<label', '<label data-i="' + i + '"'); }).join('')
-      : '<div class="rv-pn-hint">No quick parameters for this element — edit its source below.</div>';
+      : '<div class="rv-pn-hint">' + RV.esc(RV.t('panel.noParams')) + '</div>';
 
     box.querySelectorAll('.rv-pn-fld input').forEach(function (input) {
       var def = defs[parseInt(input.parentElement.getAttribute('data-i'), 10)];
@@ -330,8 +329,7 @@
       if (ids.length < 40 && n.id) ids.push({ id: n.id, node: n });
     });
     if (!ids.length) {
-      box.innerHTML = '<div class="rv-pn-hint">No id-carrying elements in this SVG — ' +
-        'add ids (e.g. in Inkscape) to animate parts.</div>';
+      box.innerHTML = '<div class="rv-pn-hint">' + RV.esc(RV.t('panel.svgNoIds')) + '</div>';
       return;
     }
     var sec = Reveal.getCurrentSlide();
@@ -357,18 +355,17 @@
             preserved.push(j.lines[k]);
           }
         }
-        box.innerHTML = '<div class="rv-pn-hint">Reveal SVG elements as steps ' +
-          '(– = always visible):</div>' +
+        box.innerHTML = '<div class="rv-pn-hint">' + RV.esc(RV.t('panel.svgSteps')) + '</div>' +
           ids.map(function (it, i) {
             var cur = step[it.id] || '';
             return '<label class="rv-pn-fld" data-id="' + F.escapeHtml(it.id) + '"><span>#' + F.escapeHtml(it.id) +
               '</span><select>' + ['<option value="">–</option>'].concat(
                 [1,2,3,4,5,6,7,8].map(function (n) {
                   return '<option value="' + n + '"' + (cur === n ? ' selected' : '') +
-                    '>step ' + n + '</option>';
+                    '>' + RV.esc(RV.t('panel.svgStep', { n: n })) + '</option>';
                 })).join('') + '</select></label>';
           }).join('') +
-          '<button class="rv-pn-svgapply">Apply steps</button>';
+          '<button class="rv-pn-svgapply">' + RV.esc(RV.t('panel.svgApply')) + '</button>';
         box.querySelectorAll('.rv-pn-fld').forEach(function (row) {
           var node = el.querySelector('svg [id="' + row.getAttribute('data-id') + '"]');
           row.addEventListener('mouseenter', function () { S.hover = node; F.syncChrome(); });
@@ -420,7 +417,7 @@
     var mine = F.mappedChildren(parent);
     var i = mine.indexOf(el);
     var target = mine[i + dir];
-    if (!target) { F.toast('Already at the ' + (dir < 0 ? 'top' : 'bottom')); return; }
+    if (!target) { F.toast(dir < 0 ? RV.t('toast.atTop') : RV.t('toast.atBottom')); return; }
     var container = containerOf(el);
     var cSpan = container ? [F.srcOf(container), F.srcEndOf(container)]
                           : [F.srcOf(el), F.srcEndOf(target)];
@@ -443,10 +440,10 @@
   function deleteSelected(el) {
     var construct = F.constructOf(el);
     if (!el.hasAttribute('data-rv-src') || el.tagName === 'SECTION') {
-      F.toast('Select a block inside the slide to delete it');
+      F.toast(RV.t('toast.selectToDelete'));
       return;
     }
-    F.toast('Deleted ' + F.kindOf(el) + ' — Ctrl+Z to undo');
+    F.toast(RV.t('toast.deleted', { kind: F.kindOf(el) }));
     var file = F.fileOf(el);
     RV.set('sel', null);
     F.rvPostEdit([{

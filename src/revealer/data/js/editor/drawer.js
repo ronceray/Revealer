@@ -34,10 +34,10 @@
   }
 
   function toggleDrawer() {
-    var w = RV.ui.box({ id: 'rv-ed-drawer', title: 'Fragments (reveal order)' });
+    var w = RV.ui.box({ id: 'rv-ed-drawer', title: RV.t('drawer.title') });
     if (!w) return;
     w.body.innerHTML = '<div class="rv-ed-drawer-list"></div>' +
-      '<div class="rv-ed-drawer-foot">↑↓ reorder · writes explicit +1..+n</div>';
+      '<div class="rv-ed-drawer-foot">' + RV.esc(RV.t('drawer.foot')) + '</div>';
     renderDrawer();
   }
 
@@ -51,7 +51,7 @@
       var row = document.createElement('div');
       row.className = 'rv-ed-drawer-item';
       var mapped = el.hasAttribute('data-rv-src');
-      var label = F.kindOf(el) + (mapped ? ' · :' + el.getAttribute('data-rv-src') : ' · (unmapped)');
+      var label = F.kindOf(el) + (mapped ? ' · :' + el.getAttribute('data-rv-src') : ' · ' + RV.t('drawer.unmapped'));
       row.innerHTML = '<span>' + (i + 1) + '. ' + label + '</span>' +
         (mapped ? '<span class="rv-ed-updown"><button data-d="-1">↑</button>' +
                   '<button data-d="1">↓</button></span>' : '');
@@ -64,7 +64,7 @@
       });
       list.appendChild(row);
     });
-    if (!frags.length) list.innerHTML = '<div class="rv-ed-drawer-item">no fragments on this slide</div>';
+    if (!frags.length) list.innerHTML = '<div class="rv-ed-drawer-item">' + RV.esc(RV.t('drawer.none')) + '</div>';
   }
 
   function reorderFragment(frags, i, delta) {
@@ -74,7 +74,7 @@
     var tmp = order[i]; order[i] = order[j]; order[j] = tmp;
     var mapped = order.filter(function (el) { return el.hasAttribute('data-rv-src'); });
     if (mapped.length !== order.length) {
-      F.toast('Some fragments are raw HTML — their order can’t be rewritten');
+      F.toast(RV.t('drawer.rawHtml'));
     }
     F.rvPostEdit([{
       op: 'reorder_fragments',
