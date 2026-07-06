@@ -1730,6 +1730,12 @@ def _build(pfile: str, dev: bool) -> str:
                 else:
                     _slide_append(slide[-1], line, lineno)
 
+    # Slide source spans: a slide ends on the line before the next marker.
+    total_lines = pres_text.count("\n") + (0 if pres_text.endswith("\n") else 1)
+    for i, S in enumerate(slide):
+        nxt = [T["src"] for T in slide[i + 1:] if T.get("src") is not None]
+        S["src_end"] = (min(nxt) - 1) if nxt else total_lines
+
     # === Bibliography ========================================================
 
     biblio = Bibtex(setting["bibtex"], pdir) if "bibtex" in setting else None
@@ -1866,7 +1872,7 @@ def _build(pfile: str, dev: bool) -> str:
             if S["type"] == "parent":
                 content += '<section data-transition="none">'
 
-            opt = 'data-transition="none" data-state="slide_{:d}"'.format(k) + _src_attr(S.get("src"))
+            opt = 'data-transition="none" data-state="slide_{:d}"'.format(k) + _src_attr(S.get("src"), S.get("src_end"))
 
             if S["param"].get("visibility") == "hidden":
                 opt += ' data-visibility="hidden"'

@@ -344,3 +344,52 @@ html.rv-edit .reveal .slides section * { cursor: crosshair; }
 
 /* keep the fragment drawer clear of the panel */
 #rv-ed-drawer { right: 306px; }
+
+/* --- split view + cheatsheet ------------------------------------------------ */
+
+:root { --rv-pw: 320px; }
+
+body.rv-split .reveal {
+  width: calc(100vw - var(--rv-pw)) !important;
+}
+body.rv-split #rv-ed-panel {
+  display: flex;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  width: calc(var(--rv-pw) - 26px);
+  max-height: 100vh;
+  border-radius: 0;
+  padding-top: 56px; /* clear of nothing on the right, but keep breathing room */
+}
+body.rv-split #rv-ed-drawer { right: calc(var(--rv-pw) + 10px); }
+
+#rv-ed-divider {
+  position: fixed;
+  top: 0;
+  bottom: 0;
+  right: calc(var(--rv-pw) - 3px);
+  width: 7px;
+  cursor: col-resize;
+  z-index: 9650;
+}
+#rv-ed-divider:hover { background: rgba(42, 118, 221, 0.35); }
+
+#rv-ed-toolbar .rv-tb-view.rv-active { background: #2a76dd; border-color: #2a76dd; }
+
+#rv-ed-panel .rv-pn-src-slide { min-height: 200px; }
+
+#rv-ed-panel .rv-pn-cheat { margin-top: 4px; border-top: 1px solid #2a3350; padding-top: 6px; }
+#rv-ed-panel .rv-pn-cheat summary { cursor: pointer; color: #c4cbe4; }
+#rv-ed-panel .rv-pn-cheat summary:hover { color: #fff; }
+#rv-ed-panel .rv-cs-sec { margin: 6px 0; }
+#rv-ed-panel .rv-cs-sec b { color: #9db7e8; font-size: 12px; }
+#rv-ed-panel .rv-cs-sec pre {
+  margin: 2px 0 0;
+  padding: 5px 7px;
+  background: #12121f;
+  border-radius: 5px;
+  font: 10.5px/1.6 ui-monospace, monospace;
+  color: #d7e0f5;
+  white-space: pre-wrap;
+}

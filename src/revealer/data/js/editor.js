@@ -19,7 +19,7 @@
       var idx = (window.Reveal && Reveal.getIndices) ? Reveal.getIndices() : {};
       sessionStorage.setItem(RESTORE_KEY, JSON.stringify({
         h: idx.h || 0, v: idx.v || 0, f: (idx.f === undefined ? -1 : idx.f),
-        editOn: !!(window.edit === undefined ? false : edit.on),
+        editOn: !!edit.on,
         selSrc: (edit.sel && edit.sel.getAttribute) ? edit.sel.getAttribute('data-rv-src') : null,
         drawer: !!document.getElementById('rv-ed-drawer')
       }));
@@ -70,7 +70,7 @@
         '<pre class="rv-dev-error-msg"></pre>' +
         '<pre class="rv-dev-error-tb"></pre>' +
         '<div class="rv-dev-error-actions">' +
-        '<button class="rv-dev-open">Open in editor</button>' +
+        '<button class="rv-dev-open">Open in text editor</button>' +
         '<span class="rv-dev-hint">fix + save to dismiss</span>' +
         '</div></div>';
       document.body.appendChild(el);
@@ -128,15 +128,9 @@
         '<div class="rv-ed-bar" hidden>' +
         '<span class="rv-ed-kind"></span>' +
         '<span class="rv-ed-line"></span>' +
-        '<button class="rv-ed-open" title="Open the .pres at this line">Open in editor</button>' +
-        '<span class="rv-ed-hint">click: select · Esc: parent / exit · E: exit</span>' +
+        '<span class="rv-ed-hint">click: select · Esc: parent / exit · Del: delete · E: exit</span>' +
         '</div>';
       document.body.appendChild(el);
-      el.querySelector('.rv-ed-open').addEventListener('click', function () {
-        if (!edit.sel) return;
-        fetch('/__rv__/open?line=' + encodeURIComponent(edit.sel.getAttribute('data-rv-src')),
-              { headers: { 'X-RV-Token': TOKEN } });
-      });
     }
     return el;
   }
@@ -249,6 +243,7 @@
     var tbBtn = document.querySelector('#rv-ed-toolbar .rv-tb-edit');
     if (tbBtn) tbBtn.classList.toggle('rv-active', on);
     if (typeof rvPanelSync === 'function') rvPanelSync();
+    if (typeof applyLayout === 'function') applyLayout();
     syncChrome();
   }
 
@@ -260,6 +255,10 @@
       ev.preventDefault();
     } else if (edit.on && ev.key === 'Escape') {
       selectParent();
+      ev.preventDefault();
+      ev.stopPropagation();
+    } else if (edit.on && edit.sel && (ev.key === 'Delete' || ev.key === 'Backspace')) {
+      deleteSelected(edit.sel);
       ev.preventDefault();
       ev.stopPropagation();
     }
@@ -899,6 +898,8 @@
       '<button class="rv-tb-undo" title="Undo (Ctrl+Z)">↶</button>' +
       '<button class="rv-tb-redo" title="Redo (Ctrl+Shift+Z)">↷</button>' +
       '<button class="rv-tb-frag" title="Fragments (F)">☰</button>' +
+      '<button class="rv-tb-media" title="Import an image / movie into Media/">＋ Media</button>' +
+      '<button class="rv-tb-view" title="Toggle split view">⇔</button>' +
       '<span class="rv-tb-status rv-st-idle">' + PRES_NAME + '</span>' +
       '<button class="rv-tb-help" title="Help">?</button>';
     document.body.appendChild(tb);
@@ -910,6 +911,16 @@
       toggleDrawer();
     });
     tb.querySelector('.rv-tb-help').addEventListener('click', toggleHelp);
+    tb.querySelector('.rv-tb-media').addEventListener('click', function () {
+      if (!edit.on) setEdit(true);
+      importMedia();
+    });
+    tb.querySelector('.rv-tb-view').addEventListener('click', function () {
+      splitPref = !splitPref;
+      try { localStorage.setItem('rv-ed-split', splitPref ? '1' : '0'); } catch (e) {}
+      if (!edit.on && splitPref) setEdit(true);
+      applyLayout();
+    });
     try {
       if (sessionStorage.getItem('rv-ed-lastsave') === 'pending') {
         sessionStorage.removeItem('rv-ed-lastsave');
@@ -932,7 +943,10 @@
       'no separate save step.</p>' +
       '<ul>' +
       '<li><b>✏ Edit / E</b> — toggle edit mode; click any element to select it</li>' +
-      '<li><b>Panel</b> — edit the selection\'s parameters, move it, or edit its source lines</li>' +
+      '<li><b>Panel</b> — edit the selection\'s parameters, move it, edit its source lines, or the whole slide when nothing is selected</li>' +
+      '<li><b>⇔</b> — split view (deck left, panel right, draggable divider)</li>' +
+      '<li><b>＋ Media</b> — pick a file: it is copied into Media/ and inserted</li>' +
+      '<li><b>Del</b> — delete the selected block (undo with Ctrl+Z)</li>' +
       '<li><b>Drag</b> — blue handles resize/move; the square grip drags a block to another column</li>' +
       '<li><b>↶ ↷ / Ctrl+Z</b> — undo/redo edits made here</li>' +
       '<li><b>☰ / F</b> — reorder the slide\'s fragments</li>' +
@@ -960,8 +974,10 @@
     var p = panelEl();
     p.style.display = edit.on ? 'flex' : 'none';
     if (!edit.on) { panelFor = null; return; }
-    if (edit.sel === panelFor) return;
-    panelFor = edit.sel;
+    var sec = window.Reveal && Reveal.getCurrentSlide && Reveal.getCurrentSlide();
+    var key = edit.sel || sec;
+    if (key === panelFor) return;
+    panelFor = key;
     renderPanel();
   }
 
@@ -979,10 +995,15 @@
     var p = panelEl();
     var el = edit.sel;
     if (!el || !document.contains(el)) {
-      p.innerHTML =
-        '<div class="rv-pn-head">Nothing selected</div>' +
-        '<div class="rv-pn-hint">Click an element in the slide to inspect and edit it. ' +
-        'Everything you change is written into <code>' + PRES_NAME + '</code> automatically.</div>';
+      var sec = window.Reveal && Reveal.getCurrentSlide && Reveal.getCurrentSlide();
+      if (sec && sec.hasAttribute('data-rv-src')) {
+        renderSlideSource(p, sec);
+      } else {
+        p.innerHTML =
+          '<div class="rv-pn-head">Nothing selected</div>' +
+          '<div class="rv-pn-hint">Click an element in the slide to inspect and edit it.</div>';
+        appendCheatsheet(p);
+      }
       return;
     }
     var kind = constructOf(el) || 'element';
@@ -1000,13 +1021,13 @@
       '<div class="rv-pn-actions">' +
       '<button class="rv-pn-up" title="Move before the previous sibling">▲ Up</button>' +
       '<button class="rv-pn-down" title="Move after the next sibling">▼ Down</button>' +
-      '<button class="rv-pn-del" title="Delete this block from the .pres">🗑 Delete</button>' +
-      '<button class="rv-pn-opensrc" title="Open in your text editor">Editor</button>' +
+      '<button class="rv-pn-del" title="Delete this block from the .pres (Del)">🗑 Delete</button>' +
       '</div>' +
       '<div class="rv-pn-srctitle">Source (editable)</div>' +
       '<textarea class="rv-pn-src" spellcheck="false"></textarea>' +
       '<button class="rv-pn-apply">Apply source</button>' +
       '<div class="rv-pn-foot">Changes save automatically to the .pres — no save button needed.</div>';
+    appendCheatsheet(p);
 
     p.querySelectorAll('.rv-pn-crumb').forEach(function (c) {
       c.addEventListener('click', function () {
@@ -1019,9 +1040,6 @@
     p.querySelector('.rv-pn-up').addEventListener('click', function () { moveSibling(el, -1); });
     p.querySelector('.rv-pn-down').addEventListener('click', function () { moveSibling(el, 1); });
     p.querySelector('.rv-pn-del').addEventListener('click', function () { deleteSelected(el); });
-    p.querySelector('.rv-pn-opensrc').addEventListener('click', function () {
-      fetch('/__rv__/open?line=' + s, { headers: { 'X-RV-Token': TOKEN } });
-    });
 
     // Source box + parameter fields need the actual .pres lines.
     fetch('/__rv__/src?start=' + s + '&end=' + e + '&token=' + encodeURIComponent(TOKEN))
@@ -1038,6 +1056,157 @@
       rvPostEdit([{ op: 'replace_lines', start: s, end: e, text: ta.value.split('\n') }]);
     });
   }
+
+  function renderSlideSource(p, sec) {
+    var s0 = srcOf(sec), e0 = srcEndOf(sec);
+    p.innerHTML =
+      '<div class="rv-pn-head"><b>' + (kindOf(sec) === 'slide' ? 'This slide' : kindOf(sec)) + '</b>' +
+      ' <span class="rv-pn-sub">' + PRES_NAME + ' : ' + s0 + '–' + e0 + '</span></div>' +
+      '<div class="rv-pn-hint">Click an element for its parameters, or edit the whole slide here.</div>' +
+      '<div class="rv-pn-srctitle">Slide source (editable)</div>' +
+      '<textarea class="rv-pn-src rv-pn-src-slide" spellcheck="false"></textarea>' +
+      '<button class="rv-pn-apply">Apply source</button>' +
+      '<div class="rv-pn-foot">Changes save automatically to the .pres — no save button needed.</div>';
+    fetch('/__rv__/src?start=' + s0 + '&end=' + e0 + '&token=' + encodeURIComponent(TOKEN))
+      .then(function (r) { return r.json(); })
+      .then(function (j) {
+        var ta = p.querySelector('.rv-pn-src');
+        if (j.lines && ta) ta.value = j.lines.join('\n');
+      });
+    p.querySelector('.rv-pn-apply').addEventListener('click', function () {
+      var ta = p.querySelector('.rv-pn-src');
+      rvPostEdit([{ op: 'replace_lines', start: s0, end: e0, text: ta.value.split('\n') }]);
+    });
+    appendCheatsheet(p);
+  }
+
+  var CHEATSHEET = [
+    ['Slides', ['=== Slide title', '--- vertical sub-slide', '%%% Section divider',
+                '>>> first: Deck title', '>>> biblio']],
+    ['Layout', ['> fill', '> row h=400 24px', '> col 2/5 center', '> end: row',
+                '|| 40%   (text columns)', '| 55%', '||']],
+    ['Media', ['! img.png fill h=200px +2 | caption', '!! movie.mp4 loop',
+               'flags: fill contain cover top h= w= + +N']],
+    ['Components', ['> info Title … > end: info', '> warn / > good', '> eq +  … > end: eq',
+                    '> grid(2,2) compact / > card +', '> stack h=300 / > layer + clear',
+                    '> pin: 50% 50% 20% +', '> frag 2 … > end: frag', '> table(2,3)']],
+    ['Text & math', ['* bullet (2 spaces = nested)', '[ highlighted line ]',
+                     '$inline$  $$display$$', '@@ python … @@']],
+  ];
+
+  function appendCheatsheet(p) {
+    var d = document.createElement('details');
+    d.className = 'rv-pn-cheat';
+    d.innerHTML = '<summary>📖 Command cheatsheet</summary>' +
+      CHEATSHEET.map(function (sec) {
+        return '<div class="rv-cs-sec"><b>' + sec[0] + '</b><pre>' +
+          sec[1].join('\n') + '</pre></div>';
+      }).join('');
+    try { d.open = localStorage.getItem('rv-ed-cheat') === '1'; } catch (e) {}
+    d.addEventListener('toggle', function () {
+      try { localStorage.setItem('rv-ed-cheat', d.open ? '1' : '0'); } catch (e) {}
+    });
+    p.appendChild(d);
+  }
+
+  /* --- media import (file picker) -------------------------------------------------- */
+
+  function importMedia() {
+    var input = document.createElement('input');
+    input.type = 'file';
+    input.accept = 'image/*,video/*,audio/*,.pdf,.svg';
+    input.addEventListener('change', function () {
+      var file = input.files && input.files[0];
+      if (file) uploadAndInsert(file);
+    });
+    input.click();
+  }
+
+  function uploadAndInsert(file) {
+    var isVideo = /^video\//.test(file.type) || /\.(mp4|webm|ogv|mov)$/i.test(file.name);
+    fetch('/__rv__/upload?name=' + encodeURIComponent(file.name), {
+      method: 'PUT', headers: { 'X-RV-Token': TOKEN }, body: file,
+    }).then(function (r) { return r.json(); }).then(function (j) {
+      if (!j.ok) { toast('Upload rejected: ' + (j.error || '?')); return; }
+      var sel = edit.sel, at = null, flags = [];
+      var sec = window.Reveal && Reveal.getCurrentSlide();
+      function spanDest(container, kind) {
+        return { insert_before: srcEndOf(container) + 1,
+                 container: [srcOf(container), srcEndOf(container)],
+                 container_kind: kind };
+      }
+      if (sel && sel.hasAttribute('data-rv-src') &&
+          (hasCls(sel, 'region') || hasCls(sel, 'rv-card') || hasCls(sel, 'rv-cell') ||
+           hasCls(sel, 'rv-layer') || hasCls(sel, 'column'))) {
+        at = spanDest(sel, hasCls(sel, 'column') ? 'column' : 'col');
+        flags = hasCls(sel, 'column') ? [] : ['fill'];
+      } else if (sel && sel.hasAttribute('data-rv-src') && sel.tagName !== 'SECTION') {
+        var cont = containerOf(sel) || sec;
+        at = { insert_before: srcEndOf(sel) + 1,
+               container: [srcOf(cont), srcEndOf(cont)],
+               container_kind: hasCls(cont, 'column') ? 'column' :
+                               (cont.tagName === 'SECTION' ? 'slide' : 'col') };
+        flags = cont.tagName === 'SECTION' || hasCls(cont, 'column') ? [] : ['fill'];
+      } else if (sec && sec.hasAttribute('data-rv-src')) {
+        at = spanDest(sec, 'slide');
+      }
+      if (!at) { toast('Uploaded to ' + j.path + ' — add a “! ' + j.path + '” line'); return; }
+      rvPostEdit([{ op: 'insert_media', at: at, kind: isVideo ? 'video' : 'img',
+                    path: j.path, flags: flags }]);
+    }).catch(function () { toast('Upload failed'); });
+  }
+
+  /* --- docked / split view ------------------------------------------------------------ */
+
+  var splitPref = false;
+  try { splitPref = localStorage.getItem('rv-ed-split') === '1'; } catch (e) {}
+
+  function applyLayout() {
+    var on = splitPref && edit.on;
+    document.body.classList.toggle('rv-split', on);
+    var div = document.getElementById('rv-ed-divider');
+    if (on && !div) {
+      div = document.createElement('div');
+      div.id = 'rv-ed-divider';
+      document.body.appendChild(div);
+      div.addEventListener('pointerdown', function (ev) {
+        ev.preventDefault();
+        function mv(e2) {
+          var w = Math.min(Math.max(window.innerWidth - e2.clientX, 240), window.innerWidth * 0.6);
+          document.documentElement.style.setProperty('--rv-pw', w + 'px');
+          try { localStorage.setItem('rv-ed-pw', String(w)); } catch (e3) {}
+          relayout();
+        }
+        function up() {
+          document.removeEventListener('pointermove', mv, true);
+          document.removeEventListener('pointerup', up, true);
+        }
+        document.addEventListener('pointermove', mv, true);
+        document.addEventListener('pointerup', up, true);
+      });
+    }
+    if (div) div.style.display = on ? 'block' : 'none';
+    var btn = document.querySelector('#rv-ed-toolbar .rv-tb-view');
+    if (btn) btn.classList.toggle('rv-active', splitPref);
+    relayout();
+  }
+
+  var relayoutRaf = null;
+  function relayout() {
+    if (relayoutRaf) return;
+    relayoutRaf = requestAnimationFrame(function () {
+      relayoutRaf = null;
+      if (window.Reveal && Reveal.layout) Reveal.layout();
+      var cur = window.Reveal && Reveal.getCurrentSlide && Reveal.getCurrentSlide();
+      if (cur && typeof window.fitSlide === 'function') window.fitSlide(cur);
+      syncChrome();
+    });
+  }
+
+  try {
+    var pw = parseInt(localStorage.getItem('rv-ed-pw') || '', 10);
+    if (pw) document.documentElement.style.setProperty('--rv-pw', pw + 'px');
+  } catch (e) {}
 
   /* --- parameter fields -------------------------------------------------------------- */
 
@@ -1202,8 +1371,11 @@
 
   function deleteSelected(el) {
     var construct = constructOf(el);
-    if (!window.confirm('Delete this ' + kindOf(el) + ' from ' + PRES_NAME + '?\n' +
-                        '(You can undo with Ctrl+Z.)')) return;
+    if (!el.hasAttribute('data-rv-src') || el.tagName === 'SECTION') {
+      toast('Select a block inside the slide to delete it');
+      return;
+    }
+    toast('Deleted ' + kindOf(el) + ' — Ctrl+Z to undo');
     edit.sel = null;
     rvPostEdit([{
       op: 'delete_block',
@@ -1249,6 +1421,7 @@
     if (Reveal.isReady && Reveal.isReady()) testArm();
     else Reveal.on('ready', testArm);
   }
+  if (params.get('rv-split') === '1') splitPref = true;
   if (params.get('rv-edit') === '1') {
     var arm = function () {
       setEdit(true);

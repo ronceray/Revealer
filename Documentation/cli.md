@@ -149,8 +149,10 @@ artifact, deleted on exit; the exported `<name>.html` is not touched.
 
 The served presentation carries a small toolbar (top left): **✏ Edit**
 toggles edit mode, **↶ / ↷** undo and redo, **☰** opens the fragment
-drawer, and the status chip names the `.pres` file being edited and reports
-every save. **You are always editing the `.pres` source file, never the
+drawer, **＋ Media** imports a file (copied into `Media/` and inserted at
+the selection), **⇔** switches between the docked panel and a split view
+(deck left, panel right, divider draggable), and the status chip names the
+`.pres` file being edited and reports every save. **You are always editing the `.pres` source file, never the
 HTML** — each change is written to it immediately as a minimal text edit
 (a session diffs like hand edits), the deck rebuilds, and the preview
 reloads in place, keeping your slide, edit mode and selection. There is no
@@ -159,13 +161,15 @@ separate save step.
 In edit mode, hovering names the element under the cursor and clicking
 selects it. The **side panel** then shows everything about the selection:
 
+- with nothing selected, the **whole slide's source**, editable in place;
 - a clickable **breadcrumb** (slide ▸ row ▸ column ▸ figure) to reach
   enclosing constructs — no guessing what you clicked;
 - **parameter fields** — pin x/y/width, media height/width, row height and
   gap, column size, grid gap, fragment index, … — type a value and press
   Enter;
 - **▲ Up / ▼ Down / 🗑 Delete** to reorder a block among its siblings or
-  remove it;
+  remove it (`Del` deletes the selection too — `Ctrl+Z` undoes);
+- a collapsible **command cheatsheet** of the frequent `.pres` shortcuts;
 - the **source box**: the actual `.pres` lines of the selection, editable in
   place (*Apply source*) — anything the quick fields don't cover.
 
