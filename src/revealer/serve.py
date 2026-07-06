@@ -79,6 +79,7 @@ class DevSession:
     clients_lock: threading.Lock = field(default_factory=threading.Lock)
     lock: threading.RLock = field(default_factory=threading.RLock)
     test_mode: bool = False             # unlocks /__rv__/test (never in normal serve)
+    test_results: dict | None = None    # last payload POSTed by the JS runner
     # undo/redo = a cursor over the shadow-git first-parent history.
     cursor: str | None = None            # detached position (None = at HEAD)
     dirty_keep: bytes | None = None      # unbuilt working state saved by a dirty undo
@@ -488,6 +489,15 @@ class _Handler(http.server.SimpleHTTPRequestHandler):
             return self._dev_asset(path[len(DEV_PREFIX) + 1:])
         if path == DEV_PREFIX + "/test":
             return self._test_runner()
+        if path.startswith(DEV_PREFIX + "/test/"):
+            return self._test_asset(path[len(DEV_PREFIX) + 6:])
+        if path == DEV_PREFIX + "/test-results":
+            if not self._check_token():
+                return self._send_json(403, {"error": "forbidden"})
+            if not self.sess.test_mode:
+                self.send_error(404)
+                return
+            return self._send_json(200, {"results": self.sess.test_results})
         if path == DEV_PREFIX + "/history/diff":
             if not self._check_token():
                 return self._send_json(403, {"error": "forbidden"})
@@ -546,6 +556,16 @@ class _Handler(http.server.SimpleHTTPRequestHandler):
             return self._undo_redo(undo=True)
         if path == DEV_PREFIX + "/redo":
             return self._undo_redo(undo=False)
+        if path == DEV_PREFIX + "/test-results":
+            if not self.sess.test_mode:
+                self.send_error(404)
+                return
+            try:
+                self.sess.test_results = json.loads(
+                    self._read_body().decode("utf-8"))
+            except (ValueError, UnicodeDecodeError):
+                return self._send_json(400, {"error": "bad json"})
+            return self._send_json(200, {"ok": True})
         return self._send_json(404, {"error": "not found"})
 
     def do_PUT(self):  # noqa: N802
@@ -616,6 +636,7 @@ class _Handler(http.server.SimpleHTTPRequestHandler):
                 "sha256": _sha_bytes(data),
                 "start": start,
                 "end": end,
+                "total": len(lines),
                 "lines": lines[start - 1:end],
             })
 
@@ -839,12 +860,51 @@ class _Handler(http.server.SimpleHTTPRequestHandler):
         self._send_html(_inject_dev(html, sess))
 
     def _test_runner(self) -> None:
-        """The in-browser JS test runner page (P3a harness); dev-tests only."""
+        """The in-browser JS test runner page (P3a harness); dev-tests only.
+
+        Load order matters: rvt.js first (its EventSource stub must precede
+        the editor boot), then the dev bootstrap, the editor manifest, the
+        suites, and finally the run trigger.
+        """
         if not self.sess.test_mode:
             self.send_error(404)
             return
-        self._send_html("<!doctype html><title>rv tests</title>"
-                        "<p>test harness placeholder</p>")
+        tdir = Path(__file__).parent / "data" / "js" / "test"
+        suites = sorted(p.name for p in tdir.glob("suite-*.js"))
+        boot = {"token": self.sess.token, "history": self.sess.history_mode}
+        head = [
+            "<!doctype html><html><head><meta charset='utf-8'>",
+            "<title>rv tests</title>",
+            '<script src="{0}/test/rvt.js"></script>'.format(DEV_PREFIX),
+            "<script>window.__RV_DEV__ = {0};</script>".format(
+                json.dumps(boot).replace("</", "<\\/")),
+            '<link rel="stylesheet" href="{0}/editor.css">'.format(DEV_PREFIX),
+        ]
+        head += ['<script src="{0}/{1}" defer></script>'.format(DEV_PREFIX, n)
+                 for n in EDITOR_JS]
+        head += ['<script src="{0}/test/{1}" defer></script>'.format(DEV_PREFIX, n)
+                 for n in suites]
+        head.append("<script>window.addEventListener('load', function () {"
+                    " RVT.run(); });</script>")
+        head.append("</head><body></body></html>")
+        self._send_html("\n".join(head))
+
+    def _test_asset(self, name: str) -> None:
+        """Serve a runner-support script; test mode only, names locked down."""
+        if not self.sess.test_mode or not re.fullmatch(r"[\w.-]+\.js", name):
+            self.send_error(404)
+            return
+        src = Path(__file__).parent / "data" / "js" / "test" / name
+        if not src.is_file():
+            self.send_error(404)
+            return
+        body = src.read_bytes()
+        self.send_response(200)
+        self.send_header("Content-Type", "application/javascript")
+        self.send_header("Content-Length", str(len(body)))
+        self.send_header("Cache-Control", "no-store")
+        self.end_headers()
+        self.wfile.write(body)
 
     def _dev_asset(self, name: str) -> None:
         src = Path(__file__).parent / "data" / "js" / name

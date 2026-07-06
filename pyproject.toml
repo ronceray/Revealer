@@ -31,7 +31,7 @@ revealer = "revealer.cli:main"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/revealer"]
-exclude = ["**/reveal.js", "**/*.pres.html", "**/*.pyc"]
+exclude = ["**/reveal.js", "**/*.pres.html", "**/*.pyc", "src/revealer/data/js/test"]
 
 [tool.hatch.version]
 path = "src/revealer/__init__.py"

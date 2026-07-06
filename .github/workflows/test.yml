@@ -23,3 +23,23 @@ jobs:
       - name: Unit tests (offline)
         run: pytest -q
         working-directory: tests
+
+  browser:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install
+        run: pip install -e ".[dev]"
+      - name: Cache reveal.js
+        uses: actions/cache@v4
+        with:
+          path: Demo/reveal.js
+          key: revealjs-${{ hashFiles('src/revealer/assets.py') }}
+      - name: Fetch reveal.js (cache miss only)
+        run: test -f Demo/reveal.js/dist/reveal.js || revealer update Demo
+      - name: JS suites (headless Chrome)
+        run: pytest -q test_editor_js.py
+        working-directory: tests
