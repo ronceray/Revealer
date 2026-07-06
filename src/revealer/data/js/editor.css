@@ -420,3 +420,30 @@ body.rv-split #rv-ed-panel { padding-top: 12px; }
 #rv-ed-panel .rv-fmt .rv-fmt-sw { width: 18px; height: 18px; padding: 0; border-radius: 50%; border: 1px solid #666; }
 #rv-ed-panel .rv-fmt input[type=color] { width: 24px; height: 20px; padding: 0; border: none; background: none; cursor: pointer; }
 #rv-ed-panel .rv-fmt select { font: 11px system-ui; background: #2a3350; color: #fff; border: 1px solid #4a5580; border-radius: 4px; }
+
+/* --- time machine ---------------------------------------------------------- */
+#rv-ed-history {
+  position: fixed; top: 60px; left: 12px; width: 380px; max-height: 70vh;
+  overflow-y: auto; background: #1c1c2e; color: #fff; border-radius: 10px;
+  padding: 10px 12px; font: 13px system-ui, sans-serif;
+  box-shadow: 0 12px 40px rgba(0,0,0,.4); z-index: 9800;
+}
+#rv-ed-history .rv-hi-head { display: flex; gap: 8px; align-items: center; }
+#rv-ed-history .rv-hi-head b { flex: 1; }
+#rv-ed-history button {
+  font: 12px system-ui; background: #2a3350; color: #fff;
+  border: 1px solid #4a5580; border-radius: 5px; padding: 2px 8px; cursor: pointer;
+}
+#rv-ed-history button:hover { background: #37436b; }
+#rv-ed-history .rv-hi-hint { color: #8a93b5; font-size: 11px; line-height: 1.45; margin: 6px 0; }
+#rv-ed-history .rv-hi-item {
+  display: flex; gap: 8px; align-items: center; padding: 4px 2px;
+  border-top: 1px solid #2a3350;
+}
+#rv-ed-history .rv-hi-badge {
+  font-size: 10px; padding: 1px 6px; border-radius: 8px;
+  background: #37436b; color: #c4cbe4; flex: 0 0 auto;
+}
+#rv-ed-history .rv-hi-badge.rv-hi-manual { background: #2a76dd; color: #fff; }
+#rv-ed-history .rv-hi-when { color: #9db7e8; flex: 0 0 64px; font-size: 11px; }
+#rv-ed-history .rv-hi-msg { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }

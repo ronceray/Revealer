@@ -902,6 +902,7 @@
       '<button class="rv-tb-frag" title="Fragments (F)">☰</button>' +
       '<button class="rv-tb-media" title="Import an image / movie into Media/">＋ Media</button>' +
       '<button class="rv-tb-view" title="Toggle split view">⇔</button>' +
+      '<button class="rv-tb-hist" title="Save history (time machine)">🕐</button>' +
       '<button class="rv-tb-xhtml" title="Export the final HTML next to the .pres">⬇ HTML</button>' +
       '<button class="rv-tb-xpdf" title="Export a PDF next to the .pres">⬇ PDF</button>' +
       '<span class="rv-tb-status rv-st-idle">' + PRES_NAME + '</span>' +
@@ -925,6 +926,7 @@
         .catch(function () { toast('Export failed', 4000); });
     }
     tb.querySelector('.rv-tb-xhtml').addEventListener('click', function () { doExport('html'); });
+    tb.querySelector('.rv-tb-hist').addEventListener('click', toggleHistory);
     tb.querySelector('.rv-tb-xpdf').addEventListener('click', function () { doExport('pdf'); });
     tb.querySelector('.rv-tb-media').addEventListener('click', function () {
       if (!edit.on) setEdit(true);
@@ -1176,6 +1178,73 @@
       try { localStorage.setItem('rv-ed-cheat', d.open ? '1' : '0'); } catch (e) {}
     });
     p.appendChild(d);
+  }
+
+  /* --- time machine ------------------------------------------------------------------ */
+
+  function relTime(ts) {
+    var d = Math.max(0, Date.now() / 1000 - ts);
+    if (d < 90) return Math.round(d) + 's ago';
+    if (d < 5400) return Math.round(d / 60) + 'min ago';
+    if (d < 129600) return Math.round(d / 3600) + 'h ago';
+    return Math.round(d / 86400) + 'd ago';
+  }
+
+  function toggleHistory() {
+    var hd = document.getElementById('rv-ed-history');
+    if (hd) { hd.remove(); return; }
+    hd = document.createElement('div');
+    hd.id = 'rv-ed-history';
+    hd.innerHTML = '<div class="rv-hi-head"><b>🕐 Save history</b>' +
+      '<button class="rv-hi-snap" title="Snapshot the current state with a note">Snapshot…</button>' +
+      '<button class="rv-hi-close">✕</button></div>' +
+      '<div class="rv-hi-hint">Every save is committed automatically to a shadow git ' +
+      'repo (.rv-history/) inside the deck folder. Restoring first snapshots the ' +
+      'current state — nothing is ever lost. Ctrl+Z also undoes a restore.</div>' +
+      '<div class="rv-hi-list">loading…</div>';
+    document.body.appendChild(hd);
+    hd.querySelector('.rv-hi-close').addEventListener('click', function () { hd.remove(); });
+    hd.querySelector('.rv-hi-snap').addEventListener('click', function () {
+      var msg = window.prompt('Snapshot note:', 'before big rework');
+      if (msg === null) return;
+      fetch('/__rv__/history/commit', {
+        method: 'POST', headers: { 'X-RV-Token': TOKEN, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ message: msg }),
+      }).then(function () { loadHistory(hd); });
+    });
+    loadHistory(hd);
+  }
+
+  function loadHistory(hd) {
+    fetch('/__rv__/history?token=' + encodeURIComponent(TOKEN))
+      .then(function (r) { return r.json(); })
+      .then(function (j) {
+        var list = hd.querySelector('.rv-hi-list');
+        if (!j.entries || !j.entries.length) {
+          list.innerHTML = '<div class="rv-hi-item">no snapshots yet — save once</div>';
+          return;
+        }
+        list.innerHTML = j.entries.map(function (e) {
+          return '<div class="rv-hi-item">' +
+            '<span class="rv-hi-badge' + (e.auto ? '' : ' rv-hi-manual') + '">' +
+            (e.auto ? 'auto' : 'save') + '</span>' +
+            '<span class="rv-hi-when">' + relTime(e.ts) + '</span>' +
+            '<span class="rv-hi-msg">' + e.msg.replace(/^(auto|save): /, '') + '</span>' +
+            '<button data-h="' + e.hash + '">Restore</button></div>';
+        }).join('');
+        list.querySelectorAll('button[data-h]').forEach(function (b) {
+          b.addEventListener('click', function () {
+            fetch('/__rv__/history/restore', {
+              method: 'POST', headers: { 'X-RV-Token': TOKEN, 'Content-Type': 'application/json' },
+              body: JSON.stringify({ hash: b.getAttribute('data-h') }),
+            }).then(function (r) { return r.json(); }).then(function (jj) {
+              if (jj.unchanged) toast('Already at that version');
+              else if (jj.ok) toast('Restored — Ctrl+Z to undo');
+              else toast('Restore failed: ' + (jj.error || '?'));
+            });
+          });
+        });
+      });
   }
 
   /* --- media import (file picker) -------------------------------------------------- */

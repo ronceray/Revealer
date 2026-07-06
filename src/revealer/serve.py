@@ -93,6 +93,11 @@ def _rebuild(sess: DevSession, log=print) -> bool:
             sess.build_error = None
             log("rebuilt {0} in {1:.0f} ms".format(
                 sess.html_path.name, 1000 * (time.monotonic() - t0)))
+            try:
+                _history_commit(sess.pdir, sess.pres,
+                                time.strftime("%H:%M:%S"), auto=True)
+            except Exception:
+                pass  # history is best-effort, never blocks a build
             _broadcast(sess, {"type": "reload", "sha": sess.sha})
             return True
         except Exception as exc:
@@ -188,6 +193,60 @@ def _inject_dev(html: str, sess: DevSession) -> str:
     return html + bootstrap
 
 
+HISTORY_DIR = ".rv-history"
+
+
+def _hgit(pdir: Path, *args: str) -> subprocess.CompletedProcess:
+    """Run git against the deck's shadow history repo (never its own .git)."""
+    return subprocess.run(
+        ["git", "--git-dir", str(pdir / HISTORY_DIR), "--work-tree", str(pdir), *args],
+        capture_output=True, text=True, timeout=30)
+
+
+def _history_init(pdir: Path) -> bool:
+    if (pdir / HISTORY_DIR / "HEAD").exists():
+        return True
+    if shutil.which("git") is None:
+        return False
+    ok = _hgit(pdir, "init", "-q").returncode == 0
+    if ok:
+        _hgit(pdir, "config", "user.name", "revealer")
+        _hgit(pdir, "config", "user.email", "revealer@local")
+    return ok
+
+
+def _history_commit(pdir: Path, pres: Path, message: str, auto: bool) -> bool:
+    """Snapshot the .pres (+ .bib files) if anything changed."""
+    if not _history_init(pdir):
+        return False
+    files = [pres.name] + [f.name for f in pdir.glob("*.bib")]
+    _hgit(pdir, "add", "-f", "--", *files)
+    if _hgit(pdir, "diff", "--cached", "--quiet").returncode == 0:
+        return False  # nothing new
+    prefix = "auto: " if auto else "save: "
+    return _hgit(pdir, "commit", "-q", "-m", prefix + message).returncode == 0
+
+
+def _history_list(pdir: Path, limit: int = 60) -> list[dict]:
+    if not (pdir / HISTORY_DIR / "HEAD").exists():
+        return []
+    proc = _hgit(pdir, "log", "--pretty=%H%x00%ct%x00%s", "-{0}".format(limit))
+    out = []
+    for line in proc.stdout.splitlines():
+        parts = line.split("\x00")
+        if len(parts) == 3:
+            out.append({"hash": parts[0], "ts": int(parts[1]), "msg": parts[2],
+                        "auto": parts[2].startswith("auto: ")})
+    return out
+
+
+def _history_show(pdir: Path, pres: Path, commit: str) -> str | None:
+    if not re.fullmatch(r"[0-9a-f]{7,40}", commit):
+        return None
+    proc = _hgit(pdir, "show", "{0}:{1}".format(commit, pres.name))
+    return proc.stdout if proc.returncode == 0 else None
+
+
 def _open_in_editor(pres: Path, line: int, log=print) -> bool:
     """Open the .pres at a line in the user's editor (best effort)."""
     line = int(line)
@@ -273,6 +332,10 @@ class _Handler(http.server.SimpleHTTPRequestHandler):
             return self._sse()
         if path in (DEV_PREFIX + "/editor.js", DEV_PREFIX + "/editor.css"):
             return self._dev_asset(path.rsplit("/", 1)[1])
+        if path == DEV_PREFIX + "/history":
+            if not self._check_token():
+                return self._send_json(403, {"error": "forbidden"})
+            return self._send_json(200, {"entries": _history_list(self.sess.pdir)})
         if path == DEV_PREFIX + "/src":
             if not self._check_token():
                 return self._send_json(403, {"error": "forbidden"})
@@ -299,6 +362,10 @@ class _Handler(http.server.SimpleHTTPRequestHandler):
             return self._edit()
         if path == DEV_PREFIX + "/export":
             return self._export()
+        if path == DEV_PREFIX + "/history/commit":
+            return self._history_snapshot()
+        if path == DEV_PREFIX + "/history/restore":
+            return self._history_restore()
         if path == DEV_PREFIX + "/undo":
             return self._undo_redo(undo=True)
         if path == DEV_PREFIX + "/redo":
@@ -373,6 +440,39 @@ class _Handler(http.server.SimpleHTTPRequestHandler):
                 "end": end,
                 "lines": lines[start - 1:end],
             })
+
+    def _history_snapshot(self) -> None:
+        try:
+            req = json.loads(self._read_body().decode("utf-8") or "{}")
+        except ValueError:
+            req = {}
+        msg = str(req.get("message") or "manual snapshot")[:200]
+        ok = _history_commit(self.sess.pdir, self.sess.pres, msg, auto=False)
+        return self._send_json(200, {"ok": True, "committed": ok})
+
+    def _history_restore(self) -> None:
+        sess = self.sess
+        try:
+            req = json.loads(self._read_body().decode("utf-8"))
+        except ValueError:
+            return self._send_json(400, {"error": "bad json"})
+        text = _history_show(sess.pdir, sess.pres, str(req.get("hash", "")))
+        if text is None:
+            return self._send_json(422, {"error": "unknown_version"})
+        with sess.lock:
+            before = sess.pres.read_text()
+            if before == text:
+                return self._send_json(200, {"ok": True, "unchanged": True})
+            # the current state is snapshotted first, so a restore never loses work
+            _history_commit(sess.pdir, sess.pres, "before restore", auto=True)
+            before_sha = _sha_bytes(before.encode("utf-8"))
+            sess.pres.write_text(text)
+            new_sha = _sha_bytes(text.encode("utf-8"))
+            sess.journal.append((new_sha, before, before_sha))
+            del sess.journal[:-200]
+            sess.redo.clear()
+            _rebuild(sess, log=self._log)
+            return self._send_json(200, {"ok": True})
 
     def _export(self) -> None:
         """Export the deck: kind=html (prod build) or kind=pdf."""
