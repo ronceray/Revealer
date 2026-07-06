@@ -27,7 +27,7 @@ Homepage = "https://github.com/CandelierLab/Revealer"
 Documentation = "https://candelierlab.github.io/Revealer"
 
 [project.scripts]
-revealer = "revealer.cli:app"
+revealer = "revealer.cli:main"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/revealer"]

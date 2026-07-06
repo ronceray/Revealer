@@ -1852,6 +1852,7 @@ def _build(pfile: str, dev: bool) -> str:
                         placeholder = "__REVEALER_SVG__"
                         _slide_append(slide[-1], placeholder + "\n", None)
                         target["_svg_placeholder"] = placeholder
+                        target["_svg_line"] = lineno
 
             # --- Slide content
 
@@ -2283,7 +2284,23 @@ def _build_svg(S, pdir, default_duration):
     svg = re.sub(r"<\?xml.*?\?>", "", svg, flags=re.DOTALL)
     svg = re.sub(r"<!DOCTYPE.*?>", "", svg, flags=re.DOTALL)
 
-    out = '<div class="revealer-svg">' + svg.strip() + "</div>"
+    hide = S["param"].get("hide")
+    if hide:
+        specs = hide if isinstance(hide, list) else [hide]
+        for spec in specs:
+            for sel in str(spec).split(","):
+                sel = sel.strip().lstrip("#")
+                if not re.match(r"^[\w-]+$", sel):
+                    continue
+                svg = re.sub(
+                    r'(<[^>]*\bid="' + re.escape(sel) + r'"[^>]*?)(\s*/?>)',
+                    lambda m: (re.sub(r'opacity="[^"]*"', 'opacity="0"', m.group(1))
+                               if 'opacity="' in m.group(1)
+                               else m.group(1) + ' opacity="0"') + m.group(2),
+                    svg, count=1)
+
+    out = '<div class="revealer-svg"{0}>'.format(
+        _src_attr(S["param"].get("_svg_line"))) + svg.strip() + "</div>"
 
     # Animation steps -> invisible reveal.js fragments
     if "animate" in S["param"]:

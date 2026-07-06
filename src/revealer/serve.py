@@ -297,6 +297,8 @@ class _Handler(http.server.SimpleHTTPRequestHandler):
         path = self._path_only()
         if path == DEV_PREFIX + "/edit":
             return self._edit()
+        if path == DEV_PREFIX + "/export":
+            return self._export()
         if path == DEV_PREFIX + "/undo":
             return self._undo_redo(undo=True)
         if path == DEV_PREFIX + "/redo":
@@ -371,6 +373,19 @@ class _Handler(http.server.SimpleHTTPRequestHandler):
                 "end": end,
                 "lines": lines[start - 1:end],
             })
+
+    def _export(self) -> None:
+        """Export the deck: kind=html (prod build) or kind=pdf."""
+        kind = self._query().get("kind", "html")
+        try:
+            if kind == "pdf":
+                from . import pdf as pdf_mod
+                out = pdf_mod.export_pdf(str(self.sess.pres), log=lambda *a: None)
+            else:
+                out = build_mod.build(str(self.sess.pres))
+        except Exception as exc:
+            return self._send_json(500, {"error": str(exc)})
+        return self._send_json(200, {"ok": True, "path": out})
 
     def _undo_redo(self, undo: bool) -> None:
         sess = self.sess

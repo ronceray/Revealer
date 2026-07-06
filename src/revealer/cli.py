@@ -288,8 +288,8 @@ def interactive_menu() -> None:
     """Navigable menu shown when ``revealer`` is run with no sub-command."""
 
     actions = {
+        "serve": ("Edit a presentation (live preview + editor)", _menu_serve),
         "open": ("Load a presentation (open a .pres in the browser)", _menu_open),
-        "serve": ("Serve a presentation (live reload while you edit)", _menu_serve),
         "build": ("Build a presentation", _menu_build),
         "new": ("Create a new presentation", _menu_new),
         "plugins": ("Manage extensions", lambda: _action_plugins(None)),
@@ -317,6 +317,23 @@ def interactive_menu() -> None:
         except typer.Exit:
             pass  # an action aborted; return to the menu
         console.print()
+
+
+# --- Entry point ---------------------------------------------------------------
+
+def main() -> None:
+    """CLI entry: `revealer <path>.pres` serves it (live edit) directly."""
+    import sys
+
+    argv = sys.argv[1:]
+    known = {"root", "new", "select", "open", "plugins", "update", "build",
+             "serve", "pdf", "export", "list", "--help", "--install-completion",
+             "--show-completion"}
+    if argv and not argv[0].startswith("-") and argv[0] not in known:
+        cand = Path(argv[0]).expanduser()
+        if cand.suffix == ".pres" or (cand.is_dir() and _find_pres(cand) is not None):
+            sys.argv = [sys.argv[0], "serve"] + sys.argv[1:]
+    app()
 
 
 # --- Root callback -----------------------------------------------------------
@@ -420,8 +437,8 @@ def serve(
     serve_mod.serve(pres, port=port, open_browser=not no_open, log=console.print)
 
 
-@app.command()
-def pdf(
+@app.command("export")
+def export(
     target: str = typer.Argument(None, help="Presentation folder or .pres/.html file."),
     out: str = typer.Option(None, "--out", "-o", help="Output PDF path."),
 ):
@@ -444,6 +461,15 @@ def pdf(
         console.print("[red]{0}[/red]".format(exc))
         raise typer.Exit(1)
     console.print("[green]Exported[/green] {0}".format(out_path))
+
+
+@app.command("pdf", hidden=True)
+def pdf_alias(
+    target: str = typer.Argument(None, help="Presentation folder or .pres/.html file."),
+    out: str = typer.Option(None, "--out", "-o", help="Output PDF path."),
+):
+    """Alias of `revealer export`."""
+    export(target, out)
 
 
 @app.command(name="list")

@@ -137,6 +137,7 @@
 
   // Friendly names for the DSL constructs, from their emitted classes.
   var KINDS = [
+    ['revealer-svg', 'svg drawing'],
     ['rv-pin', 'pin'], ['rv-stack', 'stack'], ['rv-layer', 'layer'],
     ['rv-grid-wrap', 'grid'], ['rv-card', 'card'], ['rv-cell', 'card (plain)'],
     ['box-info', 'info box'], ['box-warn', 'warn box'], ['box-good', 'good box'],
@@ -350,6 +351,7 @@
 
   function constructOf(el) {
     if (!el) return null;
+    if (hasCls(el, 'revealer-svg')) return 'svg';
     if (hasCls(el, 'rv-pin')) return 'pin';
     if (hasCls(el, 'rv-fig') || hasCls(el, 'rv-media') || hasCls(el, 'rv-media-fill')) return 'media';
     if (hasCls(el, 'rv-stack')) return 'stack';
@@ -900,6 +902,8 @@
       '<button class="rv-tb-frag" title="Fragments (F)">☰</button>' +
       '<button class="rv-tb-media" title="Import an image / movie into Media/">＋ Media</button>' +
       '<button class="rv-tb-view" title="Toggle split view">⇔</button>' +
+      '<button class="rv-tb-xhtml" title="Export the final HTML next to the .pres">⬇ HTML</button>' +
+      '<button class="rv-tb-xpdf" title="Export a PDF next to the .pres">⬇ PDF</button>' +
       '<span class="rv-tb-status rv-st-idle">' + PRES_NAME + '</span>' +
       '<button class="rv-tb-help" title="Help">?</button>';
     document.body.appendChild(tb);
@@ -911,6 +915,17 @@
       toggleDrawer();
     });
     tb.querySelector('.rv-tb-help').addEventListener('click', toggleHelp);
+    function doExport(kind) {
+      toast(kind === 'pdf' ? 'Exporting PDF… (can take a minute)' : 'Exporting HTML…', 60000);
+      fetch('/__rv__/export?kind=' + kind, { method: 'POST', headers: { 'X-RV-Token': TOKEN } })
+        .then(function (r) { return r.json(); })
+        .then(function (j) {
+          toast(j.ok ? 'Exported → ' + j.path : 'Export failed: ' + (j.error || '?'), 6000);
+        })
+        .catch(function () { toast('Export failed', 4000); });
+    }
+    tb.querySelector('.rv-tb-xhtml').addEventListener('click', function () { doExport('html'); });
+    tb.querySelector('.rv-tb-xpdf').addEventListener('click', function () { doExport('pdf'); });
     tb.querySelector('.rv-tb-media').addEventListener('click', function () {
       if (!edit.on) setEdit(true);
       importMedia();
@@ -1353,6 +1368,9 @@
       fragDef('eq');
     } else if (kind === 'frag') {
       fragDef('frag');
+    } else if (kind === 'svg') {
+      buildSvgSteps(box, el, s);
+      return;
     } else if (kind === 'column') {
       var wm = line0.match(/^\s*\|{1,2}\s*(.*)$/);
       defs.push({ label: 'width', value: wm ? wm[1] : '',
@@ -1375,6 +1393,77 @@
       });
       input.addEventListener('change', commit);
     });
+  }
+
+  var SVG_ANIM_RE = /^>\s*animate\s*:\s*#([\w-]+)\s+opacity:1\s*(?:@.*)?$/;
+  var SVG_HIDE_RE = /^>\s*hide\s*:\s*(.*)$/;
+  var SVG_BLOCK_RE = /^>\s*(hide|animate)\s*:/;
+
+  function buildSvgSteps(box, el, svgLine) {
+    var ids = [];
+    el.querySelectorAll('svg [id]').forEach(function (n) {
+      if (ids.length < 40 && n.id) ids.push({ id: n.id, node: n });
+    });
+    if (!ids.length) {
+      box.innerHTML = '<div class="rv-pn-hint">No id-carrying elements in this SVG — ' +
+        'add ids (e.g. in Inkscape) to animate parts.</div>';
+      return;
+    }
+    var sec = Reveal.getCurrentSlide();
+    fetch('/__rv__/src?start=' + srcOf(sec) + '&end=' + srcEndOf(sec) +
+          '&token=' + encodeURIComponent(TOKEN))
+      .then(function (r) { return r.json(); })
+      .then(function (j) {
+        if (!j.lines) return;
+        var base = srcOf(sec);
+        var rel = svgLine - base;           // index of `> svg:` in j.lines
+        var end = rel;
+        var hidden = {}, step = {}, order = 0, preserved = [];
+        for (var k = rel + 1; k < j.lines.length && SVG_BLOCK_RE.test(j.lines[k]); k++) {
+          end = k;
+          var hm = j.lines[k].match(SVG_HIDE_RE);
+          var am = j.lines[k].match(SVG_ANIM_RE);
+          if (hm) {
+            hm[1].split(',').forEach(function (x) { hidden[x.trim().replace('#', '')] = 1; });
+          } else if (am) {
+            step[am[1]] = ++order;
+          } else {
+            preserved.push(j.lines[k]);
+          }
+        }
+        box.innerHTML = '<div class="rv-pn-hint">Reveal SVG elements as steps ' +
+          '(– = always visible):</div>' +
+          ids.map(function (it, i) {
+            var cur = step[it.id] || '';
+            return '<label class="rv-pn-fld" data-id="' + it.id + '"><span>#' + it.id +
+              '</span><select>' + ['<option value="">–</option>'].concat(
+                [1,2,3,4,5,6,7,8].map(function (n) {
+                  return '<option value="' + n + '"' + (cur === n ? ' selected' : '') +
+                    '>step ' + n + '</option>';
+                })).join('') + '</select></label>';
+          }).join('') +
+          '<button class="rv-pn-svgapply">Apply steps</button>';
+        box.querySelectorAll('.rv-pn-fld').forEach(function (row) {
+          var node = el.querySelector('svg [id="' + row.getAttribute('data-id') + '"]');
+          row.addEventListener('mouseenter', function () { edit.hover = node; syncChrome(); });
+          row.addEventListener('mouseleave', function () { edit.hover = null; syncChrome(); });
+        });
+        box.querySelector('.rv-pn-svgapply').addEventListener('click', function () {
+          var chosen = [];
+          box.querySelectorAll('.rv-pn-fld').forEach(function (row) {
+            var v = row.querySelector('select').value;
+            if (v) chosen.push({ id: row.getAttribute('data-id'), n: parseInt(v, 10) });
+          });
+          chosen.sort(function (a, b) { return a.n - b.n; });
+          var block = [j.lines[rel]];
+          if (chosen.length) {
+            block.push('> hide: ' + chosen.map(function (c) { return '#' + c.id; }).join(','));
+            chosen.forEach(function (c) { block.push('> animate: #' + c.id + ' opacity:1'); });
+          }
+          preserved.forEach(function (ln) { block.push(ln); });
+          rvPostEdit([{ op: 'replace_lines', start: svgLine, end: base + end, text: block }]);
+        });
+      });
   }
 
   function pinApply(idx, nums, line) {

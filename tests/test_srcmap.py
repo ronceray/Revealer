@@ -261,3 +261,15 @@ def test_build_hook_runs_and_fails_loudly(deck):
     bad = deck("> build: false\n\n=== S\n\nhi\n", name="bad")
     with pytest.raises(RuntimeError):
         build_deck(bad, name="bad")
+
+
+def test_svg_hide_and_provenance(deck):
+    svg = ('<svg xmlns="http://www.w3.org/2000/svg"><rect id="a" width="5" height="5"/>'
+           '<circle id="b" r="3" opacity="0.9"/></svg>')
+    d = deck("=== S\n> svg: Media/d.svg\n> hide: #b\n> animate: #b opacity:1\n\nText\n",
+             media={"Media/d.svg": svg.encode()})
+    dev = build_deck(d, dev=True)
+    assert '<circle id="b" r="3" opacity="0"/>' in dev
+    assert '<rect id="a" width="5" height="5"/>' in dev
+    i = dev.index('class="revealer-svg"')
+    assert 'data-rv-src="2"' in dev[i:i + 60]
