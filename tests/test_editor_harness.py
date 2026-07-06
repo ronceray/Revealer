@@ -88,3 +88,13 @@ def test_prod_build_has_no_dev_hooks(deck):
     assert "__rv__" not in html
     assert "__RV_DEV__" not in html
     assert "data-rv-src" not in html
+
+
+def test_deck_reveal_js_ships_no_editor_assets(deck):
+    """Editor modules (editor/*.js, editor.css) and the test harness (rvt*,
+    suite-*) are dev-server-only: a built deck's reveal.js must have none."""
+    pdir = deck(PRES, name="hrn")
+    build_mod.build(str(pdir / "hrn.pres"))
+    shipped = [p for p in (pdir / "reveal.js").rglob("*")
+               if p.name.startswith(("editor", "rvt", "suite-"))]
+    assert shipped == [], shipped

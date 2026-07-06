@@ -60,7 +60,7 @@ EDITOR_JS: tuple[str, ...] = (
     "editor/history.js",
     "editor/shell.js",
     "editor/split.js",
-    "editor.js",
+    "editor/boot.js",
 )
 _DEV_ASSETS = frozenset(EDITOR_JS) | {"editor.css"}
 SSE_KEEPALIVE_S = 15

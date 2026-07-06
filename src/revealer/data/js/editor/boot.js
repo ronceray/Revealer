@@ -1,10 +1,4 @@
-/* Revealer dev-mode client — served ONLY by `revealer serve` (never copied
- * into decks: excluded in assets.inject_revealer_assets).
- *
- * Stage A: live-reload over SSE, position-preserving reloads, and a build
- * error overlay. The layout-editing overlay builds on top of this file in
- * later stages.
- */
+/* boot: arms the editor once every module is loaded — toolbar, ?rv-* debug/test hooks, and the SSE reload connection */
 (function () {
   'use strict';
   if (!window.__RV_DEV__) return;
@@ -12,7 +6,6 @@
   var S = RV.state;
   var F = RV.fn;
   var TOKEN = RV.token;
-
 
   // Debug/testing hook: ?rv-edit=1 auto-enters edit mode (and selects the
   // first annotated element on the current slide with ?rv-select=1).
@@ -64,4 +57,5 @@
   }
 
   connect();
+
 })();
