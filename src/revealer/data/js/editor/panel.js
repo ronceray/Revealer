@@ -49,6 +49,13 @@
       var sec = window.Reveal && Reveal.getCurrentSlide && Reveal.getCurrentSlide();
       if (sec && sec.hasAttribute('data-rv-src')) {
         renderSlideSource(p, sec);
+      } else if (sec && sec.hasAttribute('data-rv-inc')) {
+        p.innerHTML =
+          '<div class="rv-pn-head">Included slide</div>' +
+          '<div class="rv-pn-hint">This slide comes from <code>' +
+          RV.esc(sec.getAttribute('data-rv-inc')) +
+          '</code> — edit that file; it is read-only here.</div>';
+        appendCheatsheet(p);
       } else {
         p.innerHTML =
           '<div class="rv-pn-head">Nothing selected</div>' +

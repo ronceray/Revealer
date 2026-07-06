@@ -73,7 +73,7 @@ _MEDIA_EXT = {".png", ".jpg", ".jpeg", ".gif", ".webp", ".svg", ".mp4", ".webm",
               ".ogg", ".ogv", ".mov", ".mp3", ".wav", ".pdf"}
 # Extensions whose change requires a rebuild (referenced/converted at build
 # time): .pdf figures reconvert through Media/.rv-cache, .svg may be inlined.
-_REBUILD_EXT = {".bib", ".svg", ".pdf"}
+_REBUILD_EXT = {".bib", ".svg", ".pdf", ".pres"}
 # Directories never scanned by the asset watcher.
 _SKIP_DIRS = {"reveal.js", ".git", ".rv-history", ".rv-cache", "__pycache__"}
 
@@ -91,6 +91,7 @@ class DevSession:
     clients_lock: threading.Lock = field(default_factory=threading.Lock)
     lock: threading.RLock = field(default_factory=threading.RLock)
     test_mode: bool = False             # unlocks /__rv__/test (never in normal serve)
+    includes: tuple = ()                # files `> include:`d by the last build
     test_results: dict | None = None    # last payload POSTed by the JS runner
     # undo/redo = a cursor over the shadow-git first-parent history.
     cursor: str | None = None            # detached position (None = at HEAD)
@@ -121,6 +122,10 @@ def _rebuild(sess: DevSession, log=print, commit: bool = True) -> bool:
             sess.html_path = Path(out)
             sess.sha = sess.attempted_sha
             sess.build_error = None
+            try:
+                sess.includes = tuple(build_mod.collect_includes(str(sess.pres)))
+            except Exception:
+                sess.includes = ()
             log("rebuilt {0} in {1:.0f} ms".format(
                 sess.html_path.name, 1000 * (time.monotonic() - t0)))
             if commit:
@@ -162,6 +167,8 @@ def _watch(sess: DevSession, stop: threading.Event, log=print) -> None:
                 if ext not in _MEDIA_EXT and ext not in _REBUILD_EXT:
                     continue
                 p = os.path.join(root, name)
+                if ext == ".pres" and os.path.realpath(p) == str(sess.pres):
+                    continue  # the sha loop below owns the main file
                 try:
                     mt = os.stat(p).st_mtime
                 except OSError:
@@ -322,6 +329,12 @@ def _history_commit(pdir: Path, pres: Path, message: str, auto: bool,
                 pdir, sess.cursor,
                 message="auto: rewind" if auto else prefix + message)
     files = [pres.name] + [f.name for f in pdir.glob("*.bib")]
+    if sess is not None:
+        for inc in sess.includes:
+            try:
+                files.append(str(Path(inc).resolve().relative_to(pdir.resolve())))
+            except ValueError:
+                pass  # outside the deck folder — never staged
     _hgit(pdir, "add", "-f", "--", *files)
     committed = False
     if _hgit(pdir, "diff", "--cached", "--quiet").returncode != 0:

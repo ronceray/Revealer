@@ -43,6 +43,7 @@ This slide is <b>extremely</b> informative.
 | `---` *title* | **Vertical slide.** |
 | `%%%` *title* | **Section slide.** Marks the start of a section; the header is removed. Add `> relief: none` to drop the text stroke. |
 | `>>> biblio` | **Bibliography slide(s).** Adds formatted bibliography slides from the references cited with `> cite:`. The title can be set with `> title:`. |
+| `> include:` *file.pres* | **Include another file.** The line is replaced by the file's contents at build time (recursive; paths resolve relative to the including file and must stay inside the deck folder). Made for lecture courses: keep each lecture in its own `.pres` and assemble a master deck. Included slides rebuild on save like the main file, but are read-only in the browser editor — edit their own file instead. |
 
 ## Presentation settings
 

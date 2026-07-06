@@ -17,7 +17,6 @@ It also adds inline SVG animation driven from the ``.pres`` file (see
 from __future__ import annotations
 
 import hashlib
-import io
 import json as _json
 import os
 import re
@@ -1684,6 +1683,76 @@ def _slide_append(S: dict, line: str, lineno: int | None) -> None:
     S["srcmap"].append(lineno)
 
 
+_INCLUDE_RE = re.compile(r"^>\s*include\s*:\s*(\S+)\s*$")
+
+
+def _expand_includes(text: str, pdir: str, _stack: tuple = (),
+                     _root: str | None = None, _depth: int = 0):
+    """Expand ``> include: file.pres`` lines (build-only, recursive).
+
+    Returns ``(entries, includes)`` where each entry is
+    ``(origin_line, include_file, line)``: main-file lines keep their
+    1-based number and a ``None`` file; included lines carry a ``None``
+    origin (so they never receive ``data-rv-src`` — the "sha match ⇒
+    every annotation valid" invariant holds by construction) plus the
+    display name of the file they came from. ``includes`` lists the
+    absolute paths read, for the dev server's watcher and history.
+    Includes must live inside the deck folder; circular includes are
+    skipped with a comment.
+    """
+    root = _root or os.path.realpath(pdir)
+    entries: list[tuple[int | None, str | None, str]] = []
+    includes: list[str] = []
+    for lineno, line in enumerate(text.splitlines(keepends=True), 1):
+        m = _INCLUDE_RE.match(line)
+        if not m:
+            entries.append((lineno if _depth == 0 else None, None, line))
+            continue
+        fname = m.group(1)
+        fpath = os.path.realpath(os.path.join(pdir, fname))
+        if not fpath.startswith(root + os.sep):
+            print("Warning: `> include:` outside the deck folder ignored: {0}".format(fname))
+            entries.append((lineno if _depth == 0 else None, None, "\n"))
+            continue
+        if fpath in _stack:
+            print("Warning: circular `> include:` skipped: {0}".format(fname))
+            entries.append((lineno if _depth == 0 else None, None, "\n"))
+            continue
+        try:
+            sub = Path(fpath).read_text(encoding="utf-8")
+        except OSError:
+            print("Warning: `> include:` file not found: {0}".format(fname))
+            entries.append((lineno if _depth == 0 else None, None, "\n"))
+            continue
+        includes.append(fpath)
+        if not sub.endswith("\n"):
+            sub += "\n"
+        sub_entries, sub_includes = _expand_includes(
+            sub, os.path.dirname(fpath), _stack + (fpath,), root, _depth + 1)
+        entries.extend((None, sf or fname, sl) for _o, sf, sl in sub_entries)
+        includes.extend(sub_includes)
+    return entries, includes
+
+
+def collect_includes(pfile: str) -> list[str]:
+    """Absolute paths of every file `> include:`d by *pfile* (recursive)."""
+    try:
+        text = Path(pfile).read_text(encoding="utf-8")
+    except OSError:
+        return []
+    _entries, includes = _expand_includes(
+        text, os.path.dirname(os.path.abspath(pfile)),
+        _stack=(os.path.realpath(pfile),))
+    return includes
+
+
+def _inc_attr(param: dict) -> str:
+    """Dev-only marker on sections that came from an include."""
+    if not _DEV or not param.get("_inc"):
+        return ""
+    return ' data-rv-inc="{0}"'.format(_escape_attr(str(param["_inc"])))
+
+
 def _read_pres(pfile: str) -> tuple[str, str]:
     """Read a ``.pres`` file once; return ``(text, sha256-hex of its bytes)``.
 
@@ -1749,15 +1818,17 @@ def _build(pfile: str, dev: bool) -> str:
     _PDIR = pdir
     _run_build_hooks(pdir, pres_text)
 
-    with io.StringIO(pres_text) as fid:
-        for lineno, line in enumerate(fid, 1):
+    _expanded, _includes = _expand_includes(
+        pres_text, pdir, _stack=(os.path.realpath(pfile),))
+    if True:  # (indentation-stable replacement of the StringIO loop)
+        for lineno, _inc_file, line in _expanded:
 
             if line.startswith("#"):
                 continue
 
             s = ">>> first: "
             if line.startswith(s):
-                slide.append({"type": "first", "title": line[len(s):].strip(), "html": "", "notes": "", "param": {}, "src": lineno, "srcmap": []})
+                slide.append({"type": "first", "title": line[len(s):].strip(), "html": "", "notes": "", "param": ({"_inc": _inc_file} if _inc_file else {}), "src": lineno, "srcmap": []})
                 notes = False
                 table_mode = False
                 block_depth = 0
@@ -1765,7 +1836,7 @@ def _build(pfile: str, dev: bool) -> str:
 
             s = r"%%% "
             if line.startswith(s):
-                slide.append({"type": "section", "title": line[len(s):].strip(), "html": "", "notes": "", "param": {}, "src": lineno, "srcmap": []})
+                slide.append({"type": "section", "title": line[len(s):].strip(), "html": "", "notes": "", "param": ({"_inc": _inc_file} if _inc_file else {}), "src": lineno, "srcmap": []})
                 notes = False
                 table_mode = False
                 block_depth = 0
@@ -1773,7 +1844,7 @@ def _build(pfile: str, dev: bool) -> str:
 
             s = "=== "
             if line.startswith(s):
-                slide.append({"type": "slide", "title": line[len(s):].strip(), "html": "", "notes": "", "param": {}, "src": lineno, "srcmap": []})
+                slide.append({"type": "slide", "title": line[len(s):].strip(), "html": "", "notes": "", "param": ({"_inc": _inc_file} if _inc_file else {}), "src": lineno, "srcmap": []})
                 notes = False
                 table_mode = False
                 block_depth = 0
@@ -1786,7 +1857,7 @@ def _build(pfile: str, dev: bool) -> str:
                         slide[-1]["type"] = "child"
                     case _:
                         slide[-1]["type"] = "parent"
-                slide.append({"type": "lastchild", "title": line[len(s):].strip(), "html": "", "notes": "", "param": {}, "src": lineno, "srcmap": []})
+                slide.append({"type": "lastchild", "title": line[len(s):].strip(), "html": "", "notes": "", "param": ({"_inc": _inc_file} if _inc_file else {}), "src": lineno, "srcmap": []})
                 notes = False
                 table_mode = False
                 block_depth = 0
@@ -1794,7 +1865,7 @@ def _build(pfile: str, dev: bool) -> str:
 
             s = ">>> biblio"
             if line.startswith(s):
-                slide.append({"type": "biblio", "title": "Bibliography", "html": "", "notes": "", "param": {}, "src": lineno, "srcmap": []})
+                slide.append({"type": "biblio", "title": "Bibliography", "html": "", "notes": "", "param": ({"_inc": _inc_file} if _inc_file else {}), "src": lineno, "srcmap": []})
                 notes = False
                 table_mode = False
                 block_depth = 0
@@ -1902,6 +1973,9 @@ def _build(pfile: str, dev: bool) -> str:
     # Slide source spans: a slide ends on the line before the next marker.
     total_lines = pres_text.count("\n") + (0 if pres_text.endswith("\n") else 1)
     for i, S in enumerate(slide):
+        if S.get("src") is None:
+            S["src_end"] = None
+            continue
         nxt = [T["src"] for T in slide[i + 1:] if T.get("src") is not None]
         S["src_end"] = (min(nxt) - 1) if nxt else total_lines
 
@@ -2083,10 +2157,11 @@ def _build(pfile: str, dev: bool) -> str:
                         stack_end = T.get("src_end", stack_end)
                     else:
                         break
-                content += '<section data-transition="none"{0}>'.format(
-                    _src_attr(S.get("src"), stack_end))
+                content += '<section data-transition="none"{0}{1}>'.format(
+                    _src_attr(S.get("src"), stack_end), _inc_attr(S["param"]))
 
-            opt = 'data-transition="none" data-state="slide_{:d}"'.format(k) + _src_attr(S.get("src"), S.get("src_end"))
+            opt = 'data-transition="none" data-state="slide_{:d}"'.format(k) + \
+                _src_attr(S.get("src"), S.get("src_end")) + _inc_attr(S["param"])
 
             if S["param"].get("visibility") == "hidden":
                 opt += ' data-visibility="hidden"'
