@@ -1,0 +1,28 @@
+# Revealer default theme — matplotlib style matched to the deck palette.
+# Regenerate figures inside a build hook, e.g.
+#   > build: python figs.py
+# with: plt.style.use('reveal.js/dist/theme/revealer.mplstyle')
+savefig.bbox: tight
+savefig.dpi: 200
+figure.facecolor: white
+savefig.facecolor: white
+axes.spines.top: False
+axes.spines.right: False
+legend.frameon: False
+lines.linewidth: 2.2
+lines.markersize: 7
+font.size: 16
+axes.titlesize: 18
+axes.labelsize: 16
+xtick.labelsize: 14
+ytick.labelsize: 14
+mathtext.fontset: dejavusans
+axes.prop_cycle: cycler('color', ['2a76dd', '1a1a1a', '6ca0e8', '555555', '888888'])
+text.color: 1a1a1a
+axes.labelcolor: 1a1a1a
+axes.titlecolor: 1a1a1a
+axes.edgecolor: 555555
+xtick.color: 555555
+ytick.color: 555555
+font.family: sans-serif
+font.sans-serif: Source Sans Pro, Segoe UI, Helvetica, Arial, sans-serif

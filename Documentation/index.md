@@ -59,6 +59,7 @@ cli
 pres-structure
 pres-shortcuts
 themes
+figures
 svg
 bibliography
 ```

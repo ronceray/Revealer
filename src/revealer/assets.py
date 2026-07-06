@@ -257,6 +257,10 @@ def inject_revealer_assets(reveal_dir: str) -> None:
     theme_dest.mkdir(parents=True, exist_ok=True)
     for css in (DATA / "themes").glob("*.css"):
         shutil.copyfile(css, theme_dest / css.name)
+    # palette-matched matplotlib styles: figure scripts run from `> build:`
+    # hooks can plt.style.use('reveal.js/dist/theme/<theme>.mplstyle')
+    for mpl in (DATA / "themes").glob("*.mplstyle"):
+        shutil.copyfile(mpl, theme_dest / mpl.name)
 
     fonts_dest = reveal / "fonts"
     fonts_dest.mkdir(parents=True, exist_ok=True)
