@@ -20,6 +20,27 @@ Some explanatory text.
 The SVG is embedded directly in the slide (not via `<img>`), which is what makes
 its inner elements addressable for animation.
 
+`> svg:` also accepts a `.pdf` path: the PDF is converted to SVG on the fly
+and cached (see the [figures pipeline](figures.md)).
+
+## Hiding elements up front
+
+`> hide:` sets the initial state of elements without touching the SVG file:
+each listed `id` gets `opacity="0"` when the SVG is inlined, ready to be
+revealed by an `> animate:` step. Ids are comma-separated (the leading `#`
+is optional) and the directive is repeatable:
+
+```
+=== Animated SVG
+> svg: Media/Animated/demo.svg
+> hide: #dot, #arrow
+> animate: #dot opacity:1
+> animate: #arrow opacity:1
+```
+
+This is handy for figures exported from tools that make pre-hiding elements
+awkward — the source SVG stays fully visible when opened on its own.
+
 ## Animation steps
 
 Each `> animate:` line defines one step. Its syntax is:
@@ -56,8 +77,9 @@ restores each element to its original state.
 
 * Give meaningful `id`s to the elements you want to animate in your SVG editor
   (Inkscape: *Object Properties → ID*).
-* Set the SVG's initial state (e.g. `opacity="0"`) directly in the file; the
-  animation moves elements *from* that state.
+* Set the SVG's initial state (e.g. `opacity="0"`) directly in the file, or
+  keep the file untouched and use `> hide:`; the animation moves elements
+  *from* that state.
 * `transform` animates too — e.g. `transform:translate(100,0)` or
   `transform:scale(1.5)`.
 * The default global duration can be changed once for the whole presentation

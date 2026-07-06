@@ -4,6 +4,18 @@ The `revealer` command manages presentations and the reveal.js engine they
 embed. It is a hybrid CLI: explicit sub-commands, with interactive menus
 (extension selection, presentation picker) where it helps.
 
+## Direct open
+
+The fastest entry point: give `revealer` a `.pres` file (or a folder
+containing one) with no sub-command, and it behaves as `revealer serve` —
+build, open in the browser with live reload, [editor](../editor.md)
+enabled:
+
+```bash
+revealer talk.pres          # same as: revealer serve talk.pres
+revealer ~/talks/MyTalk     # a folder works too
+```
+
 ## Interactive menu
 
 Running `revealer` with **no argument** opens a navigable menu giving access to
@@ -17,7 +29,8 @@ revealer
 Revealer — reveal.js scientific presentations
 
 ? What would you like to do?
- » Load a presentation (open a .pres in the browser)
+ » Edit a presentation (live preview + editor)
+   Load a presentation (open a .pres in the browser)
    Build a presentation
    Create a new presentation
    Manage extensions
@@ -55,8 +68,10 @@ under the root only scans its direct child folders, so decks nested deeper are
 reached via *Load* / recents.)
 
 Each presentation also carries a hidden `.revealer.toml` file recording the
-reveal.js extensions it uses, so the engine can be rebuilt or updated
-identically later.
+reveal.js extensions it uses, the reveal.js version, and the commit pins of
+its third-party plugins, so the engine can be rebuilt or updated
+identically later (see
+[Recipes › Reproducible decks](../recipes.md#reproducible-decks)).
 
 ## Commands
 
@@ -145,51 +160,16 @@ current slide and fragment. Build errors appear as an overlay in the browser
 server binds to `127.0.0.1` only and serves a separate `<name>.dev.html`
 artifact, deleted on exit; the exported `<name>.html` is not touched.
 
-#### Editing from the browser
-
-The served presentation carries a small toolbar (top left): **✏ Edit**
-toggles edit mode, **↶ / ↷** undo and redo, **☰** opens the fragment
-drawer, **＋ Media** imports a file (copied into `Media/` and inserted at
-the selection), **⇔** switches between the docked panel and a split view
-(deck left, panel right, divider draggable), and the status chip names the
-`.pres` file being edited and reports every save. **You are always editing the `.pres` source file, never the
-HTML** — each change is written to it immediately as a minimal text edit
-(a session diffs like hand edits), the deck rebuilds, and the preview
-reloads in place, keeping your slide, edit mode and selection. There is no
-separate save step.
-
-In edit mode, hovering names the element under the cursor and clicking
-selects it. The **side panel** then shows everything about the selection:
-
-- with nothing selected, the **whole slide's source**, editable in place;
-- a clickable **breadcrumb** (slide ▸ row ▸ column ▸ figure) to reach
-  enclosing constructs — no guessing what you clicked;
-- **parameter fields** — pin x/y/width, media height/width, row height and
-  gap, column size, grid gap, fragment index, … — type a value and press
-  Enter;
-- **▲ Up / ▼ Down / 🗑 Delete** to reorder a block among its siblings or
-  remove it (`Del` deletes the selection too — `Ctrl+Z` undoes);
-- a collapsible **command cheatsheet** of the frequent `.pres` shortcuts;
-- the **source box**: the actual `.pres` lines of the selection, editable in
-  place (*Apply source*) — anything the quick fields don't cover.
-
-Direct manipulation works too: drag handles move pins and resize media,
-rows, stacks and column splits (with fraction snapping); the square grip
-drags a block into another column; arrow keys nudge (`Shift` = bigger
-steps); dropping an image or movie file onto a column uploads it into
-`Media/` and inserts the matching `!` / `!!` line; `F` opens the fragment
-drawer to reorder the slide's reveal sequence.
-
-Undo/redo covers all browser-made edits. If the file changed on disk in the
-meantime (e.g. you saved in your text editor), the edit is refused and the
-page resyncs — nothing is ever overwritten blindly, and the two workflows
-can be mixed freely.
+The served presentation carries the browser editor's toolbar (edit mode,
+undo/redo, fragment drawer, outline, media import, split view, save
+history, HTML/PDF export) — see [The browser editor](../editor.md).
 
 ### `revealer pdf [TARGET]`
 
-Export a presentation to PDF, one page per slide with every fragment visible.
-`TARGET` may be a `.pres` file or its folder; `--out` / `-o` sets the output
-path (default: next to the `.pres`).
+Export a presentation to PDF, one page per slide with every fragment visible
+(`revealer export` is the same command under another name). `TARGET` may be
+a `.pres` file or its folder; `--out` / `-o` sets the output path (default:
+next to the `.pres`).
 
 ```bash
 revealer pdf MyTalk               # -> MyTalk/MyTalk.pdf

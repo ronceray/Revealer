@@ -7,12 +7,20 @@
 * [pipx](https://pipx.pypa.io/) is recommended to install the command-line tool
   in an isolated environment.
 
+Some features additionally use external tools, each degrading gracefully
+when absent:
+
+* **git** — the editor's [save history](editor.md#save-history--the-time-machine)
+  (without it, undo falls back to a single-step slot);
+* **Chrome / Chromium** and **`img2pdf`** — [PDF export](reference/cli.md#revealer-pdf-target);
+* **`pdftocairo`** (poppler-utils) — [PDF figures](figures.md) (`! fig.pdf`).
+
 ## For users
 
 If you only want to *use* Revealer, install it with pipx:
 
 ```bash
-git clone https://github.com/CandelierLab/Revealer.git
+git clone https://github.com/ronceray/Revealer.git
 cd Revealer
 pipx install .
 ```
@@ -56,7 +64,7 @@ changes take effect immediately, without ever running
 `pipx uninstall`/`pipx install` again:
 
 ```bash
-git clone https://github.com/CandelierLab/Revealer.git
+git clone https://github.com/ronceray/Revealer.git
 cd Revealer
 pipx install --editable .
 ```
@@ -109,7 +117,7 @@ The built-in development server gives a save-and-see loop with no extra
 tooling:
 
 ```bash
-revealer serve MyTalk
+revealer serve MyTalk       # or simply:  revealer MyTalk/MyTalk.pres
 ```
 
 It builds the presentation, opens it in your browser, then watches the
@@ -119,6 +127,9 @@ you were on. If a build fails, the browser shows the error (with an *open in
 editor* button) and keeps displaying the last good version until the next
 save. The served copy is a separate `<name>.dev.html` artifact — the exported
 `<name>.html` is only written by `revealer build`.
+
+The served deck also carries the full WYSIWYG layer — see
+[The browser editor](editor.md).
 
 ## VS Code integration
 

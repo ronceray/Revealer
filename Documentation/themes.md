@@ -1,11 +1,12 @@
 # Themes
 
-Revealer ships two built-in themes and can also use any stock reveal.js theme.
+Revealer ships built-in themes and can also use any stock reveal.js theme.
 
 | Theme | Description |
 | --- | --- |
 | `revealer` | **Default.** A neutral, sober look: grey/black headings with a discreet blue accent. Intended to be presentation-agnostic and easy to reuse. |
 | `ljp` | **Laboratoire Jean Perrin** branding: dark-teal headings, blue sub-headings and matching links. |
+| `sfi` | A bold blue accent look with full-bleed section dividers. |
 | any reveal.js theme | `black`, `white`, `league`, … (see the [reveal.js themes](https://revealjs.com/themes/)). |
 
 Select a theme in the settings part of a `.pres` file:
@@ -54,7 +55,20 @@ presentation's `reveal.js/dist/theme/` folder at build time. Logos remain a
 per-presentation choice (`> logo:` in the `.pres` file) and are independent of
 the theme.
 
+The components emitted by the layout DSL (callout boxes, cards, stacks,
+pins, equation frames — the `rv-*` and `box-*` classes listed in the
+[constructs reference](reference/constructs.md)) are styled by the shared
+base stylesheet, so they look consistent under every theme and can be
+re-skinned from a custom theme's CSS.
+
 The header and footer band heights are not theme variables: they follow the
 theme's default look, and can be overridden per presentation with
 `> header-height:` / `> footer-height:` (a fraction of the slide height). See
-[Layout parameters](pres-structure.md#layout-parameters).
+[Layout parameters](authoring.md#layout-parameters).
+
+## Matplotlib styles
+
+Every theme also ships a palette-matched matplotlib style, copied into each
+deck at `reveal.js/dist/theme/<theme>.mplstyle` — use it from your figure
+scripts so plots inherit the deck's colors and slide-ready font sizes. See
+[Recipes › Plots that match the theme](recipes.md#plots-that-match-the-theme).

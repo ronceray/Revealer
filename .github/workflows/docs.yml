@@ -40,7 +40,7 @@ jobs:
           revealer build Demo/Simple.pres
 
       - name: Build HTML documentation
-        run: sphinx-build -b html Documentation Documentation/_build/html
+        run: sphinx-build -b html -W Documentation Documentation/_build/html
 
       - name: Disable Jekyll processing
         run: touch Documentation/_build/html/.nojekyll

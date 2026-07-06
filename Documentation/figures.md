@@ -34,7 +34,7 @@ fonts, theme color cycle, no chartjunk):
 import matplotlib
 import matplotlib.pyplot as plt
 
-plt.style.use("reveal.js/dist/theme/sfi.mplstyle")
+plt.style.use("reveal.js/dist/theme/revealer.mplstyle")
 
 fig, ax = plt.subplots(figsize=(6, 4))
 ax.plot(x, y, label="theory")
