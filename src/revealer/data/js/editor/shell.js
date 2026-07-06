@@ -33,6 +33,7 @@
       '<button class="rv-tb-undo" title="Undo (Ctrl+Z)">↶</button>' +
       '<button class="rv-tb-redo" title="Redo (Ctrl+Shift+Z)">↷</button>' +
       '<button class="rv-tb-frag" title="Fragments (F)">☰</button>' +
+      '<button class="rv-tb-outline" title="Slide outline (O)">▤</button>' +
       '<button class="rv-tb-media" title="Import an image / movie into Media/">＋ Media</button>' +
       '<button class="rv-tb-view" title="Toggle split view">⇔</button>' +
       '<button class="rv-tb-hist" title="Save history (time machine)">🕐</button>' +
@@ -48,6 +49,7 @@
       if (!S.on) F.setEdit(true);
       F.toggleDrawer();
     });
+    tb.querySelector('.rv-tb-outline').addEventListener('click', F.toggleOutline);
     tb.querySelector('.rv-tb-help').addEventListener('click', toggleHelp);
     function doExport(kind) {
       F.toast(kind === 'pdf' ? 'Exporting PDF… (can take a minute)' : 'Exporting HTML…', 60000);

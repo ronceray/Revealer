@@ -38,6 +38,7 @@
         F.syncChrome();
       }
       if (params.get('rv-drawer') === '1') F.toggleDrawer();
+      if (params.get('rv-outline') === '1') F.toggleOutline();
     };
     if (window.Reveal && Reveal.on) {
       if (Reveal.isReady && Reveal.isReady()) setTimeout(arm, 100);

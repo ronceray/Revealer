@@ -195,6 +195,9 @@
     } else if (S.on && ev.key === 'f') {
       F.toggleDrawer();
       ev.preventDefault();
+    } else if (S.on && ev.key === 'o') {
+      F.toggleOutline();
+      ev.preventDefault();
     } else if (S.on && ev.key === 'Escape') {
       selectParent();
       ev.preventDefault();

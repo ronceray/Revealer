@@ -3,7 +3,7 @@
 /* --- z-scale (single source of truth for editor chrome stacking) ----------
     9000 #rv-editor-layer (grips/outlines live inside its own context)
     9400 #rv-ed-slotbar
-    9600 #rv-ed-drawer     9610 #rv-ed-panel    9650 #rv-ed-divider
+    9600 #rv-ed-drawer #rv-ed-outline    9610 #rv-ed-panel    9650 #rv-ed-divider
     9700 #rv-ed-toolbar
     9810 #rv-ed-help       9820 #rv-ed-history (mutually exclusive, distinct z)
     9900 #rv-ed-hovertag
@@ -20,7 +20,8 @@
 #rv-ed-peek .rv-box-body { flex: 1; display: flex; padding: 0; }
 #rv-ed-peek .rv-box-body iframe { flex: 1; }
 .rv-box-hint { flex: 1; color: #8a93b5; font-size: 11px; }
-#rv-ed-help .rv-box-head button, #rv-ed-drawer .rv-box-head button {
+#rv-ed-help .rv-box-head button, #rv-ed-drawer .rv-box-head button,
+#rv-ed-outline .rv-box-head button {
   font: 12px system-ui; background: #2a3350; color: #fff;
   border: 1px solid #4a5580; border-radius: 5px; padding: 2px 8px; cursor: pointer;
 }
@@ -226,6 +227,54 @@ html.rv-edit .reveal .slides section * { cursor: crosshair; }
   padding: 0 0.4em;
 }
 #rv-ed-drawer button:hover { background: #37436b; }
+
+/* --- slide outline sidebar --------------------------------------------------- */
+
+#rv-ed-outline {
+  position: fixed;
+  top: 60px;
+  left: 12px;
+  bottom: 12px;
+  width: 240px;
+  overflow-y: auto;
+  background: #1c1c2e;
+  color: #fff;
+  border-radius: 10px;
+  font: 13px system-ui, sans-serif;
+  box-shadow: 0 10px 32px rgba(0, 0, 0, 0.4);
+  z-index: 9600;
+}
+#rv-ed-outline .rv-box-body { padding: 0 0 8px; }
+.rv-ol-item {
+  display: flex;
+  align-items: center;
+  gap: 0.5em;
+  padding: 0.35em 0.8em;
+  border-top: 1px solid #2a3350;
+  border-left: 3px solid transparent;
+  cursor: pointer;
+}
+.rv-ol-item:hover { background: #252c48; }
+.rv-ol-item.rv-ol-current {
+  background: rgba(94, 156, 255, 0.12);
+  border-left-color: #5e9cff;
+}
+.rv-ol-num { color: #8a93b5; flex: 0 0 1.4em; text-align: right; }
+.rv-ol-title { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.rv-ol-kids, .rv-ol-unmapped { color: #8a93b5; font-size: 11px; }
+.rv-ol-acts { display: flex; gap: 2px; }
+#rv-ed-outline button {
+  font: inherit;
+  background: #2a3350;
+  color: #fff;
+  border: 1px solid #4a5580;
+  border-radius: 4px;
+  cursor: pointer;
+  padding: 0 0.4em;
+}
+#rv-ed-outline button:hover { background: #37436b; }
+#rv-ed-outline button:disabled { opacity: 0.35; cursor: default; }
+#rv-ed-outline button:disabled:hover { background: #2a3350; }
 
 /* --- editor shell: toolbar, panel, help, hover tag -------------------------- */
 

@@ -58,6 +58,7 @@ EDITOR_JS: tuple[str, ...] = (
     "editor/format.js",
     "editor/panel.js",
     "editor/history.js",
+    "editor/outline.js",
     "editor/shell.js",
     "editor/split.js",
     "editor/boot.js",

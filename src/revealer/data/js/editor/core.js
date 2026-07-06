@@ -126,7 +126,8 @@
         h: idx.h || 0, v: idx.v || 0, f: (idx.f === undefined ? -1 : idx.f),
         editOn: !!S.on,
         selSrc: (S.sel && S.sel.getAttribute) ? S.sel.getAttribute('data-rv-src') : null,
-        drawer: !!document.getElementById('rv-ed-drawer')
+        drawer: !!document.getElementById('rv-ed-drawer'),
+        outline: !!document.getElementById('rv-ed-outline')
       }));
     } catch (e) { /* sessionStorage unavailable — hash restore still works */ }
     location.reload();
@@ -153,6 +154,7 @@
           F.syncChrome();
         }
         if (s.drawer) F.toggleDrawer();
+        if (s.outline) F.toggleOutline();
       }
     } catch (e) {}
   }

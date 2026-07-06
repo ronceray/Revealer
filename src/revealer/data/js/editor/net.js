@@ -17,7 +17,7 @@
      whatever is still waiting (with a toast) and runs next. Any rejected
      edit clears the queue: the deck state is the truth, resync to it. */
   var STRUCTURAL_OPS = { move_block: 1, delete_block: 1, insert_media: 1,
-                         replace_lines: 1, set_grid_gap: 1 };
+                         insert_lines: 1, replace_lines: 1, set_grid_gap: 1 };
   var editQueue = [];        // waiting line-preserving batches
   var nextStructural = null; // at most one structural batch, runs next
   var editInFlight = false;
