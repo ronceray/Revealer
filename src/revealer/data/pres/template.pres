@@ -1,23 +1,48 @@
-# --- SETTINGS --------------------------------------------------------------
+# __TITLE__ — a Revealer presentation.
+# Lines starting with # are comments. Raw HTML is allowed anywhere.
 
+# --- SETTINGS ----------------------------------------------------------------
+
+> title: __TITLE__
 > author: Your name
-> event: Somewhere, 01/01/2026
-
 > theme: revealer
 > slideNumber: c/t
 
-# --- CONTENT ---------------------------------------------------------------
+# --- CONTENT -----------------------------------------------------------------
 
->>> first: {title}
+>>> first: __TITLE__
 > subtitle: A reveal.js presentation
 
-=== First slide
+=== Text and lists
 
-Write your content in plain text and HTML.
+Write your content in plain text — **bold**, *italic*, `code`
+and math like $E = mc^2$ work out of the box.
 
 * Bullet one
 * Bullet two
+  * Nested bullet
+
+=== Rows and columns
+
+> fill
+> row
+> col 1/2 center
+The layout DSL splits a slide into rows and columns.
+
+# Drop an image into Media/ and show it with a `!` line:
+# ! Media/figure.png | A captioned figure
+
+> col 1/2 center
+A framed equation, revealed as a fragment — press the right arrow:
+
+> eq +
+\langle x^2(t) \rangle = 2 D t
+
+> end: row
 
 --- A vertical slide
 
 Press the down arrow to reach this slide.
+
+# Edit live in the browser:   revealer __TITLE__.pres
+# Full guide:                 https://ronceray.github.io/Revealer/

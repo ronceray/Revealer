@@ -173,7 +173,7 @@ def _action_new(name: str, here: bool) -> None:
 
     template = (assets.DATA / "pres" / "template.pres").read_text(encoding="utf-8")
     pres = pdir / "{0}.pres".format(name)
-    pres.write_text(template.format(title=name, encoding="utf-8"))
+    pres.write_text(template.replace("__TITLE__", name), encoding="utf-8")
 
     console.print("Setting up reveal.js in [bold]{0}[/bold]...".format(pdir))
     assets.setup_revealjs(str(pdir), extensions, log=console.print)
