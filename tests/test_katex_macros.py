@@ -77,3 +77,32 @@ x
 """)
     assert "katex: {" in html
     assert "nope.tex" in capsys.readouterr().out
+
+
+def test_commented_macros_are_ignored(deck):
+    html = _build_html(deck, """> title: C
+> macros: defs.tex
+
+=== One
+
+x
+""", files={"defs.tex": (b"% \\newcommand{\\bad}{OLD}\n"
+                          b"\\newcommand{\\good}{\\mathbb{R}}\n")})
+    (katex_line,) = [ln for ln in html.split("\n") if "katex: {" in ln]
+    assert "good" in katex_line
+    assert "bad" not in katex_line  # the % line never reached KaTeX
+
+
+def test_macro_body_cannot_break_out_of_script(deck):
+    html = _build_html(deck, """> title: X
+> macro: \\bad \\text{</script>}
+
+=== One
+
+$\\bad$
+""")
+    # the macro value must be escaped so it can't close the inline script
+    (katex_line,) = [ln for ln in html.split("\n")
+                     if "bad" in ln and "katex: {" in ln]
+    assert "</script>" not in katex_line
+    assert "<\\/script>" in katex_line

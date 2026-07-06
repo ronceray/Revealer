@@ -124,3 +124,52 @@ def test_dev_html_marks_included_regions(course):
     import re
     assert re.search(r'data-rv-src="\d+" data-rv-f="1"', html)
     assert 'rv-src-files' in html
+
+
+def test_dirty_undo_preserves_uncommitted_include_edit(deck):
+    """A hand-edited non-.pres include (watcher-ignored) survives undo->redo."""
+    pdir = deck("> title: C\n\n=== Intro\n> pin: 40% 40% 20%\nmain\n> end: pin\n"
+                "\n> include: notes.md\n", name="crs",
+                media={"notes.md": b"=== Notes\n\noriginal note\n"})
+    httpd, sess, stop = serve_mod.create_server(pdir / "crs.pres", port=0,
+                                                watch=False)
+    t = threading.Thread(target=httpd.serve_forever, daemon=True)
+    t.start()
+    try:
+        if sess.history_mode != "git":
+            import pytest
+            pytest.skip("needs git")
+        port = httpd.server_address[1]
+        notes = pdir / "notes.md"
+        # hand-edit the include (never auto-committed: .md isn't watched)
+        notes.write_text("=== Notes\n\nHAND EDITED note\n")
+        # undo: the dirty include state must be kept aside, not destroyed
+        assert _req(port, "POST", "/__rv__/undo", token=sess.token)[0] == 200
+        assert "original note" in notes.read_text()  # stepped to HEAD
+        # redo: the hand edit comes back (was in dirty_keep)
+        assert _req(port, "POST", "/__rv__/redo", token=sess.token)[0] == 200
+        assert "HAND EDITED note" in notes.read_text()
+    finally:
+        stop.set()
+        httpd.shutdown()
+
+
+def test_restore_unchanged_considers_includes(course):
+    port, sess, pdir = course
+    if sess.history_mode != "git":
+        import pytest
+        pytest.skip("needs git")
+    inc = pdir / "l1.pres"
+    # snapshot the current (C0) commit hash, then change ONLY the include
+    entries0 = serve_mod._history_list(pdir)
+    c0 = entries0[0]["hash"]
+    body = json.dumps({"file": "l1.pres", "sha256": _sha(inc), "edits": [
+        {"op": "set_pin", "line": 2, "x": "55%", "y": "65%", "w": "15%"}]})
+    assert _req(port, "POST", "/__rv__/edit", body=body.encode(),
+                token=sess.token)[0] == 200
+    assert "55% 65%" in inc.read_text()
+    # restoring C0 (differs only in the include) must NOT report unchanged
+    status, j = _req(port, "POST", "/__rv__/history/restore",
+                     body=json.dumps({"hash": c0}).encode(), token=sess.token)
+    assert status == 200 and not j.get("unchanged"), j
+    assert "> pin: 30% 60% 15%" in inc.read_text()  # include actually restored

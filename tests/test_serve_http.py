@@ -222,3 +222,11 @@ def test_export_job_cancel(server):
     finally:
         released.set()
         pdf_mod.export_pdf = orig
+
+
+def test_non_image_upload_is_size_capped(server):
+    port, sess, pdir = server
+    big = b"<svg>" + b"x" * (51 * 1024 * 1024)
+    status, _ = _req(port, "PUT", "/__rv__/upload?name=big.svg", body=big,
+                     token=sess.token)
+    assert status == 413

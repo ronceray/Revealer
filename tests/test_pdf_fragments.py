@@ -87,3 +87,33 @@ def test_export_cancel_before_render(deck, monkeypatch):
         pdf_mod.export_pdf(str(pdir / "pf.pres"), out=str(out),
                            log=lambda *a: None, should_cancel=lambda: True)
     assert not out.exists()  # nothing written on cancel
+
+
+def test_missing_png_raises_not_silent_drop(deck, monkeypatch):
+    """[6] Chrome exiting 0 without a PNG must abort, not ship a short PDF."""
+    from revealer import pdf as pdf_mod
+    monkeypatch.setattr(pdf_mod, "_find_chrome", lambda: "/usr/bin/true")
+    monkeypatch.setattr(pdf_mod.shutil, "which", lambda name: "/usr/bin/true")
+    monkeypatch.setattr(pdf_mod.subprocess, "run", lambda cmd, **kw: None)
+    pdir = deck(PRES, name="pf")
+    with pytest.raises(RuntimeError, match="rendered no image"):
+        pdf_mod.export_pdf(str(pdir / "pf.pres"), out=str(pdir / "pf.pdf"),
+                           log=lambda *a: None)
+
+
+def test_chrome_failure_is_runtimeerror(deck, monkeypatch):
+    """[7] A non-zero chrome exit surfaces as RuntimeError (cli catches that)."""
+    import subprocess as sp
+
+    from revealer import pdf as pdf_mod
+    monkeypatch.setattr(pdf_mod, "_find_chrome", lambda: "/usr/bin/true")
+    monkeypatch.setattr(pdf_mod.shutil, "which", lambda name: "/usr/bin/true")
+
+    def fake_run(cmd, **kw):
+        raise sp.CalledProcessError(1, cmd)
+
+    monkeypatch.setattr(pdf_mod.subprocess, "run", fake_run)
+    pdir = deck(PRES, name="pf")
+    with pytest.raises(RuntimeError):
+        pdf_mod.export_pdf(str(pdir / "pf.pres"), out=str(pdir / "pf.pdf"),
+                           log=lambda *a: None)

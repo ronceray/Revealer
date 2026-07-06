@@ -278,3 +278,22 @@ def test_replace_lines_shrink_and_revert(pres):
 def test_replace_lines_out_of_range(pres):
     with pytest.raises(EditError):
         _apply(pres, [{"op": "replace_lines", "start": 999, "end": 999, "text": ["x"]}])
+
+
+def test_double_padded_insert_no_sentinel_leak(tmp_path):
+    """Two padded inserts at the same line must not leak the __RV_PAD__ sentinel."""
+    import hashlib
+
+    from revealer import edit as edit_mod
+    p = tmp_path / "d.pres"
+    p.write_text("> col 50\nAlpha\n\nBeta\n", encoding="utf-8")
+    sha = hashlib.sha256(p.read_bytes()).hexdigest()
+    edit_mod.apply_edits(p, sha, [
+        {"op": "insert_lines", "at": {"insert_before": 4, "container_kind": "column"},
+         "text": ["Gamma"]},
+        {"op": "insert_lines", "at": {"insert_before": 4, "container_kind": "column"},
+         "text": ["Delta"]},
+    ])
+    text = p.read_text()
+    assert "__RV_PAD__" not in text, text
+    assert "Gamma" in text and "Delta" in text and "Beta" in text

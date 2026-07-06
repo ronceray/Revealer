@@ -98,7 +98,7 @@ class DevSession:
     test_results: dict | None = None    # last payload POSTed by the JS runner
     # undo/redo = a cursor over the shadow-git first-parent history.
     cursor: str | None = None            # detached position (None = at HEAD)
-    dirty_keep: bytes | None = None      # unbuilt working state saved by a dirty undo
+    dirty_keep: dict | None = None       # dirty worktree snapshot {"": main, rel: include}
     fallback_undo: bytes | None = None   # single-slot undo when git is unavailable
     history_mode: str = "git"            # "git" | "fallback"
     previews: set = field(default_factory=set)  # generated .rv-preview-* artifacts
@@ -174,6 +174,8 @@ def _watch(sess: DevSession, stop: threading.Event, log=print) -> None:
                 p = os.path.join(root, name)
                 if ext == ".pres" and os.path.realpath(p) == str(sess.pres):
                     continue  # the sha loop below owns the main file
+                if name.startswith(".rv-preview"):
+                    continue  # transient history-preview build inputs/outputs
                 try:
                     mt = os.stat(p).st_mtime
                 except OSError:
@@ -292,6 +294,30 @@ def _include_rels(sess: DevSession) -> list[str]:
         except ValueError:
             pass
     return rels
+
+
+def _snapshot_worktree(sess: DevSession) -> dict:
+    """Capture the current bytes of the main .pres and every tracked include.
+
+    Used by a dirty undo so an uncommitted edit to ANY file (including a
+    non-.pres include the watcher never auto-commits) survives redo.
+    """
+    snap = {"": sess.pres.read_bytes()}
+    for rel in _include_rels(sess):
+        try:
+            snap[rel] = (sess.pdir / rel).read_bytes()
+        except OSError:
+            pass
+    return snap
+
+
+def _restore_worktree(sess: DevSession, snap: dict) -> None:
+    for rel, data in snap.items():
+        target = sess.pres if rel == "" else (sess.pdir / rel)
+        try:
+            target.write_bytes(data)
+        except OSError:
+            pass
 
 
 def _restore_includes(sess: DevSession, commit: str) -> None:
@@ -812,7 +838,7 @@ class _Handler(http.server.SimpleHTTPRequestHandler):
         if data is None:
             return self._send_json(422, {"error": "unknown_version"})
         with sess.lock:
-            if sess.pres.read_bytes() == data:
+            if _worktree_matches(sess, target):
                 return self._send_json(200, {"ok": True, "unchanged": True})
             # the current state is snapshotted first, so a restore never loses
             # work; the rebuild then commits the restored state as a new entry
@@ -878,6 +904,11 @@ class _Handler(http.server.SimpleHTTPRequestHandler):
 
             if q.get("job") == "1":
                 return self._start_export_job(html, pdf_mod)
+
+            with sess.lock:
+                if sess.export_job is not None:
+                    return self._send_json(409, {"error": "export_in_progress",
+                                                 "job": sess.export_job})
 
             def progress(done, total):
                 _broadcast(sess, {"type": "export-progress",
@@ -957,9 +988,10 @@ class _Handler(http.server.SimpleHTTPRequestHandler):
             head = _head_hash(sess.pdir)
             if undo:
                 if pos == "dirty":
-                    # unbuilt/hand-edited state: keep it aside, step to HEAD
+                    # unbuilt/hand-edited state: keep the WHOLE worktree aside
+                    # (main + includes), step to HEAD
                     target = head
-                    sess.dirty_keep = sess.pres.read_bytes()
+                    sess.dirty_keep = _snapshot_worktree(sess)
                     new_cursor = None
                 else:
                     base = sess.cursor if pos == "at_cursor" else head
@@ -974,9 +1006,9 @@ class _Handler(http.server.SimpleHTTPRequestHandler):
                         return self._send_json(409, {"error": "nothing_to_redo"})
                     new_cursor = None if target == head else target
                 elif pos == "at_head" and sess.dirty_keep is not None:
-                    data, sess.dirty_keep = sess.dirty_keep, None
+                    snap, sess.dirty_keep = sess.dirty_keep, None
                     sess.cursor = None
-                    sess.pres.write_bytes(data)
+                    _restore_worktree(sess, snap)
                     _rebuild(sess, log=self._log, commit=False)
                     return self._send_json(200, {
                         "ok": True, "sha256": sess.sha, "cursor": None,
@@ -1021,12 +1053,11 @@ class _Handler(http.server.SimpleHTTPRequestHandler):
             body = self._read_body()
         except ValueError:
             return self._send_json(413, {"error": "too large"})
+        if len(body) > self._IMAGE_CAP:
+            return self._send_json(413, {"error": "too large"})
         magic = self._IMAGE_MAGIC.get(ext)
-        if magic is not None:
-            if len(body) > self._IMAGE_CAP:
-                return self._send_json(413, {"error": "too large"})
-            if not any(body.startswith(m) for m in magic):
-                return self._send_json(400, {"error": "content does not match extension"})
+        if magic is not None and not any(body.startswith(m) for m in magic):
+            return self._send_json(400, {"error": "content does not match extension"})
         media = sess.pdir / "Media"
         dest_dir = media
         for sub, exts in self._UPLOAD_ROUTES.items():

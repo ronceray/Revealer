@@ -534,9 +534,9 @@ def _reconstruct(lines: list[str], prims: list) -> list[str]:
                 out.append("")
                 pending_pad = False
             emit_insert(out, ins)
-        if out and out[-1] == "__RV_PAD__":
-            out.pop()
-            pending_pad = True
+            if out and out[-1] == "__RV_PAD__":
+                out.pop()
+                pending_pad = True
         if n > len(lines):
             break
         if n in deleted:

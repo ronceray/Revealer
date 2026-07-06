@@ -125,6 +125,9 @@ def _parse_tex_macros(text: str) -> dict[str, str]:
     so the ``[n]`` declaration can be dropped). Bodies are read with a
     balanced-brace scan, so nested groups survive.
     """
+    # Drop LaTeX comments (unescaped % to end of line) so a commented-out
+    # \newcommand is never ingested.
+    text = re.sub(r"(?<!\\)%.*", "", text)
     macros: dict[str, str] = {}
     for m in _NEWCOMMAND_RE.finditer(text):
         depth, i = 1, m.end()
@@ -1820,14 +1823,17 @@ def _expand_includes(text: str, pdir: str, _stack: tuple = (),
     """Expand ``> include: file.pres`` lines (build-only, recursive).
 
     Returns ``(entries, includes)`` where each entry is
-    ``(origin_line, include_file, line)``: main-file lines keep their
-    1-based number and a ``None`` file; included lines carry a ``None``
-    origin (so they never receive ``data-rv-src`` — the "sha match ⇒
-    every annotation valid" invariant holds by construction) plus the
-    display name of the file they came from. ``includes`` lists the
-    absolute paths read, for the dev server's watcher and history.
-    Includes must live inside the deck folder; circular includes are
-    skipped with a comment.
+    ``(origin, include_file, line)``. Origins are stride-encoded
+    ``file_idx * _FILE_STRIDE + own_line`` (file 0 = the main .pres, so the
+    encoding is the identity there); ``_src_attr`` decodes them into
+    ``data-rv-src`` plus ``data-rv-f`` for included files. ``include_file``
+    is the display path of the file a line came from (``None`` for the main
+    file). The per-file invariant: a ``data-rv-src`` annotation, with its
+    file's recorded sha matching, is always a valid source range.
+    ``_files`` accumulates the file table (path/sha/lines) used for the
+    ``rv-src-files`` meta. ``includes`` lists the absolute paths read, for
+    the dev server's watcher and history. Includes must live inside the
+    deck folder; circular includes are skipped with a comment.
     """
     root = _root or os.path.realpath(pdir)
     files = _files if _files is not None else [None]  # slot 0 = main file
@@ -2276,14 +2282,17 @@ def _build(pfile: str, dev: bool) -> str:
             macros[parsed[0]] = parsed[1]
         else:
             print("Warning: `> macro:` needs `\\name definition`, got: {0}".format(v))
+    def _js_str(x):
+        return _json.dumps(x).replace("</", "<\\/")
+
     if macros:
         pairs = ", ".join(
-            "{0}: {1}".format(_json.dumps(k), _json.dumps(v))
+            "{0}: {1}".format(_js_str(k), _js_str(v))
             for k, v in macros.items())
         katex_parts.append("macros: { " + pairs + " }")
     user_katex = setting.get("katex")
     if isinstance(user_katex, str) and user_katex.strip():
-        raw = user_katex.strip()
+        raw = user_katex.strip().replace("</", "<\\/")
         if raw.startswith("{") and raw.endswith("}"):
             raw = raw[1:-1].strip()
         if raw:

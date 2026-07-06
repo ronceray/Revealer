@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import os
 import re
+import secrets
 import shutil
 import subprocess
 import tempfile
@@ -55,7 +56,8 @@ def _make_variant(html_path: Path) -> Path:
         "</head>",
         "<style>.fragment{opacity:1!important;visibility:visible!important;}</style></head>",
     )
-    variant = html_path.with_name("._pdf_variant-{0}.html".format(os.getpid()))
+    variant = html_path.with_name(
+        "._pdf_variant-{0}.html".format(secrets.token_hex(6)))
     variant.write_text(h, encoding="utf-8")
     return variant
 
@@ -192,29 +194,49 @@ def export_pdf(pres_or_html: str, out: str | None = None, width: int = 1920,
                     progress(i, len(shots))
                 png = os.path.join(td, "slide_{0:03d}.png".format(i))
                 url = "file://{0}{1}".format(variant, suffix)
-                subprocess.run(
-                    [
-                        chrome,
-                        "--headless=new",
-                        "--disable-gpu",
-                        "--no-sandbox",
-                        "--hide-scrollbars",
-                        "--force-device-scale-factor=1",
-                        "--window-size={0},{1}".format(width, height),
-                        "--virtual-time-budget=9000",
-                        "--run-all-compositor-stages-before-draw",
-                        "--screenshot={0}".format(png),
-                        url,
-                    ],
-                    check=True,
-                    stdout=subprocess.DEVNULL,
-                    stderr=subprocess.DEVNULL,
-                )
-                if os.path.exists(png):
-                    pngs.append(png)
+                try:
+                    subprocess.run(
+                        [
+                            chrome,
+                            "--headless=new",
+                            "--disable-gpu",
+                            "--no-sandbox",
+                            "--hide-scrollbars",
+                            "--force-device-scale-factor=1",
+                            "--window-size={0},{1}".format(width, height),
+                            "--virtual-time-budget=9000",
+                            "--run-all-compositor-stages-before-draw",
+                            "--screenshot={0}".format(png),
+                            url,
+                        ],
+                        check=True,
+                        stdout=subprocess.DEVNULL,
+                        stderr=subprocess.DEVNULL,
+                    )
+                except subprocess.CalledProcessError as exc:
+                    raise RuntimeError(
+                        "Chrome failed rendering slide {0}/{1} (exit {2}).".format(
+                            i + 1, len(shots), exc.returncode)) from exc
+                if not os.path.exists(png):
+                    # Chrome exited 0 but produced nothing — never silently
+                    # drop a page and ship a short PDF.
+                    raise RuntimeError(
+                        "slide {0}/{1} rendered no image; aborting export".format(
+                            i + 1, len(shots)))
+                pngs.append(png)
+            # a cancel requested during the final slide must still win here
+            if should_cancel is not None and should_cancel():
+                raise ExportCancelled("cancelled before assembling the PDF")
             if not pngs:
                 raise RuntimeError("No slides were rendered.")
-            subprocess.run(["img2pdf", "--output", str(out_path), *pngs], check=True)
+            try:
+                subprocess.run(["img2pdf", "--output", str(out_path), *pngs],
+                               check=True, stdout=subprocess.DEVNULL,
+                               stderr=subprocess.PIPE)
+            except subprocess.CalledProcessError as exc:
+                raise RuntimeError(
+                    "img2pdf failed to assemble the PDF (exit {0}).".format(
+                        exc.returncode)) from exc
     finally:
         if variant != html_path:
             try:
