@@ -24,7 +24,7 @@ dev = ["pytest>=8", "ruff>=0.4"]
 
 [project.urls]
 Homepage = "https://github.com/ronceray/Revealer"
-Documentation = "https://github.com/ronceray/Revealer"
+Documentation = "https://ronceray.github.io/Revealer/"
 
 [project.scripts]
 revealer = "revealer.cli:main"
