@@ -34,6 +34,13 @@ Some text below the pin.
 === Two
 
 Second slide.
+
+=== Three
+Style **bold** middle plain tail.
+
+Editable target line here.
+
+Math check $x^2$ trails words.
 """
 
 

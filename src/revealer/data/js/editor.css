@@ -6,6 +6,7 @@
     9600 #rv-ed-drawer #rv-ed-outline    9610 #rv-ed-panel    9650 #rv-ed-divider
     9700 #rv-ed-toolbar
     9810 #rv-ed-help       9820 #rv-ed-history (mutually exclusive, distinct z)
+    9850 #rv-ed-bubble (selection bubble: above panel/help, below hovertag)
     9900 #rv-ed-hovertag
    10000 #rv-ed-peek
    10050 #rv-dev-error (a broken build must outrank the peek overlay)
@@ -550,3 +551,36 @@ body.rv-split #rv-ed-panel { padding-top: 12px; }
 }
 #rv-ed-peek .rv-pk-restore { background: #2a76dd; border-color: #2a76dd; }
 #rv-ed-peek iframe { flex: 1; border: 0; background: #fff; }
+
+/* --- text-selection bubble (textsel.js) --------------------------------------- */
+#rv-ed-bubble {
+  position: fixed;
+  display: none;
+  gap: 4px;
+  align-items: center;
+  background: #1c1c2e;
+  color: #fff;
+  padding: 5px 7px;
+  border-radius: 8px;
+  box-shadow: 0 6px 24px rgba(0, 0, 0, 0.35);
+  z-index: 9850;
+  font: 13px system-ui, sans-serif;
+}
+#rv-ed-bubble button {
+  font: 13px system-ui, sans-serif;
+  background: #2a3350;
+  color: #fff;
+  border: 1px solid #4a5580;
+  border-radius: 5px;
+  padding: 2px 8px;
+  cursor: pointer;
+}
+#rv-ed-bubble button:hover { background: #37436b; }
+#rv-ed-bubble .rv-fmt-sw {
+  width: 16px;
+  height: 16px;
+  padding: 0;
+  border-radius: 50%;
+  border: 1px solid #666;
+}
+#rv-ed-bubble .rv-bb-size { font-size: 11px; }

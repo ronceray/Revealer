@@ -1,6 +1,6 @@
 # The Revealer editor (dev-server WYSIWYG layer)
 
-Thirteen modules, loaded in the order of `EDITOR_JS` in `serve.py` and
+Fourteen modules, loaded in the order of `EDITOR_JS` in `serve.py` and
 injected into dev builds only (`/__rv__/<name>`; never shipped into decks —
 `test_deck_reveal_js_ships_no_editor_assets` enforces this). Each module is
 an IIFE; nothing leaks except the shared namespace below.
@@ -33,6 +33,7 @@ an IIFE; nothing leaks except the shared namespace below.
 | `blockmove.js` | block-move drop targets, slot bar, drag ghost, OS-file drop insertion |
 | `drawer.js` | fragment drawer (list + reorder) |
 | `format.js` | inline-format toolbar (bold/italic/color/size on the source box) |
+| `textsel.js` | selection bubble: maps rendered-text selections to source columns via `/__rv__/inspect`, posts `wrap_span` |
 | `panel.js` | side panel: breadcrumbs, parameter fields, source box + Apply, SVG step editor, sibling move/delete, cheatsheet |
 | `history.js` | time machine: snapshots, diffs, peek overlay, restore |
 | `outline.js` | slide outline sidebar (list, navigate, add/duplicate/move/delete slides) |

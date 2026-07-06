@@ -52,4 +52,5 @@
 
   // exports (what other editor/ modules call):
   F.formatBar = formatBar;
+  RV.PALETTE = PALETTE;  // textsel.js reuses the swatch set in the bubble
 })();
