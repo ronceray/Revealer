@@ -2346,6 +2346,98 @@ def _build(pfile: str, dev: bool) -> str:
     return ofile
 
 
+_SVG_ATTR_RE = re.compile(r"([\w:.-]+)\s*=\s*(\"[^\"]*\"|'[^']*')")
+
+
+def _svg_iter_tags(svg: str):
+    """Yield (start, end, tag_text) for each opening tag, quote-aware.
+
+    Text surgery by contract (an etree round-trip would rewrite the whole
+    file); comments, closing tags and declarations are skipped, and a `>`
+    inside a quoted attribute value never terminates the scan.
+    """
+    i, n = 0, len(svg)
+    while True:
+        i = svg.find("<", i)
+        if i == -1:
+            return
+        if svg.startswith("<!--", i):
+            j = svg.find("-->", i)
+            i = j + 3 if j != -1 else n
+            continue
+        if svg.startswith("</", i) or svg.startswith("<!", i) or svg.startswith("<?", i):
+            j = svg.find(">", i)
+            i = j + 1 if j != -1 else n
+            continue
+        j, quote = i + 1, None
+        while j < n:
+            c = svg[j]
+            if quote:
+                if c == quote:
+                    quote = None
+            elif c in "\"'":
+                quote = c
+            elif c == ">":
+                break
+            j += 1
+        if j >= n:
+            return
+        yield i, j + 1, svg[i:j + 1]
+        i = j + 1
+
+
+def _svg_tag_attrs(tag: str) -> dict[str, str]:
+    return {m.group(1): m.group(2)[1:-1] for m in _SVG_ATTR_RE.finditer(tag)}
+
+
+def _svg_replace_attr(tag: str, name: str, new_value: str) -> str:
+    for m in _SVG_ATTR_RE.finditer(tag):
+        if m.group(1) == name:
+            q = m.group(2)[0]
+            return tag[:m.start(2)] + q + new_value + q + tag[m.end(2):]
+    return tag
+
+
+def _svg_opacity_zero(tag: str, attrs: dict[str, str]) -> str:
+    """Force the element invisible, winning against whatever it declares.
+
+    A style attribute outranks a presentation attribute, so opacity is
+    rewritten inside style when one exists; otherwise the opacity
+    attribute is replaced or appended.
+    """
+    if "style" in attrs:
+        style = attrs["style"]
+        if re.search(r"(?:^|;)\s*opacity\s*:", style):
+            new_style = re.sub(r"((?:^|;)\s*opacity\s*:\s*)[^;]*",
+                               lambda m: m.group(1) + "0", style)
+        else:
+            new_style = (style.rstrip("; ") + ";" if style.strip() else "") + "opacity:0"
+        return _svg_replace_attr(tag, "style", new_style)
+    if "opacity" in attrs:
+        return _svg_replace_attr(tag, "opacity", "0")
+    if tag.endswith("/>"):
+        return tag[:-2].rstrip() + ' opacity="0"/>'
+    return tag[:-1] + ' opacity="0">'
+
+
+def _svg_hide_ids(svg: str, ids) -> str:
+    """Hide the first element carrying each id (exact `id=` — never data-id)."""
+    remaining = set(ids)
+    out, last = [], 0
+    for start, end, tag in _svg_iter_tags(svg):
+        if not remaining:
+            break
+        el_id = _svg_tag_attrs(tag).get("id")
+        if el_id not in remaining:
+            continue
+        remaining.discard(el_id)
+        out.append(svg[last:start])
+        out.append(_svg_opacity_zero(tag, _svg_tag_attrs(tag)))
+        last = end
+    out.append(svg[last:])
+    return "".join(out)
+
+
 def _build_svg(S, pdir, default_duration):
     """Inline an SVG file and emit the animation fragments for a slide."""
 
@@ -2364,18 +2456,14 @@ def _build_svg(S, pdir, default_duration):
 
     hide = S["param"].get("hide")
     if hide:
-        specs = hide if isinstance(hide, list) else [hide]
-        for spec in specs:
+        ids = set()
+        for spec in (hide if isinstance(hide, list) else [hide]):
             for sel in str(spec).split(","):
                 sel = sel.strip().lstrip("#")
-                if not re.match(r"^[\w-]+$", sel):
-                    continue
-                svg = re.sub(
-                    r'(<[^>]*\bid="' + re.escape(sel) + r'"[^>]*?)(\s*/?>)',
-                    lambda m: (re.sub(r'opacity="[^"]*"', 'opacity="0"', m.group(1))
-                               if 'opacity="' in m.group(1)
-                               else m.group(1) + ' opacity="0"') + m.group(2),
-                    svg, count=1)
+                if re.match(r"^[\w.-]+$", sel):
+                    ids.add(sel)
+        if ids:
+            svg = _svg_hide_ids(svg, ids)
 
     out = '<div class="revealer-svg"{0}>'.format(
         _src_attr(S["param"].get("_svg_line"))) + svg.strip() + "</div>"
