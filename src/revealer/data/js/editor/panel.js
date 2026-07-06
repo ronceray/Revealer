@@ -75,6 +75,8 @@
     p.innerHTML =
       '<div class="rv-pn-head">' + crumbs + '</div>' +
       '<div class="rv-pn-sub">' + F.escapeHtml(RV.PRES_NAME) + ' : ' + s + (e !== s ? '–' + e : '') + '</div>' +
+      (kind === 'paragraph' && !el.querySelector('.katex,pre')
+        ? '<div class="rv-pn-hint">Double-click the paragraph to edit its text in place.</div>' : '') +
       '<div class="rv-pn-fields"></div>' +
       '<div class="rv-pn-actions">' +
       '<button class="rv-pn-up" title="Move before the previous sibling">▲ Up</button>' +

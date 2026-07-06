@@ -584,3 +584,13 @@ body.rv-split #rv-ed-panel { padding-top: 12px; }
   border: 1px solid #666;
 }
 #rv-ed-bubble .rv-bb-size { font-size: 11px; }
+
+/* --- in-place paragraph editing (inline-edit.js) ------------------------------- */
+.rv-paragraph.rv-ed-editing {
+  outline: 2px solid #2a76dd;
+  outline-offset: 3px;
+  box-shadow: 0 0 0 6px rgba(42, 118, 221, 0.15);
+  border-radius: 2px;
+}
+html.rv-edit .rv-paragraph.rv-ed-editing,
+html.rv-edit .rv-paragraph.rv-ed-editing * { cursor: text; }
