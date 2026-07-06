@@ -57,6 +57,7 @@ EDITOR_JS: tuple[str, ...] = (
     "editor/drawer.js",
     "editor/format.js",
     "editor/panel.js",
+    "editor/history.js",
     "editor.js",
 )
 _DEV_ASSETS = frozenset(EDITOR_JS) | {"editor.css"}
