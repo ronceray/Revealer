@@ -10,6 +10,80 @@
   if (!window.__RV_DEV__) return;
   var TOKEN = window.__RV_DEV__.token;
 
+  /* --- shared editor state: window.RV, explicit ownership --------------------
+     S is THE mutable editor state; RV.ui hosts shared widget helpers. The
+     12-file split shares state through RV rather than closure capture. */
+  var RV = window.RV = {};
+  var S = RV.state = {
+    on: false,          // edit mode armed
+    sel: null,          // selected [data-rv-src] element
+    hover: null,        // hovered [data-rv-src] element
+    keyboardWas: null,  // reveal keyboard config to restore on exit
+    drag: null,         // active drag (kind, el, x0/y0, r0, scale, extras)
+    dropState: null,    // block-move / OS-file drop targets + active slot
+    splitPref: false,   // split-view preference (seeded from localStorage below)
+    panelFor: null,     // element the side panel currently renders
+    nudgeTimer: null,   // debounce timer for arrow-key nudges
+  };
+  RV.ui = {};
+
+  function escapeHtml(v) {
+    return String(v).replace(/&/g, '&amp;').replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+  }
+  RV.esc = escapeHtml;
+
+  /* Floating box with a shared header row (title, action buttons, ✕).
+     Toggle semantics: calling again while the box exists removes it and
+     returns null (replace: true recreates instead). closes: [ids] removes
+     sibling boxes that would overlap. Returns {box, body}. */
+  RV.ui.box = function (opts) {
+    var existing = document.getElementById(opts.id);
+    if (existing) {
+      existing.remove();
+      if (!opts.replace) return null;
+    }
+    (opts.closes || []).forEach(function (otherId) {
+      var o = document.getElementById(otherId);
+      if (o) o.remove();
+    });
+    var box = document.createElement('div');
+    box.id = opts.id;
+    var head = document.createElement('div');
+    head.className = 'rv-box-head' + (opts.headCls ? ' ' + opts.headCls : '');
+    var title = document.createElement('b');
+    title.textContent = opts.title;
+    head.appendChild(title);
+    if (opts.hint) {
+      var hint = document.createElement('span');
+      hint.className = 'rv-box-hint';
+      hint.textContent = opts.hint;
+      head.appendChild(hint);
+    }
+    (opts.buttons || []).forEach(function (b) {
+      var btn = document.createElement('button');
+      btn.textContent = b.label;
+      if (b.cls) btn.className = b.cls;
+      if (b.title) btn.title = b.title;
+      btn.addEventListener('click', b.onClick);
+      head.appendChild(btn);
+    });
+    if (opts.close !== false) {
+      var x = document.createElement('button');
+      x.className = 'rv-box-close';
+      x.textContent = '✕';
+      x.title = 'Close';
+      x.addEventListener('click', function () { box.remove(); });
+      head.appendChild(x);
+    }
+    box.appendChild(head);
+    var body = document.createElement('div');
+    body.className = 'rv-box-body';
+    box.appendChild(body);
+    document.body.appendChild(box);
+    return { box: box, body: body };
+  };
+
   /* --- position-preserving reload ---------------------------------------- */
 
   var RESTORE_KEY = 'rv-dev-restore';
@@ -19,8 +93,8 @@
       var idx = (window.Reveal && Reveal.getIndices) ? Reveal.getIndices() : {};
       sessionStorage.setItem(RESTORE_KEY, JSON.stringify({
         h: idx.h || 0, v: idx.v || 0, f: (idx.f === undefined ? -1 : idx.f),
-        editOn: !!edit.on,
-        selSrc: (edit.sel && edit.sel.getAttribute) ? edit.sel.getAttribute('data-rv-src') : null,
+        editOn: !!S.on,
+        selSrc: (S.sel && S.sel.getAttribute) ? S.sel.getAttribute('data-rv-src') : null,
         drawer: !!document.getElementById('rv-ed-drawer')
       }));
     } catch (e) { /* sessionStorage unavailable — hash restore still works */ }
@@ -44,7 +118,7 @@
         if (s.selSrc) {
           var slide = Reveal.getCurrentSlide();
           var el = slide && slide.querySelector('[data-rv-src="' + s.selSrc + '"]');
-          if (el) { edit.sel = el; }
+          if (el) { S.sel = el; }
           syncChrome();
         }
         if (s.drawer) toggleDrawer();
@@ -110,12 +184,6 @@
 
   /* --- inspector: edit mode, picking, breadcrumb --------------------------- */
 
-  var edit = {
-    on: false,
-    sel: null,          // selected [data-rv-src] element
-    hover: null,        // hovered [data-rv-src] element
-    keyboardWas: null,  // reveal keyboard config to restore
-  };
 
   function layer() {
     var el = document.getElementById('rv-editor-layer');
@@ -168,17 +236,17 @@
   }
 
   function syncChrome() {
-    if (!edit.on) return;
+    if (!S.on) return;
     var el = layer();
-    placeOutline(el.querySelector('.rv-ed-hover'), edit.hover !== edit.sel ? edit.hover : null);
-    placeOutline(el.querySelector('.rv-ed-select'), edit.sel);
+    placeOutline(el.querySelector('.rv-ed-hover'), S.hover !== S.sel ? S.hover : null);
+    placeOutline(el.querySelector('.rv-ed-select'), S.sel);
     if (typeof rvRenderHandles === 'function') rvRenderHandles();
     if (typeof rvPanelSync === 'function') rvPanelSync();
     var bar = el.querySelector('.rv-ed-bar');
-    if (edit.sel && document.contains(edit.sel)) {
-      var s = edit.sel.getAttribute('data-rv-src');
-      var e = edit.sel.getAttribute('data-rv-src-end');
-      el.querySelector('.rv-ed-kind').textContent = kindOf(edit.sel);
+    if (S.sel && document.contains(S.sel)) {
+      var s = S.sel.getAttribute('data-rv-src');
+      var e = S.sel.getAttribute('data-rv-src-end');
+      el.querySelector('.rv-ed-kind').textContent = kindOf(S.sel);
       el.querySelector('.rv-ed-line').textContent =
         '.pres:' + s + (e ? '–' + e : '');
       bar.hidden = false;
@@ -196,7 +264,7 @@
   }
 
   function onMove(ev) {
-    edit.hover = pickable(ev.target);
+    S.hover = pickable(ev.target);
     syncChrome();
   }
 
@@ -205,37 +273,37 @@
     if (!el) return;
     ev.preventDefault();
     ev.stopPropagation();
-    edit.sel = el;
+    S.sel = el;
     syncChrome();
   }
 
   function selectParent() {
-    if (!edit.sel) { setEdit(false); return; }
-    var parent = edit.sel.parentElement && edit.sel.parentElement.closest('[data-rv-src]');
-    edit.sel = parent || null;
+    if (!S.sel) { setEdit(false); return; }
+    var parent = S.sel.parentElement && S.sel.parentElement.closest('[data-rv-src]');
+    S.sel = parent || null;
     syncChrome();
   }
 
   function setEdit(on) {
-    if (on === edit.on) return;
-    edit.on = on;
+    if (on === S.on) return;
+    S.on = on;
     var el = layer();
     document.documentElement.classList.toggle('rv-edit', on);
     if (on) {
       if (window.Reveal && Reveal.getConfig) {
-        edit.keyboardWas = Reveal.getConfig().keyboard;
+        S.keyboardWas = Reveal.getConfig().keyboard;
         Reveal.configure({ keyboard: false });
       }
       document.addEventListener('mousemove', onMove, true);
       document.addEventListener('click', onClick, true);
     } else {
-      if (window.Reveal && edit.keyboardWas !== null) {
-        Reveal.configure({ keyboard: edit.keyboardWas });
-        edit.keyboardWas = null;
+      if (window.Reveal && S.keyboardWas !== null) {
+        Reveal.configure({ keyboard: S.keyboardWas });
+        S.keyboardWas = null;
       }
       document.removeEventListener('mousemove', onMove, true);
       document.removeEventListener('click', onClick, true);
-      edit.sel = edit.hover = null;
+      S.sel = S.hover = null;
       el.querySelectorAll('.rv-ed-outline').forEach(function (b) { b.hidden = true; });
       el.querySelector('.rv-ed-bar').hidden = true;
       var tag = document.getElementById('rv-ed-hovertag');
@@ -252,14 +320,14 @@
     var t = ev.target;
     if (t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.isContentEditable)) return;
     if (ev.key === 'e' && !ev.ctrlKey && !ev.metaKey && !ev.altKey) {
-      setEdit(!edit.on);
+      setEdit(!S.on);
       ev.preventDefault();
-    } else if (edit.on && ev.key === 'Escape') {
+    } else if (S.on && ev.key === 'Escape') {
       selectParent();
       ev.preventDefault();
       ev.stopPropagation();
-    } else if (edit.on && edit.sel && (ev.key === 'Delete' || ev.key === 'Backspace')) {
-      deleteSelected(edit.sel);
+    } else if (S.on && S.sel && (ev.key === 'Delete' || ev.key === 'Backspace')) {
+      deleteSelected(S.sel);
       ev.preventDefault();
       ev.stopPropagation();
     }
@@ -278,7 +346,7 @@
   window.addEventListener('load', hookFit);
   window.addEventListener('resize', syncChrome);
   if (window.Reveal && Reveal.on) {
-    Reveal.on('slidechanged', function () { edit.sel = edit.hover = null; syncChrome(); });
+    Reveal.on('slidechanged', function () { S.sel = S.hover = null; syncChrome(); });
   }
 
   /* --- editing machinery: POST plumbing, toasts, undo ----------------------- */
@@ -338,7 +406,7 @@
   }
 
   document.addEventListener('keydown', function (ev) {
-    if (!edit.on) return;
+    if (!S.on) return;
     if ((ev.ctrlKey || ev.metaKey) && (ev.key === 'z' || ev.key === 'Z')) {
       rvUndoRedo(ev.shiftKey ? 'redo' : 'undo');
       ev.preventDefault();
@@ -387,7 +455,6 @@
 
   /* --- drag handles ------------------------------------------------------------ */
 
-  var drag = null;  // active drag state
 
   function mkGrip(cls, cursor, title) {
     var g = document.createElement('div');
@@ -405,9 +472,9 @@
 
   function rvRenderHandles() {
     clearHandles();
-    if (!edit.on || !edit.sel || !document.contains(edit.sel) || drag) return;
+    if (!S.on || !S.sel || !document.contains(S.sel) || S.drag) return;
     var host = layer();
-    var el = edit.sel;
+    var el = S.sel;
     var kind = constructOf(el);
     var r = el.getBoundingClientRect();
 
@@ -462,14 +529,14 @@
     ev.preventDefault();
     ev.stopPropagation();
     var r = el.getBoundingClientRect();
-    drag = Object.assign({
+    S.drag = Object.assign({
       kind: kind, el: el, x0: ev.clientX, y0: ev.clientY,
       r0: r, scale: rvScale(),
     }, extra || {});
     if (kind === 'col-split') {
-      drag.rNext0 = drag.next.getBoundingClientRect();
-      drag.g0 = parseFloat(getComputedStyle(el).flexGrow) || 1;
-      drag.g1 = parseFloat(getComputedStyle(drag.next).flexGrow) || 1;
+      S.drag.rNext0 = S.drag.next.getBoundingClientRect();
+      S.drag.g0 = parseFloat(getComputedStyle(el).flexGrow) || 1;
+      S.drag.g1 = parseFloat(getComputedStyle(S.drag.next).flexGrow) || 1;
     }
     if (kind === 'block-move') buildDropTargets(el);
     document.addEventListener('pointermove', onDragMove, true);
@@ -478,31 +545,31 @@
   }
 
   function onDragMove(ev) {
-    if (!drag) return;
-    var dx = ev.clientX - drag.x0, dy = ev.clientY - drag.y0;
-    var el = drag.el, r0 = drag.r0;
+    if (!S.drag) return;
+    var dx = ev.clientX - S.drag.x0, dy = ev.clientY - S.drag.y0;
+    var el = S.drag.el, r0 = S.drag.r0;
 
-    if (drag.kind === 'pin-move') {
+    if (S.drag.kind === 'pin-move') {
       // preview via transform on top of the base translate(-50%,-50%)
       el.style.transform = 'translate(-50%, -50%) translate(' + dx + 'px,' + dy + 'px)';
-    } else if (drag.kind === 'pin-width') {
+    } else if (S.drag.kind === 'pin-width') {
       var w0 = r0.width;
       el.style.width = Math.max(20, w0 + dx) + 'px';
-    } else if (drag.kind === 'media-size') {
+    } else if (S.drag.kind === 'media-size') {
       var target = el.tagName === 'FIGURE' ? el.querySelector('img,video') : el;
       if (target) { target.style.height = Math.max(16, r0.height + dy) + 'px'; target.style.width = 'auto'; }
-    } else if (drag.kind === 'row-height' || drag.kind === 'stack-height') {
+    } else if (S.drag.kind === 'row-height' || S.drag.kind === 'stack-height') {
       var h = Math.max(24, r0.height + dy);
       el.style.flex = '0 0 ' + h + 'px';
       el.style.height = h + 'px';
-    } else if (drag.kind === 'col-split') {
-      var total = drag.g0 + drag.g1;
-      var wPair = r0.width + drag.rNext0.width;
+    } else if (S.drag.kind === 'col-split') {
+      var total = S.drag.g0 + S.drag.g1;
+      var wPair = r0.width + S.drag.rNext0.width;
       var ratio = Math.min(0.92, Math.max(0.08, (r0.width + dx) / wPair));
       el.style.flexGrow = (total * ratio).toFixed(4);
-      drag.next.style.flexGrow = (total * (1 - ratio)).toFixed(4);
-      drag.ratio = ratio;
-    } else if (drag.kind === 'block-move') {
+      S.drag.next.style.flexGrow = (total * (1 - ratio)).toFixed(4);
+      S.drag.ratio = ratio;
+    } else if (S.drag.kind === 'block-move') {
       moveGhost(ev);
       pickDropSlot(ev);
     }
@@ -512,8 +579,8 @@
   function onDragUp(ev) {
     document.removeEventListener('pointermove', onDragMove, true);
     document.removeEventListener('pointerup', onDragUp, true);
-    var d = drag;
-    drag = null;
+    var d = S.drag;
+    S.drag = null;
     if (!d) return;
     var el = d.el, line = srcOf(el);
 
@@ -600,14 +667,13 @@
 
   /* --- keyboard nudging --------------------------------------------------------------- */
 
-  var nudgeTimer = null;
 
   document.addEventListener('keydown', function (ev) {
-    if (!edit.on || !edit.sel) return;
+    if (!S.on || !S.sel) return;
     var arrows = { ArrowLeft: [-1, 0], ArrowRight: [1, 0], ArrowUp: [0, -1], ArrowDown: [0, 1] };
     var v = arrows[ev.key];
     if (!v) return;
-    var el = edit.sel, kind = constructOf(el);
+    var el = S.sel, kind = constructOf(el);
     ev.preventDefault();
     ev.stopPropagation();
     var mult = ev.shiftKey ? 4 : 1;
@@ -618,8 +684,8 @@
       el._nx = (el._nx === undefined ? 0 : el._nx) + v[0] * mult * pr.width / 100;
       el._ny = (el._ny === undefined ? 0 : el._ny) + v[1] * mult * pr.height / 100;
       el.style.transform = 'translate(-50%, -50%) translate(' + el._nx + 'px,' + el._ny + 'px)';
-      clearTimeout(nudgeTimer);
-      nudgeTimer = setTimeout(function () {
+      clearTimeout(S.nudgeTimer);
+      S.nudgeTimer = setTimeout(function () {
         var r = el.getBoundingClientRect();
         var cx = Math.round((r.left + r.width / 2 - pr.left) / pr.width * 200) / 2;
         var cy = Math.round((r.top + r.height / 2 - pr.top) / pr.height * 200) / 2;
@@ -634,8 +700,8 @@
       if (v[1] === 0) return;
       if (kind === 'media') { target.style.height = h + 'px'; target.style.width = 'auto'; }
       else { el.style.flex = '0 0 ' + h + 'px'; el.style.height = h + 'px'; }
-      clearTimeout(nudgeTimer);
-      nudgeTimer = setTimeout(function () {
+      clearTimeout(S.nudgeTimer);
+      S.nudgeTimer = setTimeout(function () {
         var hpx = Math.round(target.getBoundingClientRect().height / rvScale());
         rvPostEdit([kind === 'media'
           ? { op: 'set_media_size', line: srcOf(el), dim: 'h', value: hpx + 'px' }
@@ -647,7 +713,6 @@
 
   /* --- block move: ghost, drop targets, commit ------------------------------------------ */
 
-  var dropState = null;  // {targets: [{el, slots: [{line, y}]}], active: {el, slot}}
 
   function mappedChildren(container) {
     return Array.prototype.filter.call(container.children, function (c) {
@@ -670,7 +735,7 @@
                      kind: hasCls(c, 'column') ? 'column' : 'col' });
       c.classList.add('rv-ed-droptarget');
     });
-    dropState = { targets: targets, active: null };
+    S.dropState = { targets: targets, active: null };
   }
 
   function clearDropTargets() {
@@ -681,7 +746,7 @@
     if (bar) bar.remove();
     var ghost = document.getElementById('rv-ed-ghost');
     if (ghost) ghost.remove();
-    dropState = null;
+    S.dropState = null;
   }
 
   function moveGhost(ev) {
@@ -689,7 +754,7 @@
     if (!g) {
       g = document.createElement('div');
       g.id = 'rv-ed-ghost';
-      g.textContent = kindOf(drag.el);
+      g.textContent = kindOf(S.drag.el);
       document.body.appendChild(g);
     }
     g.style.left = (ev.clientX + 12) + 'px';
@@ -697,21 +762,21 @@
   }
 
   function pickDropSlot(ev) {
-    if (!dropState) return;
+    if (!S.dropState) return;
     var hit = null;
-    dropState.targets.forEach(function (t) {
+    S.dropState.targets.forEach(function (t) {
       var r = t.el.getBoundingClientRect();
       if (ev.clientX >= r.left && ev.clientX <= r.right &&
           ev.clientY >= r.top - 8 && ev.clientY <= r.bottom + 8) hit = t;
     });
     var bar = document.getElementById('rv-ed-slotbar');
-    if (!hit) { if (bar) bar.remove(); dropState.active = null; return; }
+    if (!hit) { if (bar) bar.remove(); S.dropState.active = null; return; }
     var slot = hit.slots[0], dist = Infinity;
     hit.slots.forEach(function (s) {
       var d = Math.abs(ev.clientY - s.y);
       if (d < dist) { dist = d; slot = s; }
     });
-    dropState.active = { target: hit, slot: slot };
+    S.dropState.active = { target: hit, slot: slot };
     if (!bar) {
       bar = document.createElement('div');
       bar.id = 'rv-ed-slotbar';
@@ -724,7 +789,7 @@
   }
 
   function commitBlockMove(d, ev) {
-    var choice = dropState && dropState.active;
+    var choice = S.dropState && S.dropState.active;
     var el = d.el;
     clearDropTargets();
     if (!choice) { syncChrome(); return; }
@@ -770,14 +835,10 @@
   }
 
   function toggleDrawer() {
-    var dw = document.getElementById('rv-ed-drawer');
-    if (dw) { dw.remove(); return; }
-    dw = document.createElement('div');
-    dw.id = 'rv-ed-drawer';
-    dw.innerHTML = '<div class="rv-ed-drawer-title">Fragments (reveal order)</div>' +
-      '<div class="rv-ed-drawer-list"></div>' +
+    var w = RV.ui.box({ id: 'rv-ed-drawer', title: 'Fragments (reveal order)' });
+    if (!w) return;
+    w.body.innerHTML = '<div class="rv-ed-drawer-list"></div>' +
       '<div class="rv-ed-drawer-foot">↑↓ reorder · writes explicit +1..+n</div>';
-    document.body.appendChild(dw);
     renderDrawer();
   }
 
@@ -795,8 +856,8 @@
       row.innerHTML = '<span>' + (i + 1) + '. ' + label + '</span>' +
         (mapped ? '<span class="rv-ed-updown"><button data-d="-1">↑</button>' +
                   '<button data-d="1">↓</button></span>' : '');
-      row.addEventListener('mouseenter', function () { edit.hover = el; syncChrome(); });
-      row.addEventListener('mouseleave', function () { edit.hover = null; syncChrome(); });
+      row.addEventListener('mouseenter', function () { S.hover = el; syncChrome(); });
+      row.addEventListener('mouseleave', function () { S.hover = null; syncChrome(); });
       row.querySelectorAll('button').forEach(function (b) {
         b.addEventListener('click', function () {
           reorderFragment(frags, i, parseInt(b.getAttribute('data-d'), 10));
@@ -827,7 +888,7 @@
   document.addEventListener('keydown', function (ev) {
     var t = ev.target;
     if (t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.isContentEditable)) return;
-    if (edit.on && ev.key === 'f' && !ev.ctrlKey && !ev.metaKey && !ev.altKey) {
+    if (S.on && ev.key === 'f' && !ev.ctrlKey && !ev.metaKey && !ev.altKey) {
       toggleDrawer();
       ev.preventDefault();
     }
@@ -836,17 +897,17 @@
   /* --- OS file drag-drop --------------------------------------------------------------------- */
 
   window.addEventListener('dragover', function (ev) {
-    if (!edit.on) return;
+    if (!S.on) return;
     if (!ev.dataTransfer || Array.prototype.indexOf.call(ev.dataTransfer.types, 'Files') === -1) return;
     ev.preventDefault();
-    if (!dropState) buildDropTargets(document.createElement('div'));
+    if (!S.dropState) buildDropTargets(document.createElement('div'));
     pickDropSlot(ev);
   });
 
   window.addEventListener('drop', function (ev) {
-    if (!edit.on || !ev.dataTransfer || !ev.dataTransfer.files.length) return;
+    if (!S.on || !ev.dataTransfer || !ev.dataTransfer.files.length) return;
     ev.preventDefault();
-    var choice = dropState && dropState.active;
+    var choice = S.dropState && S.dropState.active;
     var file = ev.dataTransfer.files[0];
     clearDropTargets();
     if (!choice) { toast('Drop inside a column to insert media'); return; }
@@ -868,7 +929,7 @@
   });
 
   window.addEventListener('dragleave', function (ev) {
-    if (edit.on && !ev.relatedTarget && dropState && !drag) clearDropTargets();
+    if (S.on && !ev.relatedTarget && S.dropState && !S.drag) clearDropTargets();
   });
 
 
@@ -905,14 +966,14 @@
       '<button class="rv-tb-hist" title="Save history (time machine)">🕐</button>' +
       '<button class="rv-tb-xhtml" title="Export the final HTML next to the .pres">⬇ HTML</button>' +
       '<button class="rv-tb-xpdf" title="Export a PDF next to the .pres">⬇ PDF</button>' +
-      '<span class="rv-tb-status rv-st-idle">' + PRES_NAME + '</span>' +
+      '<span class="rv-tb-status rv-st-idle">' + escapeHtml(PRES_NAME) + '</span>' +
       '<button class="rv-tb-help" title="Help">?</button>';
     document.body.appendChild(tb);
-    tb.querySelector('.rv-tb-edit').addEventListener('click', function () { setEdit(!edit.on); });
+    tb.querySelector('.rv-tb-edit').addEventListener('click', function () { setEdit(!S.on); });
     tb.querySelector('.rv-tb-undo').addEventListener('click', function () { rvUndoRedo('undo'); });
     tb.querySelector('.rv-tb-redo').addEventListener('click', function () { rvUndoRedo('redo'); });
     tb.querySelector('.rv-tb-frag').addEventListener('click', function () {
-      if (!edit.on) setEdit(true);
+      if (!S.on) setEdit(true);
       toggleDrawer();
     });
     tb.querySelector('.rv-tb-help').addEventListener('click', toggleHelp);
@@ -940,13 +1001,13 @@
     }
     tb.querySelector('.rv-tb-xpdf').addEventListener('click', function () { doExport('pdf'); });
     tb.querySelector('.rv-tb-media').addEventListener('click', function () {
-      if (!edit.on) setEdit(true);
+      if (!S.on) setEdit(true);
       importMedia();
     });
     tb.querySelector('.rv-tb-view').addEventListener('click', function () {
-      splitPref = !splitPref;
-      try { localStorage.setItem('rv-ed-split', splitPref ? '1' : '0'); } catch (e) {}
-      if (!edit.on && splitPref) setEdit(true);
+      S.splitPref = !S.splitPref;
+      try { localStorage.setItem('rv-ed-split', S.splitPref ? '1' : '0'); } catch (e) {}
+      if (!S.on && S.splitPref) setEdit(true);
       applyLayout();
     });
     try {
@@ -959,13 +1020,11 @@
   }
 
   function toggleHelp() {
-    var h = document.getElementById('rv-ed-help');
-    if (h) { h.remove(); return; }
-    h = document.createElement('div');
-    h.id = 'rv-ed-help';
-    h.innerHTML =
-      '<b>How editing works</b>' +
-      '<p>You are editing <code>' + PRES_NAME + '</code> — the source text file, ' +
+    var w = RV.ui.box({ id: 'rv-ed-help', title: 'How editing works',
+                        closes: ['rv-ed-history'] });
+    if (!w) return;
+    w.body.innerHTML =
+      '<p>You are editing <code>' + escapeHtml(PRES_NAME) + '</code> — the source text file, ' +
       'not the HTML. Every change is written to it immediately as a minimal ' +
       'edit, the deck rebuilds, and this preview reloads in place. There is ' +
       'no separate save step.</p>' +
@@ -979,14 +1038,11 @@
       '<li><b>↶ ↷ / Ctrl+Z</b> — undo/redo edits made here</li>' +
       '<li><b>☰ / F</b> — reorder the slide\'s fragments</li>' +
       '<li><b>Drop a file</b> — insert an image/movie into a column</li>' +
-      '</ul><button class="rv-help-close">Close</button>';
-    document.body.appendChild(h);
-    h.querySelector('.rv-help-close').addEventListener('click', function () { h.remove(); });
+      '</ul>';
   }
 
   /* --- side panel ---------------------------------------------------------------- */
 
-  var panelFor = null;  // element the panel currently shows
 
   function panelEl() {
     var p = document.getElementById('rv-ed-panel');
@@ -1000,12 +1056,12 @@
 
   function rvPanelSync() {
     var p = panelEl();
-    p.style.display = edit.on ? 'flex' : 'none';
-    if (!edit.on) { panelFor = null; return; }
+    p.style.display = S.on ? 'flex' : 'none';
+    if (!S.on) { S.panelFor = null; return; }
     var sec = window.Reveal && Reveal.getCurrentSlide && Reveal.getCurrentSlide();
-    var key = edit.sel || sec;
-    if (key === panelFor) return;
-    panelFor = key;
+    var key = S.sel || sec;
+    if (key === S.panelFor) return;
+    S.panelFor = key;
     renderPanel();
   }
 
@@ -1021,7 +1077,7 @@
 
   function renderPanel() {
     var p = panelEl();
-    var el = edit.sel;
+    var el = S.sel;
     if (!el || !document.contains(el)) {
       var sec = window.Reveal && Reveal.getCurrentSlide && Reveal.getCurrentSlide();
       if (sec && sec.hasAttribute('data-rv-src')) {
@@ -1039,12 +1095,12 @@
 
     var crumbs = crumbChain(el).map(function (c) {
       var label = c === el ? '<b>' + kindOf(c) + '</b>' : kindOf(c);
-      return '<span class="rv-pn-crumb" data-src="' + c.getAttribute('data-rv-src') + '">' + label + '</span>';
+      return '<span class="rv-pn-crumb" data-src="' + escapeHtml(c.getAttribute('data-rv-src')) + '">' + escapeHtml(label) + '</span>';
     }).join(' ▸ ');
 
     p.innerHTML =
       '<div class="rv-pn-head">' + crumbs + '</div>' +
-      '<div class="rv-pn-sub">' + PRES_NAME + ' : ' + s + (e !== s ? '–' + e : '') + '</div>' +
+      '<div class="rv-pn-sub">' + escapeHtml(PRES_NAME) + ' : ' + s + (e !== s ? '–' + e : '') + '</div>' +
       '<div class="rv-pn-fields"></div>' +
       '<div class="rv-pn-actions">' +
       '<button class="rv-pn-up" title="Move before the previous sibling">▲ Up</button>' +
@@ -1063,7 +1119,7 @@
         var slide = Reveal.getCurrentSlide();
         var t = (slide && slide.querySelector('[data-rv-src="' + c.getAttribute('data-src') + '"]')) ||
                 document.querySelector('section[data-rv-src="' + c.getAttribute('data-src') + '"]');
-        if (t) { edit.sel = t; syncChrome(); }
+        if (t) { S.sel = t; syncChrome(); }
       });
     });
     p.querySelector('.rv-pn-up').addEventListener('click', function () { moveSibling(el, -1); });
@@ -1092,7 +1148,7 @@
     var s0 = srcOf(sec), e0 = srcEndOf(sec);
     p.innerHTML =
       '<div class="rv-pn-head"><b>' + (kindOf(sec) === 'slide' ? 'This slide' : kindOf(sec)) + '</b>' +
-      ' <span class="rv-pn-sub">' + PRES_NAME + ' : ' + s0 + '–' + e0 + '</span></div>' +
+      ' <span class="rv-pn-sub">' + escapeHtml(PRES_NAME) + ' : ' + s0 + '–' + e0 + '</span></div>' +
       '<div class="rv-pn-hint">Click an element for its parameters, or edit the whole slide here.</div>' +
       '<div class="rv-pn-srctitle">Slide source (editable)</div>' +
       '<div class="rv-fmt-slot"></div>' +
@@ -1136,7 +1192,7 @@
       '<button data-b="\`" data-a="\`" title="code">&lt;&gt;</button>' +
       PALETTE.map(function (c) {
         return '<button class="rv-fmt-sw" data-b="[" data-a="]{.' + c[0] + '}" title="' + c[0] +
-          '" style="background:' + (root.getPropertyValue(c[1]).trim() || '#888') + '"></button>';
+          '" style="background:' + escapeHtml(root.getPropertyValue(c[1]).trim() || '#888') + '"></button>';
       }).join('') +
       '<input type="color" title="custom color" value="#1a4fd6">' +
       '<select title="size"><option value="">size…</option>' +
@@ -1202,28 +1258,32 @@
   }
 
   function toggleHistory() {
-    var hd = document.getElementById('rv-ed-history');
-    if (hd) { hd.remove(); return; }
-    hd = document.createElement('div');
-    hd.id = 'rv-ed-history';
-    hd.innerHTML = '<div class="rv-hi-head"><b>🕐 Save history</b>' +
-      '<button class="rv-hi-snap" title="Snapshot the current state with a note">Snapshot…</button>' +
-      '<button class="rv-hi-close">✕</button></div>' +
+    var w = RV.ui.box({
+      id: 'rv-ed-history', title: '🕐 Save history',
+      closes: ['rv-ed-help'],
+      buttons: [{
+        label: 'Snapshot…', cls: 'rv-hi-snap',
+        title: 'Snapshot the current state with a note',
+        onClick: function () {
+          var msg = window.prompt('Snapshot note:', 'before big rework');
+          if (msg === null) return;
+          fetch('/__rv__/history/commit', {
+            method: 'POST', headers: { 'X-RV-Token': TOKEN, 'Content-Type': 'application/json' },
+            body: JSON.stringify({ message: msg }),
+          }).then(function () {
+            var hd = document.getElementById('rv-ed-history');
+            if (hd) loadHistory(hd);
+          });
+        },
+      }],
+    });
+    if (!w) return;
+    w.body.innerHTML =
       '<div class="rv-hi-hint">Every save is committed automatically to a shadow git ' +
       'repo (.rv-history/) inside the deck folder. Restoring first snapshots the ' +
       'current state — nothing is ever lost. Ctrl+Z also undoes a restore.</div>' +
       '<div class="rv-hi-list">loading…</div>';
-    document.body.appendChild(hd);
-    hd.querySelector('.rv-hi-close').addEventListener('click', function () { hd.remove(); });
-    hd.querySelector('.rv-hi-snap').addEventListener('click', function () {
-      var msg = window.prompt('Snapshot note:', 'before big rework');
-      if (msg === null) return;
-      fetch('/__rv__/history/commit', {
-        method: 'POST', headers: { 'X-RV-Token': TOKEN, 'Content-Type': 'application/json' },
-        body: JSON.stringify({ message: msg }),
-      }).then(function () { loadHistory(hd); });
-    });
-    loadHistory(hd);
+    loadHistory(w.box);
   }
 
   function loadHistory(hd) {
@@ -1242,7 +1302,7 @@
             '<span class="rv-hi-badge' + (e.auto ? '' : ' rv-hi-manual') + '">' +
             (e.auto ? 'auto' : 'save') + '</span>' +
             '<span class="rv-hi-when">' + relTime(e.ts) + '</span>' +
-            '<span class="rv-hi-msg">' + e.msg.replace(/^(auto|save): /, '') + '</span>' +
+            '<span class="rv-hi-msg">' + escapeHtml(e.msg.replace(/^(auto|save): /, '')) + '</span>' +
             '<button class="rv-hi-diff" data-h="' + e.hash + '">Diff</button>' +
             '<button class="rv-hi-peek" data-h="' + e.hash + '">Peek</button>' +
             '<button data-h="' + e.hash + '">Restore</button></div>' +
@@ -1293,26 +1353,27 @@
   }
 
   function openPeek(url, hash) {
-    var ov = document.getElementById('rv-ed-peek');
-    if (ov) ov.remove();
-    ov = document.createElement('div');
-    ov.id = 'rv-ed-peek';
-    ov.innerHTML = '<div class="rv-pk-bar"><b>🕐 Peek: past version</b>' +
-      '<span class="rv-pk-hint">read-only preview — the deck is unchanged</span>' +
-      '<button class="rv-pk-restore">Restore this version</button>' +
-      '<button class="rv-pk-close">Close</button></div>' +
-      '<iframe src="' + url + '"></iframe>';
-    document.body.appendChild(ov);
-    ov.querySelector('.rv-pk-close').addEventListener('click', function () { ov.remove(); });
-    ov.querySelector('.rv-pk-restore').addEventListener('click', function () {
-      fetch('/__rv__/history/restore', {
-        method: 'POST', headers: { 'X-RV-Token': TOKEN, 'Content-Type': 'application/json' },
-        body: JSON.stringify({ hash: hash }),
-      }).then(function (r) { return r.json(); }).then(function (jj) {
-        ov.remove();
-        toast(jj.ok ? 'Restored — Ctrl+Z to undo' : 'Restore failed');
-      });
+    var w = RV.ui.box({
+      id: 'rv-ed-peek', replace: true, headCls: 'rv-pk-bar',
+      title: '🕐 Peek: past version',
+      hint: 'read-only preview — the deck is unchanged',
+      buttons: [{
+        label: 'Restore this version', cls: 'rv-pk-restore',
+        onClick: function () {
+          fetch('/__rv__/history/restore', {
+            method: 'POST', headers: { 'X-RV-Token': TOKEN, 'Content-Type': 'application/json' },
+            body: JSON.stringify({ hash: hash }),
+          }).then(function (r) { return r.json(); }).then(function (jj) {
+            var ov = document.getElementById('rv-ed-peek');
+            if (ov) ov.remove();
+            toast(jj.ok ? 'Restored — Ctrl+Z to undo' : 'Restore failed');
+          });
+        },
+      }],
     });
+    var fr = document.createElement('iframe');
+    fr.src = url;
+    w.body.appendChild(fr);
   }
 
   /* --- media import (file picker) -------------------------------------------------- */
@@ -1334,7 +1395,7 @@
       method: 'PUT', headers: { 'X-RV-Token': TOKEN }, body: file,
     }).then(function (r) { return r.json(); }).then(function (j) {
       if (!j.ok) { toast('Upload rejected: ' + (j.error || '?')); return; }
-      var sel = edit.sel, at = null, flags = [];
+      var sel = S.sel, at = null, flags = [];
       var sec = window.Reveal && Reveal.getCurrentSlide();
       function spanDest(container, kind) {
         return { insert_before: srcEndOf(container) + 1,
@@ -1364,11 +1425,10 @@
 
   /* --- docked / split view ------------------------------------------------------------ */
 
-  var splitPref = false;
-  try { splitPref = localStorage.getItem('rv-ed-split') === '1'; } catch (e) {}
+  try { S.splitPref = localStorage.getItem('rv-ed-split') === '1'; } catch (e) {}
 
   function applyLayout() {
-    var on = splitPref && edit.on;
+    var on = S.splitPref && S.on;
     document.body.classList.toggle('rv-split', on);
     var div = document.getElementById('rv-ed-divider');
     if (on && !div) {
@@ -1393,7 +1453,7 @@
     }
     if (div) div.style.display = on ? 'block' : 'none';
     var btn = document.querySelector('#rv-ed-toolbar .rv-tb-view');
-    if (btn) btn.classList.toggle('rv-active', splitPref);
+    if (btn) btn.classList.toggle('rv-active', S.splitPref);
     relayout();
   }
 
@@ -1418,8 +1478,8 @@
 
   function fld(label, value, hint) {
     return '<label class="rv-pn-fld"><span>' + label + '</span>' +
-      '<input type="text" value="' + (value == null ? '' : String(value).replace(/"/g, '&quot;')) + '"' +
-      (hint ? ' placeholder="' + hint + '"' : '') + '></label>';
+      '<input type="text" value="' + (value == null ? '' : escapeHtml(value)) + '"' +
+      (hint ? ' placeholder="' + escapeHtml(hint) + '"' : '') + '></label>';
   }
 
   function tokensOf(line, headRe) {
@@ -1572,7 +1632,7 @@
           '(– = always visible):</div>' +
           ids.map(function (it, i) {
             var cur = step[it.id] || '';
-            return '<label class="rv-pn-fld" data-id="' + it.id + '"><span>#' + it.id +
+            return '<label class="rv-pn-fld" data-id="' + escapeHtml(it.id) + '"><span>#' + escapeHtml(it.id) +
               '</span><select>' + ['<option value="">–</option>'].concat(
                 [1,2,3,4,5,6,7,8].map(function (n) {
                   return '<option value="' + n + '"' + (cur === n ? ' selected' : '') +
@@ -1582,8 +1642,8 @@
           '<button class="rv-pn-svgapply">Apply steps</button>';
         box.querySelectorAll('.rv-pn-fld').forEach(function (row) {
           var node = el.querySelector('svg [id="' + row.getAttribute('data-id') + '"]');
-          row.addEventListener('mouseenter', function () { edit.hover = node; syncChrome(); });
-          row.addEventListener('mouseleave', function () { edit.hover = null; syncChrome(); });
+          row.addEventListener('mouseenter', function () { S.hover = node; syncChrome(); });
+          row.addEventListener('mouseleave', function () { S.hover = null; syncChrome(); });
         });
         box.querySelector('.rv-pn-svgapply').addEventListener('click', function () {
           var chosen = [];
@@ -1656,7 +1716,7 @@
       return;
     }
     toast('Deleted ' + kindOf(el) + ' — Ctrl+Z to undo');
-    edit.sel = null;
+    S.sel = null;
     rvPostEdit([{
       op: 'delete_block',
       src: [srcOf(el), srcEndOf(el)],
@@ -1668,7 +1728,7 @@
 
   function hoverTag(ev) {
     var tag = document.getElementById('rv-ed-hovertag');
-    if (!edit.on || !edit.hover || edit.hover === edit.sel || drag) {
+    if (!S.on || !S.hover || S.hover === S.sel || S.drag) {
       if (tag) tag.style.display = 'none';
       return;
     }
@@ -1677,14 +1737,14 @@
       tag.id = 'rv-ed-hovertag';
       document.body.appendChild(tag);
     }
-    tag.textContent = kindOf(edit.hover);
+    tag.textContent = kindOf(S.hover);
     tag.style.display = 'block';
     tag.style.left = (ev.clientX + 14) + 'px';
     tag.style.top = (ev.clientY + 16) + 'px';
   }
 
   document.addEventListener('mousemove', function (ev) {
-    if (edit.on) hoverTag(ev);
+    if (S.on) hoverTag(ev);
   }, true);
 
   buildToolbar();
@@ -1701,14 +1761,14 @@
     if (Reveal.isReady && Reveal.isReady()) testArm();
     else Reveal.on('ready', testArm);
   }
-  if (params.get('rv-split') === '1') splitPref = true;
+  if (params.get('rv-split') === '1') S.splitPref = true;
   if (params.get('rv-edit') === '1') {
     var arm = function () {
       setEdit(true);
       var selParam = params.get('rv-select');
       if (selParam) {
         var slide = Reveal.getCurrentSlide();
-        edit.sel = slide && (selParam === '1'
+        S.sel = slide && (selParam === '1'
           ? slide.querySelector('[data-rv-src]')
           : slide.querySelector('[data-rv-src="' + selParam + '"]'));
         syncChrome();

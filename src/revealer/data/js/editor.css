@@ -1,5 +1,31 @@
 /* Revealer dev-mode styles — served only by `revealer serve`. */
 
+/* --- z-scale (single source of truth for editor chrome stacking) ----------
+    9000 #rv-editor-layer (grips/outlines live inside its own context)
+    9400 #rv-ed-slotbar
+    9600 #rv-ed-drawer     9610 #rv-ed-panel    9650 #rv-ed-divider
+    9700 #rv-ed-toolbar
+    9810 #rv-ed-help       9820 #rv-ed-history (mutually exclusive, distinct z)
+    9900 #rv-ed-hovertag
+   10000 #rv-ed-peek
+   10050 #rv-dev-error (a broken build must outrank the peek overlay)
+   10060 #rv-ed-toast      10070 #rv-ed-ghost (drag ghost above everything)
+   --------------------------------------------------------------------------- */
+
+/* shared chrome for RV.ui.box widgets */
+.rv-box-head { display: flex; gap: 8px; align-items: center; padding: 10px 12px 4px; }
+.rv-box-head b { flex: 1; }
+.rv-box-body { padding: 4px 12px 10px; }
+#rv-ed-drawer .rv-box-body { padding: 0; }
+#rv-ed-peek .rv-box-body { flex: 1; display: flex; padding: 0; }
+#rv-ed-peek .rv-box-body iframe { flex: 1; }
+.rv-box-hint { flex: 1; color: #8a93b5; font-size: 11px; }
+#rv-ed-help .rv-box-head button, #rv-ed-drawer .rv-box-head button {
+  font: 12px system-ui; background: #2a3350; color: #fff;
+  border: 1px solid #4a5580; border-radius: 5px; padding: 2px 8px; cursor: pointer;
+}
+#rv-ed-help .rv-box-head button { background: #e8ecf5; color: #1c1c2e; border-color: #bbb; }
+
 #rv-dev-error {
   position: fixed;
   inset: 0;
@@ -7,7 +33,7 @@
   align-items: center;
   justify-content: center;
   background: rgba(15, 15, 25, 0.55);
-  z-index: 10000;
+  z-index: 10050;
   font-family: system-ui, sans-serif;
 }
 #rv-dev-error .rv-dev-error-box {
@@ -140,7 +166,7 @@ html.rv-edit .reveal .slides section * { cursor: crosshair; }
   opacity: 0;
   pointer-events: none;
   transition: opacity 0.15s, transform 0.15s;
-  z-index: 10001;
+  z-index: 10060;
 }
 #rv-ed-toast.rv-on { opacity: 1; transform: translateX(-50%) translateY(0); }
 
@@ -152,7 +178,7 @@ html.rv-edit .reveal .slides section * { cursor: crosshair; }
   border-radius: 6px;
   font: 13px system-ui, sans-serif;
   pointer-events: none;
-  z-index: 10002;
+  z-index: 10070;
 }
 
 #rv-ed-slotbar {
@@ -181,7 +207,6 @@ html.rv-edit .reveal .slides section * { cursor: crosshair; }
   box-shadow: 0 10px 32px rgba(0, 0, 0, 0.4);
   z-index: 9600;
 }
-#rv-ed-drawer .rv-ed-drawer-title { font-weight: 700; padding: 0.7em 1em 0.3em; }
 #rv-ed-drawer .rv-ed-drawer-foot { color: #8a93b5; font-size: 11px; padding: 0.3em 1em 0.7em; }
 #rv-ed-drawer .rv-ed-drawer-item {
   display: flex;
@@ -248,10 +273,9 @@ html.rv-edit .reveal .slides section * { cursor: crosshair; }
   background: #fff;
   color: #1c1c2e;
   border-radius: 10px;
-  padding: 1em 1.2em;
   font: 13px/1.5 system-ui, sans-serif;
   box-shadow: 0 12px 40px rgba(0, 0, 0, 0.35);
-  z-index: 9800;
+  z-index: 9810;
 }
 #rv-ed-help ul { margin: 0.5em 0; padding-left: 1.2em; }
 #rv-ed-help code { background: #f0f2f8; padding: 0 4px; border-radius: 3px; }
@@ -280,7 +304,7 @@ html.rv-edit .reveal .slides section * { cursor: crosshair; }
   padding: 12px 14px;
   font: 13px system-ui, sans-serif;
   box-shadow: 0 10px 32px rgba(0, 0, 0, 0.4);
-  z-index: 9600;
+  z-index: 9610;
 }
 #rv-ed-panel .rv-pn-head { font-size: 13px; line-height: 1.5; }
 #rv-ed-panel .rv-pn-crumb { cursor: pointer; color: #9db7e8; }
@@ -425,8 +449,8 @@ body.rv-split #rv-ed-panel { padding-top: 12px; }
 #rv-ed-history {
   position: fixed; top: 60px; left: 12px; width: 380px; max-height: 70vh;
   overflow-y: auto; background: #1c1c2e; color: #fff; border-radius: 10px;
-  padding: 10px 12px; font: 13px system-ui, sans-serif;
-  box-shadow: 0 12px 40px rgba(0,0,0,.4); z-index: 9800;
+  font: 13px system-ui, sans-serif;
+  box-shadow: 0 12px 40px rgba(0,0,0,.4); z-index: 9820;
 }
 #rv-ed-history .rv-hi-head { display: flex; gap: 8px; align-items: center; }
 #rv-ed-history .rv-hi-head b { flex: 1; }
