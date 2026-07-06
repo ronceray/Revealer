@@ -270,11 +270,51 @@ def _head_hash(pdir: Path) -> str | None:
     return proc.stdout.strip() if proc.returncode == 0 else None
 
 
-def _blob_bytes(pdir: Path, pres: Path, commit: str) -> bytes | None:
+def _blob_bytes(pdir: Path, pres, commit: str) -> bytes | None:
+    """Blob bytes of a tracked file at *commit*; *pres* is a Path (its name
+    is used) or a repo-relative posix path string (for included files)."""
     if not re.fullmatch(r"[0-9a-f]{7,40}", commit):
         return None
-    proc = _hgit(pdir, "show", "{0}:{1}".format(commit, pres.name))
+    rel = pres.name if isinstance(pres, Path) else str(pres)
+    proc = _hgit(pdir, "show", "{0}:{1}".format(commit, rel))
     return proc.stdout if proc.returncode == 0 else None
+
+
+def _include_rels(sess: DevSession) -> list[str]:
+    rels = []
+    for inc in sess.includes:
+        try:
+            rels.append(Path(inc).resolve().relative_to(
+                sess.pdir.resolve()).as_posix())
+        except ValueError:
+            pass
+    return rels
+
+
+def _restore_includes(sess: DevSession, commit: str) -> None:
+    """Write every tracked include's blob at *commit* (undo spans files)."""
+    for rel in _include_rels(sess):
+        blob = _blob_bytes(sess.pdir, rel, commit)
+        if blob is None:
+            continue
+        p = sess.pdir / rel
+        try:
+            if not p.exists() or p.read_bytes() != blob:
+                p.write_bytes(blob)
+        except OSError:
+            pass
+
+
+def _resolve_edit_file(sess: DevSession, name: str):
+    """Map a request's optional ``file`` field to the main .pres or a
+    recorded include; None when it names neither (422 at the caller)."""
+    if not name or name == sess.pres.name:
+        return sess.pres
+    target = (sess.pdir / name).resolve()
+    for inc in sess.includes:
+        if Path(inc).resolve() == target:
+            return Path(target)
+    return None
 
 
 def _parent_of(pdir: Path, commit: str) -> str | None:
@@ -366,11 +406,35 @@ def _history_show(pdir: Path, pres: Path, commit: str) -> str | None:
     return data.decode("utf-8", errors="replace") if data is not None else None
 
 
+def _worktree_matches(sess: DevSession, commit: str) -> bool:
+    """Do the main .pres AND every tracked include match *commit*'s blobs?
+
+    P8: an include edit leaves the main file untouched, so position
+    resolution must compare the whole fileset — else undo/redo of an
+    include-only change looks like "at_head" and redo has nowhere to go.
+    """
+    try:
+        if _blob_bytes(sess.pdir, sess.pres, commit) != sess.pres.read_bytes():
+            return False
+    except OSError:
+        return False
+    for rel in _include_rels(sess):
+        blob = _blob_bytes(sess.pdir, rel, commit)
+        try:
+            work = (sess.pdir / rel).read_bytes()
+        except OSError:
+            work = None
+        if blob != work:
+            return False
+    return True
+
+
 def _resolve_position(sess: DevSession) -> str:
-    """Where the working file sits relative to history.
+    """Where the working tree sits relative to history.
 
     ``no_history`` | ``at_head`` | ``at_cursor`` | ``dirty`` — the working
-    bytes are always revalidated; the cursor is never trusted blindly.
+    bytes (main + includes) are always revalidated; the cursor is never
+    trusted blindly.
     """
     if sess.history_mode != "git":
         return "no_history"
@@ -378,12 +442,12 @@ def _resolve_position(sess: DevSession) -> str:
     if head is None:
         return "no_history"
     try:
-        cur = sess.pres.read_bytes()
+        sess.pres.read_bytes()
     except OSError:
         return "no_history"
-    if _blob_bytes(sess.pdir, sess.pres, head) == cur:
+    if _worktree_matches(sess, head):
         return "at_head"
-    if sess.cursor and _blob_bytes(sess.pdir, sess.pres, sess.cursor) == cur:
+    if sess.cursor and _worktree_matches(sess, sess.cursor):
         return "at_cursor"
     return "dirty"
 
@@ -628,27 +692,36 @@ class _Handler(http.server.SimpleHTTPRequestHandler):
         if not isinstance(edits, list) or not edits:
             return self._send_json(400, {"error": "no edits"})
         with sess.lock:
-            before_text = sess.pres.read_text(encoding="utf-8")
+            # P8: a batch targets exactly one file — the main .pres by
+            # default, or a recorded include named by the `file` field.
+            target = _resolve_edit_file(sess, str(req.get("file") or ""))
+            if target is None:
+                return self._send_json(422, {"error": "unknown_file",
+                                             "file": req.get("file")})
+            before_text = target.read_text(encoding="utf-8")
             try:
-                result = edit_mod.apply_edits(sess.pres, sha, edits)
+                result = edit_mod.apply_edits(target, sha, edits)
             except edit_mod.EditError as exc:
                 return self._send_json(exc.status, exc.payload)
             # Undo state: the rebuild's auto-commit records this edit in the
-            # shadow git; without git, keep a single before-image slot.
-            if sess.history_mode != "git":
+            # shadow git; without git, keep a single before-image slot
+            # (main file only — include edits have no fallback undo).
+            if sess.history_mode != "git" and target == sess.pres:
                 sess.fallback_undo = before_text.encode("utf-8")
             _rebuild(sess, log=self._log)
             if sess.build_error:
                 # The edit produced an unbuildable deck — engine bug or bad op.
                 # Roll it back so the user is never stuck on a broken file.
-                sess.pres.write_text(before_text, encoding="utf-8")
-                sess.fallback_undo = None
+                target.write_text(before_text, encoding="utf-8")
+                if target == sess.pres:
+                    sess.fallback_undo = None
                 _rebuild(sess, log=self._log)
                 return self._send_json(422, {
                     "error": "edit_breaks_build",
                     "detail": sess.build_error and sess.build_error.get("message"),
                 })
-            return self._send_json(200, {"ok": True, "sha256": result["sha256"]})
+            return self._send_json(200, {"ok": True, "sha256": result["sha256"],
+                                         "file": str(req.get("file") or "")})
 
     def _src_span(self) -> None:
         """Return the .pres source lines of a span (panel display + editing)."""
@@ -659,7 +732,10 @@ class _Handler(http.server.SimpleHTTPRequestHandler):
         except ValueError:
             return self._send_json(400, {"error": "bad range"})
         with self.sess.lock:
-            data = self.sess.pres.read_bytes()
+            target = _resolve_edit_file(self.sess, q.get("file", ""))
+            if target is None:
+                return self._send_json(422, {"error": "unknown_file"})
+            data = target.read_bytes()
             lines = data.decode("utf-8").replace("\r\n", "\n").split("\n")
             if not (1 <= start <= end <= len(lines)):
                 return self._send_json(422, {"error": "line_out_of_range"})
@@ -668,6 +744,7 @@ class _Handler(http.server.SimpleHTTPRequestHandler):
                 "start": start,
                 "end": end,
                 "total": len(lines),
+                "file": q.get("file", ""),
                 "lines": lines[start - 1:end],
             })
 
@@ -685,7 +762,10 @@ class _Handler(http.server.SimpleHTTPRequestHandler):
         except ValueError:
             return self._send_json(400, {"error": "bad range"})
         with self.sess.lock:
-            data = self.sess.pres.read_bytes()
+            target = _resolve_edit_file(self.sess, q.get("file", ""))
+            if target is None:
+                return self._send_json(422, {"error": "unknown_file"})
+            data = target.read_bytes()
             lines = data.decode("utf-8").replace("\r\n", "\n").split("\n")
             if not (1 <= start <= end <= len(lines)):
                 return self._send_json(422, {"error": "line_out_of_range"})
@@ -701,6 +781,7 @@ class _Handler(http.server.SimpleHTTPRequestHandler):
                 "sha256": _sha_bytes(data),
                 "start": start,
                 "end": end,
+                "file": q.get("file", ""),
                 "lines": out,
             })
 
@@ -734,6 +815,7 @@ class _Handler(http.server.SimpleHTTPRequestHandler):
             _history_commit(sess.pdir, sess.pres, "before restore", auto=True,
                             sess=sess)
             sess.pres.write_bytes(data)
+            _restore_includes(sess, target)
             sess.dirty_keep = None
             _rebuild(sess, log=self._log)
             return self._send_json(200, {
@@ -851,6 +933,7 @@ class _Handler(http.server.SimpleHTTPRequestHandler):
             if data is None:
                 return self._send_json(409, {"error": "nothing_to_" + kind})
             sess.pres.write_bytes(data)
+            _restore_includes(sess, target)
             sess.cursor = new_cursor
             _rebuild(sess, log=self._log, commit=False)
             return self._send_json(200, {

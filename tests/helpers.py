@@ -8,8 +8,8 @@ from pathlib import Path
 from revealer.build import build
 
 # Everything a dev build may add on top of a prod build.
-_DEV_META_RE = re.compile(r'<meta name="rv-src-(?:file|sha)" content="[^"]*">\n')
-_SRC_ATTR_RE = re.compile(r' data-rv-(?:src|src-end|implicit)="[^"]*"')
+_DEV_META_RE = re.compile(r'<meta name="rv-src-(?:file|sha|files)" content="[^"]*">\n')
+_SRC_ATTR_RE = re.compile(r' data-rv-(?:src|src-end|implicit|f|inc)="[^"]*"')
 
 
 def build_deck(pdir: Path, name: str = "test", dev: bool = False) -> str:

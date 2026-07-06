@@ -277,12 +277,22 @@ _DEV = False
 
 
 def _src_attr(start: int | None, end: int | None = None) -> str:
-    """The dev-only provenance attribute(s) for an emitted element."""
+    """The dev-only provenance attribute(s) for an emitted element.
+
+    Origins are stride-encoded (see ``_FILE_STRIDE``); elements from an
+    included file carry ``data-rv-f`` with the file-table index. A span
+    crossing a file boundary keeps only its start (never a wrong span).
+    """
     if not _DEV or start is None:
         return ""
-    out = ' data-rv-src="{0}"'.format(start)
+    f, own = divmod(int(start), 10_000_000)
+    out = ' data-rv-src="{0}"'.format(own)
+    if f:
+        out += ' data-rv-f="{0}"'.format(f)
     if end is not None and end != start:
-        out += ' data-rv-src-end="{0}"'.format(end)
+        fe, own_e = divmod(int(end), 10_000_000)
+        if fe == f and own_e != own:
+            out += ' data-rv-src-end="{0}"'.format(own_e)
     return out
 
 
@@ -1796,9 +1806,17 @@ def _slide_append(S: dict, line: str, lineno: int | None) -> None:
 
 _INCLUDE_RE = re.compile(r"^>\s*include\s*:\s*(\S+)\s*$")
 
+# P8 multi-file provenance: line origins are encoded as
+# ``file_idx * _FILE_STRIDE + own_line`` so the whole srcmap machinery keeps
+# doing plain integer arithmetic. File 0 is the main .pres (encoding is the
+# identity there); included files register in the build's file table and
+# their elements emit ``data-rv-src="<own_line>" data-rv-f="<idx>"``.
+_FILE_STRIDE = 10_000_000
+
 
 def _expand_includes(text: str, pdir: str, _stack: tuple = (),
-                     _root: str | None = None, _depth: int = 0):
+                     _root: str | None = None, _depth: int = 0,
+                     _files: list | None = None, _idx: int = 0):
     """Expand ``> include: file.pres`` lines (build-only, recursive).
 
     Returns ``(entries, includes)`` where each entry is
@@ -1812,35 +1830,56 @@ def _expand_includes(text: str, pdir: str, _stack: tuple = (),
     skipped with a comment.
     """
     root = _root or os.path.realpath(pdir)
+    files = _files if _files is not None else [None]  # slot 0 = main file
     entries: list[tuple[int | None, str | None, str]] = []
     includes: list[str] = []
+
+    def enc(n: int) -> int:
+        return _idx * _FILE_STRIDE + n
+
+    here = None if _idx == 0 else (files[_idx] or {}).get("path")
     for lineno, line in enumerate(text.splitlines(keepends=True), 1):
         m = _INCLUDE_RE.match(line)
         if not m:
-            entries.append((lineno if _depth == 0 else None, None, line))
+            entries.append((enc(lineno), here, line))
             continue
         fname = m.group(1)
         fpath = os.path.realpath(os.path.join(pdir, fname))
         if not fpath.startswith(root + os.sep):
             print("Warning: `> include:` outside the deck folder ignored: {0}".format(fname))
-            entries.append((lineno if _depth == 0 else None, None, "\n"))
+            entries.append((enc(lineno), here, "\n"))
             continue
         if fpath in _stack:
             print("Warning: circular `> include:` skipped: {0}".format(fname))
-            entries.append((lineno if _depth == 0 else None, None, "\n"))
+            entries.append((enc(lineno), here, "\n"))
             continue
         try:
             sub = Path(fpath).read_text(encoding="utf-8")
         except OSError:
             print("Warning: `> include:` file not found: {0}".format(fname))
-            entries.append((lineno if _depth == 0 else None, None, "\n"))
+            entries.append((enc(lineno), here, "\n"))
             continue
         includes.append(fpath)
         if not sub.endswith("\n"):
             sub += "\n"
+        sub_bytes = sub.encode("utf-8")
+        try:
+            rel = str(Path(fpath).relative_to(root))
+        except ValueError:
+            rel = fname
+        existing = next((i for i, fe in enumerate(files)
+                         if fe and fe["path"] == rel), None)
+        if existing is None:
+            files.append({"path": rel,
+                          "sha": hashlib.sha256(sub_bytes).hexdigest(),
+                          "lines": sub.count("\n")})
+            sub_idx = len(files) - 1
+        else:
+            sub_idx = existing
         sub_entries, sub_includes = _expand_includes(
-            sub, os.path.dirname(fpath), _stack + (fpath,), root, _depth + 1)
-        entries.extend((None, sf or fname, sl) for _o, sf, sl in sub_entries)
+            sub, os.path.dirname(fpath), _stack + (fpath,), root, _depth + 1,
+            files, sub_idx)
+        entries.extend(sub_entries)
         includes.extend(sub_includes)
     return entries, includes
 
@@ -1929,8 +1968,11 @@ def _build(pfile: str, dev: bool) -> str:
     _PDIR = pdir
     _run_build_hooks(pdir, pres_text)
 
+    _files: list = [{"path": os.path.basename(pfile), "sha": pres_sha,
+                     "lines": pres_text.count("\n")
+                              + (0 if pres_text.endswith("\n") else 1)}]
     _expanded, _includes = _expand_includes(
-        pres_text, pdir, _stack=(os.path.realpath(pfile),))
+        pres_text, pdir, _stack=(os.path.realpath(pfile),), _files=_files)
     if True:  # (indentation-stable replacement of the StringIO loop)
         for lineno, _inc_file, line in _expanded:
 
@@ -2087,8 +2129,16 @@ def _build(pfile: str, dev: bool) -> str:
         if S.get("src") is None:
             S["src_end"] = None
             continue
-        nxt = [T["src"] for T in slide[i + 1:] if T.get("src") is not None]
-        S["src_end"] = (min(nxt) - 1) if nxt else total_lines
+        f = S["src"] // _FILE_STRIDE
+        nxt = [T["src"] for T in slide[i + 1:]
+               if T.get("src") is not None
+               and T["src"] // _FILE_STRIDE == f and T["src"] > S["src"]]
+        if nxt:
+            S["src_end"] = min(nxt) - 1
+        elif f == 0:
+            S["src_end"] = total_lines
+        else:
+            S["src_end"] = f * _FILE_STRIDE + _files[f]["lines"]
 
     # === Bibliography ========================================================
 
@@ -2518,8 +2568,12 @@ def _build(pfile: str, dev: bool) -> str:
         # built from, for the dev server's optimistic-concurrency checks.
         meta = (
             '<meta name="rv-src-file" content="{0}">\n'
-            '<meta name="rv-src-sha" content="{1}">\n'.format(
-                _escape_attr(os.path.basename(pfile)), pres_sha
+            '<meta name="rv-src-sha" content="{1}">\n'
+            '<meta name="rv-src-files" content="{2}">\n'.format(
+                _escape_attr(os.path.basename(pfile)), pres_sha,
+                _escape_attr(_json.dumps(
+                    [{"path": fe["path"], "sha256": fe["sha"]}
+                     for fe in _files])),
             )
         )
         out = out.replace("</head>", meta + "</head>", 1)

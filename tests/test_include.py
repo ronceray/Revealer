@@ -46,14 +46,18 @@ def _course(deck):
 
 def test_expansion_origin_map(deck):
     pdir = _course(deck)
-    entries, includes = _expand_includes(MAIN, str(pdir))
-    # main lines keep their numbers; included lines carry None + file name
+    files = [{"path": "crs.pres", "sha": "x", "lines": MAIN.count("\n")}]
+    entries, includes = _expand_includes(MAIN, str(pdir), _files=files)
+    # main lines keep their plain numbers; included lines are stride-encoded
+    # into their own file's coordinates (P8 multi-file provenance)
     origins = [(o, f) for o, f, _line in entries]
-    assert (1, None) in origins                       # settings line
-    assert (None, "lectures/l1.pres") in origins      # from l1
-    assert (None, "l2.pres") in origins               # nested, nearest file
-    assert [o for o, f in origins if o is not None] == sorted(
-        o for o, f in origins if o is not None)
+    assert (1, None) in origins                             # settings line
+    stride = build_mod._FILE_STRIDE
+    assert (stride + 1, "lectures/l1.pres") in origins      # l1 line 1
+    assert (2 * stride + 1, "lectures/l2.pres") in origins  # nested l2 line 1
+    assert [fe["path"] for fe in files] == [
+        "crs.pres", "lectures/l1.pres", "lectures/l2.pres"]
+    assert all(len(fe["sha"]) == 64 for fe in files[1:])
     assert [Path(i).name for i in includes] == ["l1.pres", "l2.pres"]
 
 
@@ -79,20 +83,29 @@ def test_build_annotations_and_invariant(deck):
     # all included content rendered
     for text in ("included body L1", "included body L2", "main outro body"):
         assert text in html
-    # every data-rv-src points into the MAIN file (invariant by construction)
+    # P8: every annotation is per-file — an element without data-rv-f points
+    # into the main file; with data-rv-f=<idx> into that included file
     main_lines = MAIN.count("\n")
-    for m in re.finditer(r'data-rv-src="(\d+)"', html):
+    for m in re.finditer(r'data-rv-src="(\d+)"(?! data-rv-f)', html):
         assert 1 <= int(m.group(1)) <= main_lines
-    # included slides carry the data-rv-inc marker instead
+    assert re.search(r'data-rv-src="\d+" data-rv-f="1"', html)
+    assert re.search(r'data-rv-src="\d+" data-rv-f="2"', html)
+    # the file table meta carries per-file shas
+    fm = re.search(r'<meta name="rv-src-files" content="([^"]*)">', html)
+    assert fm is not None
+    import html as _html
+    import json as _json
+    table = _json.loads(_html.unescape(fm.group(1)))
+    assert [t["path"] for t in table] == [
+        "crs.pres", "lectures/l1.pres", "lectures/l2.pres"]
+    assert all(len(t["sha256"]) == 64 for t in table)
+    # the human hint marker is still emitted on included sections
     assert 'data-rv-inc="lectures/l1.pres"' in html
-    assert 'data-rv-inc="l2.pres"' in html
-    # included body text sits in elements without provenance
-    frag = html.split("included body L1")[0].rsplit("<", 1)[0]
-    assert "data-rv-src" not in frag.split("<section")[-1]
 
     # prod build: no dev markers at all
     prod = Path(build_mod.build(str(pdir / "crs.pres"))).read_text(encoding="utf-8")
-    assert "data-rv-inc" not in prod and "data-rv-src" not in prod
+    for marker in ("data-rv-inc", "data-rv-src", "data-rv-f=", "rv-src-files"):
+        assert marker not in prod
     assert "included body L2" in prod
 
 
