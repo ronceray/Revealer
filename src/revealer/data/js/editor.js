@@ -1230,9 +1230,41 @@
             (e.auto ? 'auto' : 'save') + '</span>' +
             '<span class="rv-hi-when">' + relTime(e.ts) + '</span>' +
             '<span class="rv-hi-msg">' + e.msg.replace(/^(auto|save): /, '') + '</span>' +
-            '<button data-h="' + e.hash + '">Restore</button></div>';
+            '<button class="rv-hi-diff" data-h="' + e.hash + '">Diff</button>' +
+            '<button class="rv-hi-peek" data-h="' + e.hash + '">Peek</button>' +
+            '<button data-h="' + e.hash + '">Restore</button></div>' +
+            '<pre class="rv-hi-diffbox" data-h="' + e.hash + '" hidden></pre>';
         }).join('');
-        list.querySelectorAll('button[data-h]').forEach(function (b) {
+        list.querySelectorAll('.rv-hi-diff').forEach(function (b) {
+          b.addEventListener('click', function () {
+            var box = list.querySelector('.rv-hi-diffbox[data-h="' + b.getAttribute('data-h') + '"]');
+            if (!box.hidden) { box.hidden = true; return; }
+            fetch('/__rv__/history/diff?hash=' + b.getAttribute('data-h') +
+                  '&token=' + encodeURIComponent(TOKEN))
+              .then(function (r) { return r.json(); })
+              .then(function (jj) {
+                box.innerHTML = (jj.diff || '(no diff)').split('\n').map(function (ln) {
+                  var esc = ln.replace(/&/g, '&amp;').replace(/</g, '&lt;');
+                  if (/^\+(?!\+\+)/.test(ln)) return '<span class="rv-d-add">' + esc + '</span>';
+                  if (/^-(?!--)/.test(ln)) return '<span class="rv-d-del">' + esc + '</span>';
+                  return esc;
+                }).join('\n');
+                box.hidden = false;
+              });
+          });
+        });
+        list.querySelectorAll('.rv-hi-peek').forEach(function (b) {
+          b.addEventListener('click', function () {
+            fetch('/__rv__/history/preview', {
+              method: 'POST', headers: { 'X-RV-Token': TOKEN, 'Content-Type': 'application/json' },
+              body: JSON.stringify({ hash: b.getAttribute('data-h') }),
+            }).then(function (r) { return r.json(); }).then(function (jj) {
+              if (!jj.ok) { toast('Preview failed: ' + (jj.error || '?')); return; }
+              openPeek(jj.url, b.getAttribute('data-h'));
+            });
+          });
+        });
+        list.querySelectorAll('button[data-h]:not(.rv-hi-diff):not(.rv-hi-peek)').forEach(function (b) {
           b.addEventListener('click', function () {
             fetch('/__rv__/history/restore', {
               method: 'POST', headers: { 'X-RV-Token': TOKEN, 'Content-Type': 'application/json' },
@@ -1245,6 +1277,29 @@
           });
         });
       });
+  }
+
+  function openPeek(url, hash) {
+    var ov = document.getElementById('rv-ed-peek');
+    if (ov) ov.remove();
+    ov = document.createElement('div');
+    ov.id = 'rv-ed-peek';
+    ov.innerHTML = '<div class="rv-pk-bar"><b>🕐 Peek: past version</b>' +
+      '<span class="rv-pk-hint">read-only preview — the deck is unchanged</span>' +
+      '<button class="rv-pk-restore">Restore this version</button>' +
+      '<button class="rv-pk-close">Close</button></div>' +
+      '<iframe src="' + url + '"></iframe>';
+    document.body.appendChild(ov);
+    ov.querySelector('.rv-pk-close').addEventListener('click', function () { ov.remove(); });
+    ov.querySelector('.rv-pk-restore').addEventListener('click', function () {
+      fetch('/__rv__/history/restore', {
+        method: 'POST', headers: { 'X-RV-Token': TOKEN, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ hash: hash }),
+      }).then(function (r) { return r.json(); }).then(function (jj) {
+        ov.remove();
+        toast(jj.ok ? 'Restored — Ctrl+Z to undo' : 'Restore failed');
+      });
+    });
   }
 
   /* --- media import (file picker) -------------------------------------------------- */

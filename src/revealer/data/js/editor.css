@@ -447,3 +447,28 @@ body.rv-split #rv-ed-panel { padding-top: 12px; }
 #rv-ed-history .rv-hi-badge.rv-hi-manual { background: #2a76dd; color: #fff; }
 #rv-ed-history .rv-hi-when { color: #9db7e8; flex: 0 0 64px; font-size: 11px; }
 #rv-ed-history .rv-hi-msg { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+/* --- peek overlay + diffs ---------------------------------------------------- */
+#rv-ed-history .rv-hi-diffbox {
+  margin: 2px 0 6px 70px; padding: 6px; background: #12121f; border-radius: 5px;
+  font: 10.5px/1.5 ui-monospace, monospace; white-space: pre-wrap; max-height: 200px; overflow: auto;
+}
+#rv-ed-history .rv-d-add { color: #7ade7a; }
+#rv-ed-history .rv-d-del { color: #ff8a7a; }
+#rv-ed-peek {
+  position: fixed; inset: 24px; z-index: 10000; background: #1c1c2e;
+  border-radius: 10px; box-shadow: 0 20px 60px rgba(0,0,0,.5);
+  display: flex; flex-direction: column; overflow: hidden;
+}
+#rv-ed-peek .rv-pk-bar {
+  display: flex; gap: 10px; align-items: center; padding: 8px 12px;
+  color: #fff; font: 13px system-ui, sans-serif;
+}
+#rv-ed-peek .rv-pk-bar b { flex: 0 0 auto; }
+#rv-ed-peek .rv-pk-hint { flex: 1; color: #8a93b5; font-size: 11px; }
+#rv-ed-peek button {
+  font: 12px system-ui; background: #2a3350; color: #fff;
+  border: 1px solid #4a5580; border-radius: 5px; padding: 3px 10px; cursor: pointer;
+}
+#rv-ed-peek .rv-pk-restore { background: #2a76dd; border-color: #2a76dd; }
+#rv-ed-peek iframe { flex: 1; border: 0; background: #fff; }

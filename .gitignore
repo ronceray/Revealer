@@ -14,3 +14,4 @@ __pycache__/
 Documentation/_build/
 *.dev.html
 .rv-history/
+.rv-preview.*

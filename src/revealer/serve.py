@@ -332,6 +332,15 @@ class _Handler(http.server.SimpleHTTPRequestHandler):
             return self._sse()
         if path in (DEV_PREFIX + "/editor.js", DEV_PREFIX + "/editor.css"):
             return self._dev_asset(path.rsplit("/", 1)[1])
+        if path == DEV_PREFIX + "/history/diff":
+            if not self._check_token():
+                return self._send_json(403, {"error": "forbidden"})
+            h = self._query().get("hash", "")
+            if not re.fullmatch(r"[0-9a-f]{7,40}", h):
+                return self._send_json(400, {"error": "bad hash"})
+            proc = _hgit(self.sess.pdir, "show", h, "--format=%s", "--patch",
+                         "--", self.sess.pres.name)
+            return self._send_json(200, {"diff": proc.stdout[:20000]})
         if path == DEV_PREFIX + "/history":
             if not self._check_token():
                 return self._send_json(403, {"error": "forbidden"})
@@ -366,6 +375,8 @@ class _Handler(http.server.SimpleHTTPRequestHandler):
             return self._history_snapshot()
         if path == DEV_PREFIX + "/history/restore":
             return self._history_restore()
+        if path == DEV_PREFIX + "/history/preview":
+            return self._history_preview()
         if path == DEV_PREFIX + "/undo":
             return self._undo_redo(undo=True)
         if path == DEV_PREFIX + "/redo":
@@ -473,6 +484,31 @@ class _Handler(http.server.SimpleHTTPRequestHandler):
             sess.redo.clear()
             _rebuild(sess, log=self._log)
             return self._send_json(200, {"ok": True})
+
+    def _history_preview(self) -> None:
+        """Build a historical version as a separate artifact, without touching
+        the deck: served at /.rv-preview.html for the peek overlay."""
+        sess = self.sess
+        try:
+            req = json.loads(self._read_body().decode("utf-8"))
+        except ValueError:
+            return self._send_json(400, {"error": "bad json"})
+        text = _history_show(sess.pdir, sess.pres, str(req.get("hash", "")))
+        if text is None:
+            return self._send_json(422, {"error": "unknown_version"})
+        tmp = sess.pdir / ".rv-preview.pres"
+        try:
+            tmp.write_text(text)
+            out = build_mod.build(str(tmp))
+        except Exception as exc:
+            return self._send_json(500, {"error": str(exc)[:300]})
+        finally:
+            try:
+                tmp.unlink()
+            except OSError:
+                pass
+        return self._send_json(200, {"ok": True,
+                                     "url": "/" + Path(out).name})
 
     def _export(self) -> None:
         """Export the deck: kind=html (prod build) or kind=pdf."""
@@ -680,6 +716,11 @@ def serve(pres: Path, port: int = 8000, open_browser: bool = True, log=print) ->
     finally:
         stop.set()
         httpd.server_close()
+        for stray in (sess.pdir / ".rv-preview.html", sess.pdir / ".rv-preview.pres"):
+            try:
+                stray.unlink()
+            except OSError:
+                pass
         if sess.html_path is not None and sess.html_path.is_file():
             try:
                 sess.html_path.unlink()
