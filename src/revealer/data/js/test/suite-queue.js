@@ -7,14 +7,23 @@
 
   function token() { return (window.__RV_DEV__ || {}).token || ''; }
 
-  function srcAll() {
-    return RVT.fetch('/__rv__/src?start=1&end=1&token=' + encodeURIComponent(token()))
-      .then(function (r) { return r.json(); })
-      .then(function (j) {
-        return RVT.fetch('/__rv__/src?start=1&end=' + j.total +
-                         '&token=' + encodeURIComponent(token()))
-          .then(function (r) { return r.json(); });
+  // Idempotent GET, polled during rapid rebuilds — retry transient
+  // "Failed to fetch" (a reload aborting the request) instead of failing.
+  function getJSON(url, tries) {
+    tries = tries || 0;
+    return RVT.fetch(url).then(function (r) { return r.json(); })
+      .catch(function (e) {
+        if (tries >= 6) throw e;
+        return new Promise(function (res) { setTimeout(res, 200); })
+          .then(function () { return getJSON(url, tries + 1); });
       });
+  }
+
+  function srcAll() {
+    var tk = encodeURIComponent(token());
+    return getJSON('/__rv__/src?start=1&end=1&token=' + tk).then(function (j) {
+      return getJSON('/__rv__/src?start=1&end=' + j.total + '&token=' + tk);
+    });
   }
 
   function findPin(j) {

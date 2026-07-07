@@ -10,10 +10,19 @@
     return TOKEN;
   }
 
-  function srcLines(start, end) {
+  // /src is idempotent, so a transient "Failed to fetch" (an in-flight
+  // request aborted by a rebuild's reload) is retried rather than failing
+  // the whole test.
+  function srcLines(start, end, tries) {
+    tries = tries || 0;
     return RVT.fetch('/__rv__/src?start=' + start + '&end=' + end +
                      '&token=' + encodeURIComponent(token()))
-      .then(function (r) { return r.json(); });
+      .then(function (r) { return r.json(); })
+      .catch(function (e) {
+        if (tries >= 6) throw e;
+        return new Promise(function (res) { setTimeout(res, 200); })
+          .then(function () { return srcLines(start, end, tries + 1); });
+      });
   }
 
   RVT.test('editor boots and arms edit mode', function () {
