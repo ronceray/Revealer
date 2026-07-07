@@ -383,3 +383,205 @@ $(document).ready(function () {
   set_fixed(Reveal.getCurrentSlide());
   fitSlide(Reveal.getCurrentSlide());
 });
+
+
+/* --- thumbnail grid overview -------------------------------------------------
+   Replaces reveal.js's single-row Esc overview (which is "just a line" for
+   horizontal-only decks) with a wrapped grid of live slide thumbnails.
+   Enabled by `overview: false` in the deck's Reveal.initialize. Works in the
+   served deck AND in exported standalone HTML. */
+(function () {
+  var GRID_ID = 'rv-grid';
+  var isOpen = false;
+  var cells = [];   // [{ cell, h, v }]
+  var sel = 0;
+  var cols = 1;
+
+  function injectStyle() {
+    if (document.getElementById('rv-grid-style')) return;
+    var css =
+      '#rv-grid{position:fixed;inset:0;z-index:100000;overflow:auto;padding:26px;' +
+      'background:#12141c;-webkit-font-smoothing:antialiased;}' +
+      '#rv-grid .rv-grid-head{color:#c7cde0;font:13px system-ui,sans-serif;' +
+      'text-align:center;margin:0 0 16px;}' +
+      '#rv-grid .rv-grid-inner{display:grid;gap:18px;max-width:1680px;margin:0 auto;' +
+      'grid-template-columns:repeat(auto-fill,minmax(300px,1fr));}' +
+      '.rv-grid-cell{all:unset;display:block;cursor:pointer;border-radius:8px;' +
+      'overflow:hidden;background:#fff;box-shadow:0 2px 12px rgba(0,0,0,.45);' +
+      'outline:3px solid transparent;outline-offset:1px;transition:outline-color .1s;}' +
+      '.rv-grid-cell:hover{outline-color:#5e9cff;}' +
+      '.rv-grid-cell.rv-grid-sel{outline-color:#5e9cff;}' +
+      '.rv-grid-cell.rv-grid-cur{outline-color:#2a76dd;}' +
+      '.rv-grid-cell.rv-grid-sub .rv-grid-thumb{border-left:4px solid #5e9cff;}' +
+      '.rv-grid-thumb{position:relative;width:100%;overflow:hidden;' +
+      'background:var(--r-background-color,#fff);}' +
+      '.rv-grid-scaler{position:absolute;top:0;left:0;transform-origin:top left;' +
+      'pointer-events:none;}' +
+      '.rv-grid-label{padding:5px 9px;font:12px system-ui,sans-serif;color:#1c2233;' +
+      'background:#eef1f6;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}';
+    var st = document.createElement('style');
+    st.id = 'rv-grid-style';
+    st.textContent = css;
+    document.head.appendChild(st);
+  }
+
+  // All slides, flattened: each vertical sub-slide is its own addressable cell.
+  function slideList() {
+    var out = [];
+    var tops = document.querySelectorAll('.reveal .slides > section');
+    Array.prototype.forEach.call(tops, function (top, h) {
+      var subs = top.querySelectorAll(':scope > section');
+      if (subs.length) {
+        Array.prototype.forEach.call(subs, function (sub, v) {
+          out.push({ el: sub, h: h, v: v, stack: true });
+        });
+      } else {
+        out.push({ el: top, h: h, v: 0, stack: false });
+      }
+    });
+    return out;
+  }
+
+  function titleOf(el) {
+    var h = el.querySelector('.slide_header, h1, h2, h3');
+    return h ? h.textContent.trim() : '';
+  }
+
+  function build() {
+    injectStyle();
+    var cfg = Reveal.getConfig();
+    var W = cfg.width || 960, H = cfg.height || 700;
+    var ov = document.createElement('div');
+    ov.id = GRID_ID;
+    var head = document.createElement('div');
+    head.className = 'rv-grid-head';
+    head.textContent = 'Slides — click or ←→ then Enter · Esc to close';
+    ov.appendChild(head);
+    var grid = document.createElement('div');
+    grid.className = 'rv-grid-inner';
+    var list = slideList();
+    var cur = Reveal.getIndices();
+    cells = [];
+    sel = 0;
+    list.forEach(function (s, i) {
+      var cell = document.createElement('button');
+      cell.type = 'button';
+      cell.className = 'rv-grid-cell' + (s.stack ? ' rv-grid-sub' : '');
+      var isCur = s.h === cur.h && (s.v || 0) === (cur.v || 0);
+      if (isCur) { cell.classList.add('rv-grid-cur'); sel = i; }
+      var thumb = document.createElement('div');
+      thumb.className = 'rv-grid-thumb';
+      thumb.style.aspectRatio = W + ' / ' + H;
+      var scaler = document.createElement('div');
+      scaler.className = 'rv-grid-scaler';
+      scaler.style.width = W + 'px';
+      scaler.style.height = H + 'px';
+      var clone = s.el.cloneNode(true);
+      clone.removeAttribute('hidden');
+      clone.classList.add('present');
+      clone.style.cssText = 'display:block;position:static;transform:none;' +
+        'width:' + W + 'px;height:' + H + 'px;visibility:visible;opacity:1;';
+      // static thumbnails: don't let cloned media reload/play
+      Array.prototype.forEach.call(clone.querySelectorAll('iframe'), function (f) {
+        f.removeAttribute('src');
+      });
+      Array.prototype.forEach.call(clone.querySelectorAll('video'), function (v) {
+        v.removeAttribute('autoplay'); v.pause && v.pause();
+      });
+      scaler.appendChild(clone);
+      thumb.appendChild(scaler);
+      cell.appendChild(thumb);
+      var label = document.createElement('div');
+      label.className = 'rv-grid-label';
+      var t = titleOf(s.el);
+      label.textContent = (i + 1) + (t ? '. ' + t : '');
+      cell.appendChild(label);
+      cell.addEventListener('click', function () { go(s.h, s.v); });
+      grid.appendChild(cell);
+      cells.push({ cell: cell, h: s.h, v: s.v });
+    });
+    ov.appendChild(grid);
+    document.body.appendChild(ov);
+    // Scale each clone to its thumbnail width once the grid has laid out.
+    requestAnimationFrame(function () {
+      cells.forEach(function (c) {
+        var thumb = c.cell.querySelector('.rv-grid-thumb');
+        var scaler = c.cell.querySelector('.rv-grid-scaler');
+        if (thumb && scaler) {
+          scaler.style.transform = 'scale(' + (thumb.clientWidth / W) + ')';
+        }
+      });
+      // columns = cells sharing the first row's top offset (for arrow nav)
+      if (cells.length) {
+        var top0 = cells[0].cell.offsetTop;
+        cols = cells.filter(function (c) { return c.cell.offsetTop === top0; }).length || 1;
+      }
+      markSel();
+      if (cells[sel]) cells[sel].cell.scrollIntoView({ block: 'center' });
+    });
+  }
+
+  function markSel() {
+    cells.forEach(function (c, i) {
+      c.cell.classList.toggle('rv-grid-sel', i === sel);
+    });
+  }
+
+  function go(h, v) {
+    close();
+    Reveal.slide(h, v);
+  }
+
+  function open() {
+    if (isOpen) return;
+    isOpen = true;
+    build();
+  }
+
+  function close() {
+    var ov = document.getElementById(GRID_ID);
+    if (ov) ov.remove();
+    isOpen = false;
+    cells = [];
+  }
+
+  function toggle() { isOpen ? close() : open(); }
+
+  document.addEventListener('keydown', function (ev) {
+    var t = ev.target;
+    if (t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.isContentEditable)) return;
+    // In the dev editor's edit mode the editor owns Esc (select-parent) and
+    // 'o' (outline); defer entirely while editing and the grid isn't open.
+    if (!isOpen && document.documentElement.classList.contains('rv-edit')) return;
+    if (ev.key === 'Escape' || ev.key === 'o' || ev.key === 'O') {
+      toggle();
+      ev.preventDefault();
+      ev.stopPropagation();
+      return;
+    }
+    if (!isOpen) return;
+    var moved = true;
+    if (ev.key === 'ArrowRight') sel = Math.min(cells.length - 1, sel + 1);
+    else if (ev.key === 'ArrowLeft') sel = Math.max(0, sel - 1);
+    else if (ev.key === 'ArrowDown') sel = Math.min(cells.length - 1, sel + cols);
+    else if (ev.key === 'ArrowUp') sel = Math.max(0, sel - cols);
+    else if (ev.key === 'Enter') { var c = cells[sel]; if (c) go(c.h, c.v); return; }
+    else moved = false;
+    if (moved) {
+      markSel();
+      if (cells[sel]) cells[sel].cell.scrollIntoView({ block: 'nearest' });
+      ev.preventDefault();
+      ev.stopPropagation();
+    }
+  }, true);
+
+  // Exposed for the JS test harness.
+  window.RVGrid = { open: open, close: close, toggle: toggle,
+                    isOpen: function () { return isOpen; } };
+
+  // Debug/screenshot hook: ?rv-grid=1 opens the grid once the deck is ready.
+  if (/[?&]rv-grid=1/.test(location.search) && window.Reveal && Reveal.on) {
+    Reveal.on('ready', function () { setTimeout(open, 300); });
+  }
+})();
+

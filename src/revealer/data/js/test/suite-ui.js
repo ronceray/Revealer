@@ -92,4 +92,31 @@
       });
     });
   });
+
+  RVT.test('split view letterboxes the slide over a gray stage', function () {
+    return RVT.iframe('/?rv-edit=1&rv-split=1', '#rv-ed-toolbar').then(function (f) {
+      return RVT.until(function () {
+        var d = f.contentDocument;
+        var reveal = d.querySelector('.reveal');
+        return d.body.classList.contains('rv-split') &&
+               d.getElementById('rv-ed-stage') &&
+               reveal && reveal.style.width ? f : null;
+      }, 15000, 'gray stage + fitted reveal box').then(function (f) {
+        var d = f.contentDocument;
+        var stage = d.getElementById('rv-ed-stage');
+        var reveal = d.querySelector('.reveal');
+        var boxW = parseFloat(reveal.style.width);
+        var boxH = parseFloat(reveal.style.height);
+        var stageW = parseFloat(stage.style.width);
+        RVT.assert(boxW > 0 && boxW < stageW,
+          'reveal box (' + boxW + ') is inset within the stage (' + stageW + ')');
+        var cfg = f.contentWindow.Reveal.getConfig();
+        var want = (cfg.width || 960) / (cfg.height || 700);
+        RVT.assert(Math.abs(boxW / boxH - want) < 0.05,
+          'box aspect ' + (boxW / boxH).toFixed(3) + ' ~ deck ' + want.toFixed(3));
+        f.remove();
+        return true;
+      });
+    });
+  });
 })();

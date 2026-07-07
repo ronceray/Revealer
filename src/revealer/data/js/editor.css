@@ -461,9 +461,8 @@ html.rv-edit .reveal .slides section * { cursor: crosshair; }
 
 :root { --rv-pw: 320px; }
 
-body.rv-split .reveal {
-  width: calc(100vw - var(--rv-pw)) !important;
-}
+/* .reveal geometry in split mode is driven inline by split.js (see the v2
+   block below); no width rule here so the aspect-fit box wins. */
 body.rv-split #rv-ed-panel {
   display: flex;
   top: 0;
@@ -506,14 +505,28 @@ body.rv-split #rv-ed-drawer { right: calc(var(--rv-pw) + 10px); }
   white-space: pre-wrap;
 }
 
-/* --- split view v2: slide fitted with controls off the canvas ---------------- */
+/* --- split view v2: slide fitted with controls off the canvas ----------------
+   The reveal box is shrunk by split.js to a centred, aspect-correct rectangle
+   over the gray stage (#rv-ed-stage), with a crisp bordered edge, so it is
+   obvious what is on the slide and what is not. Geometry (top/left/width/height)
+   is set inline by split.js; this rule provides the framing. */
+
+#rv-ed-stage {
+  position: fixed;
+  background: #c4c8d0;
+  z-index: 0;
+  pointer-events: none;
+  display: none;
+}
+body.rv-split #rv-ed-stage { display: block; }
 
 body.rv-split .reveal {
   position: fixed !important;
-  top: 58px;
-  left: 10px;
-  width: calc(100vw - var(--rv-pw) - 20px) !important;
-  height: calc(100vh - 106px) !important; /* strips above (toolbar) and below (hints) */
+  z-index: 1;
+  /* opaque deck background so the gray stage shows only OUTSIDE the box;
+     reveal's per-slide .backgrounds layer paints dark/image slides over it. */
+  background: var(--r-background-color, #fff);
+  box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.18), 0 10px 40px rgba(0, 0, 0, 0.28);
 }
 body.rv-split #rv-ed-toolbar {
   top: 10px;

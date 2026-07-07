@@ -236,6 +236,7 @@ def generate_index_html(reveal_dir: str, extensions: list[str]) -> None:
                 hash: true,
                 slideNumber: false,
                 center: false,
+                overview: false,
                 plugins: {plugins},__REVEAL_OPTIONS__{deps}
             }});
         </script>

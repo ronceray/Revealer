@@ -70,6 +70,12 @@ revealer pdf MyTalk          # -> MyTalk/MyTalk.pdf  (one page per slide)
 Both are also one click away in the served deck's toolbar (⬇ HTML /
 ⬇ PDF).
 
+## 5. Presenting
+
+Navigate with the arrow keys. Press **`Esc`** (or `o`) to open a grid of
+slide thumbnails — click one, or move with the arrow keys and press `Enter`,
+to jump anywhere. This works both when serving and in an exported deck.
+
 ## Where to go next
 
 - [Authoring guide](authoring.md) — the `.pres` language, end to end.

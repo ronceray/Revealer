@@ -56,7 +56,9 @@ the selection:
 
 The panel docks to the side of the deck; the **⇔** button switches to a
 split view with the deck on the left and the panel on the right, divider
-draggable.
+draggable. In split view the slide is scaled to fit its space with its
+aspect ratio preserved and a gray margin around it, so it is always clear
+where the slide ends.
 
 ## Direct manipulation
 

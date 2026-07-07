@@ -98,3 +98,13 @@ def test_deck_reveal_js_ships_no_editor_assets(deck):
     shipped = [p for p in (pdir / "reveal.js").rglob("*")
                if p.name.startswith(("editor", "rvt", "suite-"))]
     assert shipped == [], shipped
+
+
+def test_prod_build_disables_overview_and_ships_grid(deck):
+    """The thumbnail grid replaces reveal's row overview in every built deck."""
+    pdir = deck(PRES, name="ov")
+    out = build_mod.build(str(pdir / "ov.pres"))
+    html = Path(out).read_text(encoding="utf-8")
+    assert "overview: false" in html  # reveal's single-row overview disabled
+    rjs = (pdir / "reveal.js" / "js" / "revealer.js").read_text(encoding="utf-8")
+    assert "RVGrid" in rjs and "rv-grid-inner" in rjs  # grid runtime bundled
