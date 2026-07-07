@@ -93,27 +93,34 @@
     });
   });
 
-  RVT.test('split view letterboxes the slide over a gray stage', function () {
+  RVT.test('split view scales the whole deck into a gray-framed box', function () {
     return RVT.iframe('/?rv-edit=1&rv-split=1', '#rv-ed-toolbar').then(function (f) {
       return RVT.until(function () {
         var d = f.contentDocument;
         var reveal = d.querySelector('.reveal');
+        var frame = d.getElementById('rv-ed-frame');
         return d.body.classList.contains('rv-split') &&
                d.getElementById('rv-ed-stage') &&
-               reveal && reveal.style.width ? f : null;
-      }, 15000, 'gray stage + fitted reveal box').then(function (f) {
+               frame && frame.style.display === 'block' &&
+               reveal && /scale\(/.test(reveal.style.transform) ? f : null;
+      }, 15000, 'stage + framed box + scaled deck').then(function (f) {
         var d = f.contentDocument;
+        var frame = d.getElementById('rv-ed-frame');
         var stage = d.getElementById('rv-ed-stage');
-        var reveal = d.querySelector('.reveal');
-        var boxW = parseFloat(reveal.style.width);
-        var boxH = parseFloat(reveal.style.height);
-        var stageW = parseFloat(stage.style.width);
-        RVT.assert(boxW > 0 && boxW < stageW,
-          'reveal box (' + boxW + ') is inset within the stage (' + stageW + ')');
-        var cfg = f.contentWindow.Reveal.getConfig();
-        var want = (cfg.width || 960) / (cfg.height || 700);
-        RVT.assert(Math.abs(boxW / boxH - want) < 0.05,
-          'box aspect ' + (boxW / boxH).toFixed(3) + ' ~ deck ' + want.toFixed(3));
+        var fw = parseFloat(frame.style.width), fh = parseFloat(frame.style.height);
+        var sw = parseFloat(stage.style.width), sh = parseFloat(stage.style.height);
+        RVT.assert(fw > 0 && fw < sw && fh > 0 && fh < sh,
+          'framed box (' + fw + 'x' + fh + ') inset in the stage (' + sw + 'x' + sh + ')');
+        // the deck — reveal AND the fixed chrome — is scaled by the SAME factor
+        var m = /scale\(([0-9.]+)\)/.exec(d.querySelector('.reveal').style.transform);
+        RVT.assert(m && parseFloat(m[1]) > 0 && parseFloat(m[1]) < 1,
+          'reveal scaled down (' + (m && m[1]) + ')');
+        var header = d.querySelector('body > header');
+        if (header && header.style.transform) {
+          var hm = /scale\(([0-9.]+)\)/.exec(header.style.transform);
+          RVT.assert(hm && Math.abs(parseFloat(hm[1]) - parseFloat(m[1])) < 1e-6,
+            'header scaled by the same factor as the deck (stays coupled)');
+        }
         f.remove();
         return true;
       });

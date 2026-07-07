@@ -17,6 +17,9 @@
       var stage = document.createElement('div');
       stage.id = 'rv-ed-stage';
       document.body.appendChild(stage);
+      var frame = document.createElement('div');
+      frame.id = 'rv-ed-frame';
+      document.body.appendChild(frame);
     }
     var div = document.getElementById('rv-ed-divider');
     if (on && !div) {
@@ -49,43 +52,69 @@
   // above, hint bar below, editor gap left, panel + gap right.
   var STAGE = { top: 58, left: 10, bottom: 48, gapRight: 10 };
 
-  // Shrink .reveal to the largest deck-aspect box that fits the stage,
-  // centred, and size the gray backdrop to the whole stage. Called before
-  // Reveal.layout() so reveal scales the slide to fill the box (no internal
-  // letterbox); the gray shows only outside the box.
+  // The whole deck unit — the reveal element AND the window-absolute fixed
+  // chrome (header / footer / logos, which are sized in vh and would
+  // otherwise stay stranded at the window edge) — is scaled uniformly into a
+  // centred box over the gray stage. Scaling everything by the same
+  // window->box map keeps the title glued to its slide, a faithful
+  // scaled-down preview.
+  function chromeEls() {
+    var els = [document.querySelector('.reveal')];
+    ['body > header', 'body > footer', '#hlogos'].forEach(function (sel) {
+      var el = document.querySelector(sel);
+      if (el) els.push(el);
+    });
+    return els.filter(Boolean);
+  }
+
+  function clearStage() {
+    chromeEls().forEach(function (el) {
+      el.style.removeProperty('transform');
+      el.style.removeProperty('transform-origin');
+    });
+    var frame = document.getElementById('rv-ed-frame');
+    if (frame) frame.style.display = 'none';
+  }
+
   function fitStage() {
-    var reveal = document.querySelector('.reveal');
-    if (!reveal) return;
-    var stage = document.getElementById('rv-ed-stage');
-    if (!(S.splitPref && S.on)) {
-      ['top', 'left', 'width', 'height'].forEach(function (p) {
-        reveal.style.removeProperty(p);
-      });
-      return;
-    }
+    if (!document.querySelector('.reveal')) return;
+    if (!(S.splitPref && S.on)) { clearStage(); return; }
     var pw = parseInt(getComputedStyle(document.documentElement)
       .getPropertyValue('--rv-pw'), 10) || 320;
     var sx = STAGE.left, sy = STAGE.top;
     var sw = Math.max(40, window.innerWidth - pw - STAGE.left - STAGE.gapRight);
     var sh = Math.max(40, window.innerHeight - STAGE.top - STAGE.bottom);
+    var stage = document.getElementById('rv-ed-stage');
     if (stage) {
-      stage.style.left = sx + 'px';
-      stage.style.top = sy + 'px';
-      stage.style.width = sw + 'px';
-      stage.style.height = sh + 'px';
+      stage.style.left = sx + 'px'; stage.style.top = sy + 'px';
+      stage.style.width = sw + 'px'; stage.style.height = sh + 'px';
     }
-    var cfg = (window.Reveal && Reveal.getConfig) ? Reveal.getConfig() : {};
-    var ar = (cfg.width || 960) / (cfg.height || 700);
-    // Fit inside a small inset so there is always a visible gray gutter
-    // around the slide (the letterbox reads as intentional even when the
-    // stage aspect nearly matches the deck).
+    // Scale the full window into the stage, with a gutter so the gray always
+    // frames the deck. The box has the WINDOW's aspect (the header/footer are
+    // part of the deck), so the preview matches the real full-screen look.
     var pad = 16;
-    var boxW = Math.min(sw - pad * 2, (sh - pad * 2) * ar);
-    var boxH = boxW / ar;
-    reveal.style.setProperty('top', (sy + (sh - boxH) / 2) + 'px', 'important');
-    reveal.style.setProperty('left', (sx + (sw - boxW) / 2) + 'px', 'important');
-    reveal.style.setProperty('width', boxW + 'px', 'important');
-    reveal.style.setProperty('height', boxH + 'px', 'important');
+    var W = window.innerWidth, H = window.innerHeight;
+    var f = Math.min((sw - pad * 2) / W, (sh - pad * 2) / H);
+    var boxW = W * f, boxH = H * f;
+    var tx = sx + (sw - boxW) / 2, ty = sy + (sh - boxH) / 2;
+    // Measure untransformed positions first, then map each element uniformly
+    // (window point p -> box point t + f*p).
+    var els = chromeEls();
+    els.forEach(function (el) { el.style.removeProperty('transform'); });
+    void els[0].offsetWidth;  // reflow so the rects below are untransformed
+    els.forEach(function (el) {
+      var r = el.getBoundingClientRect();
+      el.style.setProperty('transform-origin', '0 0', 'important');
+      el.style.setProperty('transform',
+        'translate(' + (tx - r.left * (1 - f)) + 'px,' +
+        (ty - r.top * (1 - f)) + 'px) scale(' + f + ')', 'important');
+    });
+    var frame = document.getElementById('rv-ed-frame');
+    if (frame) {
+      frame.style.display = 'block';
+      frame.style.left = tx + 'px'; frame.style.top = ty + 'px';
+      frame.style.width = boxW + 'px'; frame.style.height = boxH + 'px';
+    }
   }
 
   var relayoutRaf = null;

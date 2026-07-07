@@ -520,13 +520,24 @@ body.rv-split #rv-ed-drawer { right: calc(var(--rv-pw) + 10px); }
 }
 body.rv-split #rv-ed-stage { display: block; }
 
+/* The bordered frame around the scaled deck box (split.js sizes it to the
+   transformed reveal box; it is not itself scaled, so the border stays crisp). */
+#rv-ed-frame {
+  position: fixed;
+  z-index: 0;
+  pointer-events: none;
+  display: none;
+  background: var(--r-background-color, #fff);
+  box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.18), 0 12px 40px rgba(0, 0, 0, 0.3);
+}
+
+/* split.js transform-scales the whole deck (reveal + header/footer/logos)
+   into the frame; reveal itself fills the window so its internal layout and
+   the fixed chrome stay coupled. */
 body.rv-split .reveal {
   position: fixed !important;
+  inset: 0 !important;
   z-index: 1;
-  /* opaque deck background so the gray stage shows only OUTSIDE the box;
-     reveal's per-slide .backgrounds layer paints dark/image slides over it. */
-  background: var(--r-background-color, #fff);
-  box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.18), 0 10px 40px rgba(0, 0, 0, 0.28);
 }
 body.rv-split #rv-ed-toolbar {
   top: 10px;
