@@ -1531,6 +1531,22 @@ def _contentify_legacy(html: str, src: list | None = None) -> str:
                 index += 1
                 continue
 
+            # --- Vertical spacer: `> space` (filling) / `> space: <size>` (fixed)
+
+            sp = re.match(r"^>\s*space\s*(?::\s*(.*?)\s*)?$", line)
+            if sp:
+                _close_lists()
+                val = (sp.group(1) or "").strip()
+                if val:
+                    style = "flex:0 0 {0};height:{0};".format(
+                        _escape_style_value(val))
+                else:
+                    style = "flex:1 1 0;min-height:0;"
+                html += '<div class="rv-space"{sa} style="{st}"></div>\n'.format(
+                    sa=_src_attr(src[index]), st=style)
+                index += 1
+                continue
+
             # --- Block constructs: registry-driven dispatch (REGISTRY order)
 
             dispatched = False
@@ -2060,6 +2076,13 @@ def _build(pfile: str, dev: bool) -> str:
                     continue
 
                 if len(slide) and not notes and re.match(r"^>\s*end\s*:\s*\w+\s*$", line):
+                    _slide_append(slide[-1], line, lineno)
+                    continue
+
+                # `> space` / `> space: <size>`: a vertical spacer kept in the
+                # content stream so contentify() renders it (never a param).
+                if len(slide) and not notes and re.match(
+                        r"^\s*>\s*space\s*(?::.*)?$", line):
                     _slide_append(slide[-1], line, lineno)
                     continue
 

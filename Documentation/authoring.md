@@ -395,6 +395,12 @@ grid whose heights resolve against the canvas:
   column host an absolutely-positioned overlay.
 - Rows nest: a `> row` inside a column splits it further.
 - `> end: row` closes the row.
+- `> space` adds vertical whitespace in the flow. Bare `> space` is a
+  *filling* spacer (`flex: 1`) — it absorbs the free vertical space, so it
+  pushes blocks apart, centres one, or pins one to the bottom. `> space: 40px`
+  (also `2em`, `10%`) is a *fixed* gap of that height. Handy between two
+  consecutive `> grid(…)` blocks, which otherwise sit flush against each
+  other. (Filling needs a `> fill` slide; a fixed `> space:` works anywhere.)
 
 Inside a `> table(...)` block, `> row` keeps its table meaning (a new table
 row); everywhere else it opens a layout row.
