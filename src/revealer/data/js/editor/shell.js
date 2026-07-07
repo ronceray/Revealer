@@ -123,6 +123,7 @@
     var tb = document.createElement('div');
     tb.id = 'rv-ed-toolbar';
     tb.innerHTML =
+      '<span class="rv-tb-grip" title="' + RV.esc(RV.t('toolbar.dragTitle')) + '">⠿</span>' +
       '<button class="rv-tb-edit" title="' + RV.esc(RV.t('toolbar.editTitle')) + '">' + RV.t('toolbar.edit') + '</button>' +
       '<button class="rv-tb-undo" title="' + RV.esc(RV.t('toolbar.undoTitle')) + '">↶</button>' +
       '<button class="rv-tb-redo" title="' + RV.esc(RV.t('toolbar.redoTitle')) + '">↷</button>' +
@@ -136,6 +137,33 @@
       '<span class="rv-tb-status rv-st-idle">' + F.escapeHtml(PRES_NAME) + '</span>' +
       '<button class="rv-tb-help" title="' + RV.esc(RV.t('toolbar.helpTitle')) + '">?</button>';
     document.body.appendChild(tb);
+
+    // Draggable by its grip so it can be moved off a slide title in docked
+    // view (split view forces it to the top-left corner via CSS). The
+    // position persists across reloads.
+    try {
+      var saved = JSON.parse(localStorage.getItem('rv-ed-tbpos') || 'null');
+      if (saved) { tb.style.left = saved.x + 'px'; tb.style.top = saved.y + 'px'; }
+    } catch (e) {}
+    tb.querySelector('.rv-tb-grip').addEventListener('pointerdown', function (ev) {
+      ev.preventDefault();
+      var r = tb.getBoundingClientRect();
+      var offX = ev.clientX - r.left, offY = ev.clientY - r.top;
+      function mv(e2) {
+        var x = Math.max(0, Math.min(window.innerWidth - tb.offsetWidth, e2.clientX - offX));
+        var y = Math.max(0, Math.min(window.innerHeight - tb.offsetHeight, e2.clientY - offY));
+        tb.style.left = x + 'px';
+        tb.style.top = y + 'px';
+        try { localStorage.setItem('rv-ed-tbpos', JSON.stringify({ x: x, y: y })); } catch (e3) {}
+      }
+      function up() {
+        document.removeEventListener('pointermove', mv, true);
+        document.removeEventListener('pointerup', up, true);
+      }
+      document.addEventListener('pointermove', mv, true);
+      document.addEventListener('pointerup', up, true);
+    });
+
     tb.querySelector('.rv-tb-edit').addEventListener('click', function () { F.setEdit(!S.on); });
     tb.querySelector('.rv-tb-undo').addEventListener('click', function () { F.rvUndoRedo('undo'); });
     tb.querySelector('.rv-tb-redo').addEventListener('click', function () { F.rvUndoRedo('redo'); });

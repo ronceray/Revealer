@@ -330,6 +330,16 @@ html.rv-edit .reveal .slides section * { cursor: crosshair; }
   font: 13px system-ui, sans-serif;
   z-index: 9700;
 }
+#rv-ed-toolbar .rv-tb-grip {
+  color: #6b74a0;
+  cursor: grab;
+  padding: 0 4px 0 2px;
+  font-size: 15px;
+  line-height: 1;
+  user-select: none;
+  touch-action: none;
+}
+#rv-ed-toolbar .rv-tb-grip:active { cursor: grabbing; }
 #rv-ed-toolbar button {
   font: inherit;
   background: #2a3350;
@@ -540,8 +550,8 @@ body.rv-split .reveal {
   z-index: 1;
 }
 body.rv-split #rv-ed-toolbar {
-  top: 10px;
-  left: 10px;
+  top: 10px !important;   /* split view ignores a dragged docked position */
+  left: 10px !important;
   box-shadow: none;
 }
 body.rv-split #rv-editor-layer .rv-ed-bar {

@@ -93,6 +93,31 @@
     });
   });
 
+  RVT.test('toolbar is draggable by its grip (docked view)', function () {
+    return RVT.iframe('/?rv-edit=1', '#rv-ed-toolbar').then(function (f) {
+      var doc = f.contentDocument, win = f.contentWindow;
+      var tb = doc.getElementById('rv-ed-toolbar');
+      var grip = tb.querySelector('.rv-tb-grip');
+      RVT.assert(grip, 'toolbar has a drag grip');
+      var before = tb.getBoundingClientRect().left;
+      var gr = grip.getBoundingClientRect();
+      function pe(type, x, y, target) {
+        (target || doc).dispatchEvent(new win.PointerEvent(type, {
+          bubbles: true, cancelable: true, clientX: x, clientY: y,
+          pointerId: 1, isPrimary: true, buttons: 1 }));
+      }
+      pe('pointerdown', gr.left + 5, gr.top + 5, grip);
+      pe('pointermove', gr.left + 235, gr.top + 120);
+      pe('pointerup', gr.left + 235, gr.top + 120);
+      var after = tb.getBoundingClientRect().left;
+      RVT.assert(after > before + 150,
+        'toolbar moved right (' + before + ' -> ' + after + ')');
+      try { win.localStorage.removeItem('rv-ed-tbpos'); } catch (e) {}
+      f.remove();
+      return true;
+    });
+  });
+
   RVT.test('split view scales the whole deck into a gray-framed box', function () {
     return RVT.iframe('/?rv-edit=1&rv-split=1', '#rv-ed-toolbar').then(function (f) {
       return RVT.until(function () {
