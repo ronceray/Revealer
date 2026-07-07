@@ -38,6 +38,11 @@
       'toolbar.xpdfTitle': 'Export a PDF next to the .pres',
       'toolbar.helpTitle': 'Help',
       'toolbar.dragTitle': 'Drag to move the toolbar',
+      'toolbar.settingsTitle': 'Document settings (the .pres header)',
+      'docset.title': '⚙ Document settings',
+      'docset.hint': 'The settings block at the top of the .pres — title, ' +
+        'author, logos, theme… Applies above the first slide.',
+      'docset.apply': 'Apply settings',
       'status.saved': 'Saved to {name} ✓',
       'toast.gitMissing': 'git not found — undo limited to the last edit, no save history',
       'toast.exportingHtml': 'Exporting HTML…',
@@ -154,6 +159,11 @@
       'toolbar.xpdfTitle': 'Exporter un PDF à côté du .pres',
       'toolbar.helpTitle': 'Aide',
       'toolbar.dragTitle': 'Glisser pour déplacer la barre',
+      'toolbar.settingsTitle': 'Paramètres du document (l’en-tête du .pres)',
+      'docset.title': '⚙ Paramètres du document',
+      'docset.hint': 'Le bloc de paramètres en haut du .pres — titre, ' +
+        'auteur, logos, thème… S’applique avant la première diapositive.',
+      'docset.apply': 'Appliquer',
       'status.saved': 'Enregistré dans {name} ✓',
       'toast.gitMissing': 'git introuvable — annulation limitée à la dernière modification, pas d’historique',
       'toast.exportingHtml': 'Export HTML…',

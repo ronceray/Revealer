@@ -130,6 +130,7 @@
       '<button class="rv-tb-frag" title="' + RV.esc(RV.t('toolbar.fragTitle')) + '">☰</button>' +
       '<button class="rv-tb-outline" title="' + RV.esc(RV.t('toolbar.outlineTitle')) + '">▤</button>' +
       '<button class="rv-tb-media" title="' + RV.esc(RV.t('toolbar.mediaTitle')) + '">' + RV.t('toolbar.media') + '</button>' +
+      '<button class="rv-tb-docset" title="' + RV.esc(RV.t('toolbar.settingsTitle')) + '">⚙</button>' +
       '<button class="rv-tb-view" title="' + RV.esc(RV.t('toolbar.viewTitle')) + '">⇔</button>' +
       '<button class="rv-tb-hist" title="' + RV.esc(RV.t('toolbar.histTitle')) + '">🕐</button>' +
       '<button class="rv-tb-xhtml" title="' + RV.esc(RV.t('toolbar.xhtmlTitle')) + '">' + RV.t('toolbar.xhtml') + '</button>' +
@@ -172,6 +173,7 @@
       F.toggleDrawer();
     });
     tb.querySelector('.rv-tb-outline').addEventListener('click', F.toggleOutline);
+    tb.querySelector('.rv-tb-docset').addEventListener('click', function () { F.openDocSettings(); });
     tb.querySelector('.rv-tb-help').addEventListener('click', toggleHelp);
     tb.querySelector('.rv-tb-xhtml').addEventListener('click', exportHtml);
     if (window.__RV_DEV__.history === 'fallback') {

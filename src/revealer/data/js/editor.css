@@ -5,7 +5,7 @@
     9400 #rv-ed-slotbar
     9600 #rv-ed-drawer #rv-ed-outline    9610 #rv-ed-panel    9650 #rv-ed-divider
     9700 #rv-ed-toolbar
-    9810 #rv-ed-help       9820 #rv-ed-history (mutually exclusive, distinct z)
+    9810 #rv-ed-help       9820 #rv-ed-history    9830 #rv-ed-docset
     9850 #rv-ed-bubble (selection bubble: above panel/help, below hovertag)
     9860 #rv-ed-export (PDF export progress + Cancel)
     9900 #rv-ed-hovertag
@@ -330,6 +330,14 @@ html.rv-edit .reveal .slides section * { cursor: crosshair; }
   font: 13px system-ui, sans-serif;
   z-index: 9700;
 }
+#rv-ed-docset {
+  position: fixed; top: 60px; left: 12px; width: 460px; max-height: 78vh;
+  overflow-y: auto; background: #1c1c2e; color: #fff; border-radius: 10px;
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.4); z-index: 9830;
+  font: 13px system-ui, sans-serif;
+}
+#rv-ed-docset .rv-ds-src { width: 100%; min-height: 220px; box-sizing: border-box; }
+#rv-ed-docset .rv-ds-apply { margin-top: 6px; }
 #rv-ed-toolbar .rv-tb-grip {
   color: #6b74a0;
   cursor: grab;

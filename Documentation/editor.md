@@ -26,13 +26,15 @@ The served presentation carries a small toolbar (top left):
 | **☰** | Fragment drawer (`F`) — the slide's reveal sequence. |
 | **▤** | Slide outline sidebar (`O`). |
 | **＋ Media** | Import an image or movie into `Media/` and insert it. |
+| **⚙** | Document settings — edit the `.pres` header block (title, author, logos, theme, …) that sits above the first slide. |
 | **⇔** | Toggle the split view (deck left, panel right, draggable divider). |
 | **🕐** | Save history — the time machine. |
 | **⬇ HTML / ⬇ PDF** | Export the final `talk.html` / `talk.pdf` next to the `.pres`. |
 | **?** | Help card with all of the above. |
 
 The status chip next to the toolbar names the `.pres` file being edited and
-reports every save.
+reports every save. Drag the toolbar by the **⠿** grip at its left edge to move
+it off a slide title.
 
 ## Edit mode: selecting and inspecting
 

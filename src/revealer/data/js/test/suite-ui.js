@@ -93,6 +93,51 @@
     });
   });
 
+  RVT.test('document settings editor edits the .pres header block', function () {
+    return RVT.iframe('/?rv-edit=1', '#rv-ed-toolbar').then(function (f) {
+      return RVT.until(function () {
+        return f.contentDocument.documentElement.classList.contains('rv-edit') ? f : null;
+      }, 15000, 'edit mode');
+    }).then(function (f) {
+      var doc = f.contentDocument;
+      var tok = (f.contentWindow.__RV_DEV__ || {}).token || '';
+      doc.querySelector('.rv-tb-docset').click();
+      return RVT.until(function () {
+        var ta = doc.querySelector('#rv-ed-docset .rv-ds-src');
+        return ta && ta.value.indexOf('> title:') !== -1 ? ta : null;
+      }, 15000, 'settings editor showing the title').then(function (ta) {
+        RVT.assert(ta.value.indexOf('> title: JS harness') !== -1,
+          'settings block is shown: ' + JSON.stringify(ta.value));
+        ta.value = ta.value.replace('JS harness', 'Edited Header');
+        doc.querySelector('#rv-ed-docset .rv-ds-apply').click();
+        function poll(n) {
+          return RVT.fetch('/__rv__/src?start=1&end=1&token=' + encodeURIComponent(tok))
+            .then(function (r) { return r.json(); })
+            .then(function (j) {
+              if (j.lines && j.lines[0].indexOf('Edited Header') !== -1) return true;
+              RVT.assert(n < 40, 'title line not updated: ' + (j.lines && j.lines[0]));
+              return new Promise(function (res) { setTimeout(res, 250); })
+                .then(function () { return poll(n + 1); });
+            });
+        }
+        return poll(0);
+      }).then(function () {
+        // restore the fixture title for later suites (deck is shared)
+        return RVT.fetch('/__rv__/src?start=1&end=1&token=' + encodeURIComponent(tok))
+          .then(function (r) { return r.json(); })
+          .then(function (j) {
+            return RVT.fetch('/__rv__/edit', {
+              method: 'POST',
+              headers: { 'X-RV-Token': tok, 'Content-Type': 'application/json' },
+              body: JSON.stringify({ sha256: j.sha256, edits: [{
+                op: 'replace_lines', start: 1, end: 1,
+                text: ['> title: JS harness'] }] }),
+            });
+          });
+      }).then(function () { f.remove(); return true; });
+    });
+  });
+
   RVT.test('toolbar is draggable by its grip (docked view)', function () {
     return RVT.iframe('/?rv-edit=1', '#rv-ed-toolbar').then(function (f) {
       var doc = f.contentDocument, win = f.contentWindow;
