@@ -163,15 +163,27 @@
     el.addEventListener('mousedown', function (ev) { ev.preventDefault(); });
     el.querySelectorAll('button').forEach(function (b) {
       b.addEventListener('click', function () {
-        var op = armed && { op: 'wrap_span', line: armed.line,
-                            start_col: armed.start_col, end_col: armed.end_col,
-                            before: b.getAttribute('data-b'),
-                            after: b.getAttribute('data-a') };
-        var file = armed ? (armed.file || '') : '';  // owning file (P8)
+        var a = armed;
+        var before = b.getAttribute('data-b'), after = b.getAttribute('data-a');
+        var file = a ? (a.file || '') : '';  // owning file (P8)
         hideBubble();
-        if (!op) return;
+        if (!a) return;
         try { document.getSelection().removeAllRanges(); } catch (e) {}
-        F.rvPostEdit([op], file);
+        if (a.list) {
+          // A sub-selection inside a bullet list can't map to exact columns
+          // (the marker + <li> structure), so the font is applied to the
+          // whole list: each item's content is wrapped after its marker.
+          var text = a.lines.map(function (ln) {
+            var m = /^(\s*(?:[*+\-]|\d+[.)])\s+)([\s\S]*)$/.exec(ln.text);
+            return (m && m[2].trim()) ? m[1] + before + m[2] + after : ln.text;
+          });
+          F.rvPostEdit([{ op: 'replace_lines', start: a.start, end: a.end,
+                          text: text }], file);
+          return;
+        }
+        F.rvPostEdit([{ op: 'wrap_span', line: a.line,
+                        start_col: a.start_col, end_col: a.end_col,
+                        before: before, after: after }], file);
       });
     });
     document.body.appendChild(el);
@@ -221,6 +233,13 @@
       if (paraOf(range2.commonAncestorContainer) !== para) return hideBubble();
       var mapped = mapSelection(para, insp, range2);
       if (typeof mapped === 'string') {
+        // A bullet/numbered list can't map a sub-selection, but the font can
+        // still be applied to the whole list — show the bubble in list mode.
+        if (mapped === 'structure' && para.querySelector('ul.rv-list, ol.rv-list')) {
+          showBubble(range2, { list: true, file: file, lines: insp,
+                               start: F.srcOf(para), end: F.srcEndOf(para) });
+          return;
+        }
         hideBubble();
         if (mapped === 'crossing' && !crossToasted) {
           crossToasted = true;

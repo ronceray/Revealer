@@ -108,6 +108,33 @@
     });
   });
 
+  RVT.test('bubble applies a font to a whole bullet list', function () {
+    return openDeck().then(function (f) {
+      return gotoSlideWith(f, 'alpha bullet').then(function () {
+        selectWord(f, 'alpha');
+        return RVT.until(function () { return bubbleVisible(f); },
+                         15000, 'bubble on a bullet selection');
+      }).then(function (bub) {
+        var lede = Array.prototype.filter.call(
+          bub.querySelectorAll('button'),
+          function (b) { return b.textContent === 'lede'; })[0];
+        RVT.assert(lede, 'the bubble has a lede size button');
+        lede.click();
+        return pollSrc(function (j) { return findLine(j, '[alpha bullet]{.lede}'); },
+                       'alpha wrapped');
+      }).then(function (hit) {
+        RVT.assert(hit.text.indexOf('* [alpha bullet]{.lede}') !== -1,
+                   'first bullet wrapped after its marker: ' + hit.text);
+        return srcAll();
+      }).then(function (j) {
+        RVT.assert(findLine(j, '* [beta bullet]{.lede}'),
+                   'the font applied to the WHOLE list (second bullet too)');
+        f.remove();
+        return true;
+      });
+    });
+  });
+
   RVT.test('bubble refuses a selection crossing a formatting boundary', function () {
     return openDeck().then(function (f) {
       return gotoSlideWith(f, 'middle plain tail').then(function () {

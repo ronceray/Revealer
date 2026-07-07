@@ -42,6 +42,11 @@ Editable target line here.
 
 Math check $x^2$ trails words.
 
+=== Bullets
+
+* alpha bullet
+* beta bullet
+
 > include: inc.pres
 """
 
