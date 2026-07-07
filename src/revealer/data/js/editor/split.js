@@ -71,6 +71,7 @@
     chromeEls().forEach(function (el) {
       el.style.removeProperty('transform');
       el.style.removeProperty('transform-origin');
+      el.style.removeProperty('z-index');
     });
     var frame = document.getElementById('rv-ed-frame');
     if (frame) frame.style.display = 'none';
@@ -108,6 +109,9 @@
       el.style.setProperty('transform',
         'translate(' + (tx - r.left * (1 - f)) + 'px,' +
         (ty - r.top * (1 - f)) + 'px) scale(' + f + ')', 'important');
+      // above the white #rv-ed-frame (z 0), which would otherwise hide the
+      // header / footer / logos (they sit at the deck's own z-index).
+      el.style.setProperty('z-index', '1', 'important');
     });
     var frame = document.getElementById('rv-ed-frame');
     if (frame) {

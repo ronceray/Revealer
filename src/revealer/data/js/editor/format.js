@@ -8,11 +8,25 @@
 
   function wrapSel(ta, before, after) {
     var a = ta.selectionStart, b = ta.selectionEnd;
-    var mid = ta.value.slice(a, b) || 'text';
-    ta.value = ta.value.slice(0, a) + before + mid + after + ta.value.slice(b);
+    var sel = ta.value.slice(a, b);
+    var out;
+    if (a === b) {
+      out = before + 'text' + after;
+    } else if (sel.indexOf('\n') === -1) {
+      out = before + sel + after;
+    } else {
+      // An inline span (**…**, [ …]{…}) can't cross a line break — build.py
+      // renders each line separately — so a multi-line selection wraps each
+      // non-blank line's content after any list marker, not the whole block.
+      out = sel.split('\n').map(function (ln) {
+        var m = /^(\s*(?:[*+\-]|\d+[.)])\s+)?(.*)$/.exec(ln);
+        return (m && m[2].trim()) ? (m[1] || '') + before + m[2] + after : ln;
+      }).join('\n');
+    }
+    ta.value = ta.value.slice(0, a) + out + ta.value.slice(b);
     ta.focus();
-    ta.selectionStart = a + before.length;
-    ta.selectionEnd = a + before.length + mid.length;
+    ta.selectionStart = a;
+    ta.selectionEnd = a + out.length;
   }
 
   var PALETTE = [['accent', '--rv-accent'], ['warn', '--rv-warn'],

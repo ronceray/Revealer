@@ -108,6 +108,39 @@
     });
   });
 
+  RVT.test('format bar wraps a multi-line bullet selection per line', function () {
+    return openDeck().then(function (f) {
+      var doc = f.contentDocument, win = f.contentWindow;
+      return gotoSlideWith(f, 'alpha bullet').then(function () {
+        var para = win.Reveal.getCurrentSlide()
+          .querySelector('.rv-paragraph[data-rv-src]');
+        RVT.assert(para, 'bullet paragraph present');
+        var r = para.getBoundingClientRect();
+        para.dispatchEvent(new win.MouseEvent('click', {
+          bubbles: true, cancelable: true,
+          clientX: r.left + 5, clientY: r.top + 5 }));
+        return RVT.until(function () {
+          var ta = doc.querySelector('#rv-ed-panel .rv-pn-src');
+          return ta && ta.value.indexOf('alpha bullet') !== -1 ? ta : null;
+        }, 15000, 'panel source box with the bullets');
+      }).then(function (ta) {
+        ta.focus();
+        ta.setSelectionRange(0, ta.value.length);
+        doc.querySelector('#rv-ed-panel .rv-fmt button[data-b="**"]').click();
+        // each bullet's content is wrapped after its marker — NOT the whole
+        // block in one span (which would render literally).
+        RVT.assert(ta.value.indexOf('* **alpha bullet**') !== -1,
+          'alpha wrapped per line: ' + JSON.stringify(ta.value));
+        RVT.assert(ta.value.indexOf('* **beta bullet**') !== -1,
+          'beta wrapped per line');
+        RVT.assert(ta.value.indexOf('[* ') === -1 && ta.value.indexOf('**]') === -1,
+          'no whole-block wrap');
+        f.remove();
+        return true;
+      });
+    });
+  });
+
   RVT.test('bubble applies a font to a whole bullet list', function () {
     return openDeck().then(function (f) {
       return gotoSlideWith(f, 'alpha bullet').then(function () {
