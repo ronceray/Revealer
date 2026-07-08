@@ -15,26 +15,28 @@ edit (a session diffs like hand edits), the deck rebuilds, and the preview
 reloads in place, keeping your slide, edit mode and selection. There is no
 separate save step.
 
-## The toolbar
+## The command bar
 
-The served presentation carries a small toolbar (top left):
+The chrome is **mode-aware**. In preview (not editing) the deck is untouched —
+the only chrome is a small draggable **✏ Edit** pill (with a save-state dot) in
+the corner. Press `E` or click it to start editing.
 
-| Button | Action |
+In edit mode a command bar pins to the top of the window and the deck docks
+below it. Left to right: the **✏ Edit** toggle, a **slide chip** (`N · title`)
+that drops the [slide filmstrip](#slide-selector), then a menubar:
+
+| Menu | Items |
 | --- | --- |
-| **✏ Edit** | Toggle edit mode (`E`). |
-| **↶ / ↷** | Undo / redo (`Ctrl+Z` / `Ctrl+Shift+Z`). |
-| **☰** | Fragment drawer (`F`) — the slide's reveal sequence. |
-| **▤** | Slide outline sidebar (`O`). |
-| **＋ Media** | Import an image or movie into `Media/` and insert it. |
-| **⚙** | Document settings — edit the `.pres` header block (title, author, logos, theme, …) that sits above the first slide. |
-| **⇔** | Toggle the split view (deck left, panel right, draggable divider). |
-| **🕐** | Save history — the time machine. |
-| **⬇ HTML / ⬇ PDF** | Export the final `talk.html` / `talk.pdf` next to the `.pres`. |
-| **?** | Help card with all of the above. |
+| **Insert** | **Media** — import an image or movie into `Media/` and insert it · **Fragments / animation** drawer (`F`). |
+| **Slide** | **New slide…** — the [template gallery](#new-slide-templates) · **Slide selector** (`O`). |
+| **History** | **Undo** / **Redo** (`Ctrl+Z` / `Ctrl+Shift+Z`) · **Version history** — the [time machine](#save-history). |
+| **View** | **Split view** (deck left, panel right, draggable divider) · **Document source** — edit the `.pres` header block (title, author, logos, theme, …) that sits above the first slide, right in the panel. |
+| **Export** | **Export HTML** / **PDF** — the final `talk.html` / `talk.pdf` next to the `.pres`. |
+| **Help** | The help card. |
 
-The status chip next to the toolbar names the `.pres` file being edited and
-reports every save. Drag the toolbar by the **⠿** grip at its left edge to move
-it off a slide title.
+The status chip on the right names the `.pres` file being edited and reports
+every save. In preview, drag the **✏ Edit** pill by its **⠿** grip to move it
+off a slide title.
 
 ## Edit mode: selecting and inspecting
 
@@ -51,13 +53,14 @@ the selection:
   `Enter`;
 - **▲ Up / ▼ Down / 🗑 Delete** to reorder a block among its siblings or
   remove it (`Del` deletes the selection too — `Ctrl+Z` undoes);
-- a **format bar** and a collapsible **command cheatsheet** of the frequent
-  `.pres` shortcuts;
+- a **format bar** and a collapsible, clickable **command palette** —
+  generated from the grammar, so it lists every construct; click an entry to
+  drop its ready-to-fill skeleton at the cursor;
 - the **source box**: the actual `.pres` lines of the selection, editable
   in place (*Apply source*) — anything the quick fields don't cover.
 
-The panel docks to the side of the deck; the **⇔** button switches to a
-split view with the deck on the left and the panel on the right, divider
+The panel docks to the side of the deck; **View ▸ Split view** switches to a
+split layout with the deck on the left and the panel on the right, divider
 draggable. In split view the slide is scaled to fit its space with its
 aspect ratio preserved and a gray margin around it, so it is always clear
 where the slide ends.
@@ -88,22 +91,31 @@ Shortcuts never fire while you are typing in a field or text box.
 
 ## Fragment drawer
 
-`F` (or **☰**) opens a drawer listing the current slide's fragments — every
-`+`-flagged element and `> frag` block — in reveal order. Drag entries to
-reorder the sequence; the `data-fragment-index` flags in the source are
-rewritten accordingly.
+`F` (or **Insert ▸ Fragments**) opens a drawer listing the current slide's
+fragments — every `+`-flagged element (including `* +` bullets) and `> frag`
+block — in reveal order. Drag entries to reorder the sequence; the
+`data-fragment-index` flags in the source are rewritten accordingly.
 
-## Outline sidebar
+## Slide selector
 
-`O` (or **▤**) opens a sidebar listing every slide. From there you can
-navigate, **add**, **duplicate**, **reorder** (drag) and **delete** slides
+`O` (or the slide chip in the command bar, or **Slide ▸ Slide selector**) drops
+a horizontal **filmstrip** of every slide below the command bar. From there you
+can navigate and, per slide, **add**, **duplicate**, **reorder** and **delete**
 — whole-slide operations that would be tedious as text edits.
+
+## New-slide templates
+
+Adding a slide — the **＋** on a filmstrip cell, or **Slide ▸ New slide…** —
+opens a visual gallery of starter layouts (content, section divider, bulleted
+list, two columns, image + caption, comparison, equation, grid, table, vertical
+sub-slide and more). Pick one and its `.pres` skeleton is inserted right after
+that slide.
 
 (save-history)=
 
 ## Save history — the time machine
 
-The **🕐** button opens the save history. While the server runs, every
+**History ▸ Version history** opens the save history. While the server runs, every
 change to the `.pres` (from the browser *or* from your text editor) is
 auto-committed to a shadow git repository inside the deck folder
 (`.rv-history/` — invisible to your own git, no setup required):
@@ -137,7 +149,7 @@ open that file (or serve it directly) to edit them.
 
 - The server binds to `127.0.0.1` only and serves a separate
   `<name>.dev.html` artifact, deleted on exit; the exported `<name>.html`
-  is only written by `revealer build` or the ⬇ HTML button.
+  is only written by `revealer build` or **Export ▸ HTML**.
 - Every edit is guarded by a checksum of the file it was computed against;
   concurrent hand edits can never be clobbered.
 - The editor layer exists only in dev builds — exported decks contain none
