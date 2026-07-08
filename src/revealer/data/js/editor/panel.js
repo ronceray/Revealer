@@ -56,7 +56,7 @@
         p.innerHTML =
           '<div class="rv-pn-head">' + RV.esc(RV.t('panel.nothing')) + '</div>' +
           '<div class="rv-pn-hint">' + RV.esc(RV.t('panel.nothingHint')) + '</div>';
-        appendCheatsheet(p);
+        appendPalette(p);
       }
       return;
     }
@@ -91,7 +91,7 @@
       '<textarea class="rv-pn-src" spellcheck="false"></textarea>' +
       '<button class="rv-pn-apply">' + RV.esc(RV.t('panel.apply')) + '</button>' +
       '<div class="rv-pn-foot">' + RV.esc(RV.t('panel.autosave')) + '</div>';
-    appendCheatsheet(p);
+    appendPalette(p);
 
     p.querySelectorAll('.rv-pn-crumb').forEach(function (c) {
       c.addEventListener('click', function () {
@@ -162,40 +162,77 @@
       var ta = p.querySelector('.rv-pn-src');
       F.rvPostEdit([{ op: 'replace_lines', start: bounds0.start, end: bounds0.end, text: ta.value.split('\n') }], file);
     });
-    appendCheatsheet(p);
+    appendPalette(p);
   }
 
 
-  var CHEATSHEET = [
-    ['cheat.slides', ['=== Slide title', '--- vertical sub-slide', '%%% Section divider',
-                '>>> first: Deck title', '>>> biblio']],
-    ['cheat.layout', ['> fill', '> row h=400 24px', '> col 2/5 center', '> end: row',
-                '|| 40%   (text columns)', '| 55%', '||',
-                '> space: 30px   (fixed gap)', '> space   (filling gap)']],
-    ['cheat.media', ['! img.png fill h=200px +2 | caption', '!! movie.mp4 loop',
-               'flags: fill contain cover top h= w= + +N']],
-    ['cheat.components', ['> info Title … > end: info', '> warn / > good', '> eq +  … > end: eq',
-                    '> grid(2,2) compact / > card +', '> stack h=300 / > layer + clear',
-                    '> pin: 50% 50% 20% +', '> frag 2 … > end: frag', '> table(2,3)']],
-    ['cheat.textMath', ['* bullet (2 spaces = nested)', '[ highlighted line ]',
-                     '$inline$  $$display$$', '@@ python … @@']],
-    ['cheat.inlineFormat', ['**bold**  *italic*  \`code\`', '[text](https://url)',
-                       '[text]{.accent}  [x]{color=#f00}', '[big]{.lede}  [small]{.sm}',
-                       '> size: lede   (paragraph scope)', '> align: center',
-                       'escape: \\* \\\` \\[']],
-  ];
+  // Preferred category order for the palette; unknown categories append after.
+  var PALETTE_ORDER = ['Slides', 'Layout', 'Media', 'Components',
+                       'Text & math', 'Fragments', 'Inline format'];
+  var CAT_KEY = {
+    'Slides': 'cheat.slides', 'Layout': 'cheat.layout', 'Media': 'cheat.media',
+    'Components': 'cheat.components', 'Text & math': 'cheat.textMath',
+    'Fragments': 'cheat.fragments', 'Inline format': 'cheat.inlineFormat',
+  };
 
-  function appendCheatsheet(p) {
+  // Merge staticCheat + every construct's cheat into {category: [[chip, insert]]}.
+  function paletteGroups() {
+    if (!RV.schema) return null;
+    var groups = {};
+    function add(e) { (groups[e[0]] = groups[e[0]] || []).push([e[1], e[2]]); }
+    (RV.schema.staticCheat || []).forEach(add);
+    var cons = RV.schema.constructs || {};
+    Object.keys(cons).forEach(function (n) { (cons[n].cheat || []).forEach(add); });
+    return groups;
+  }
+
+  // Drop a snippet into the panel's source box at the caret, else append it as
+  // a new block on the current slide.
+  function paletteInsert(insert) {
+    var ta = document.querySelector('#rv-ed-panel .rv-pn-src');
+    if (ta) { F.insertAtCursor(ta, insert); return; }
+    var sec = window.Reveal && Reveal.getCurrentSlide && Reveal.getCurrentSlide();
+    if (!sec || !sec.hasAttribute('data-rv-src')) { F.toast(RV.t('palette.needTarget')); return; }
+    F.rvPostEdit([{ op: 'insert_lines',
+      at: { insert_before: F.srcEndOf(sec) + 1, container_kind: 'deck' },
+      text: insert.replace(/\n+$/, '').split('\n') }], F.fileOf(sec));
+  }
+
+  function appendPalette(p) {
+    var groups = paletteGroups();
+    if (!groups) return;                       // schema not loaded yet
+    var cats = PALETTE_ORDER.filter(function (c) { return groups[c]; })
+      .concat(Object.keys(groups).filter(function (c) { return PALETTE_ORDER.indexOf(c) < 0; }));
     var d = document.createElement('details');
     d.className = 'rv-pn-cheat';
-    d.innerHTML = '<summary>' + RV.esc(RV.t('panel.cheatsheet')) + '</summary>' +
-      CHEATSHEET.map(function (sec) {
-        return '<div class="rv-cs-sec"><b>' + RV.esc(RV.t(sec[0])) + '</b><pre>' +
-          sec[1].join('\n') + '</pre></div>';
-      }).join('');
+    var html = '<summary>' + RV.esc(RV.t('panel.cheatsheet')) + '</summary>' +
+      '<div class="rv-pl-hint">' + RV.esc(RV.t('palette.hint')) + '</div>';
+    cats.forEach(function (cat) {
+      var label = CAT_KEY[cat] ? RV.t(CAT_KEY[cat]) : cat;
+      html += '<div class="rv-pl-sec"><b>' + RV.esc(label) + '</b><div class="rv-pl-chips">' +
+        groups[cat].map(function (ci, i) {
+          return '<button class="rv-pl-chip" data-cat="' + RV.esc(cat) +
+                 '" data-i="' + i + '">' + RV.esc(ci[0]) + '</button>';
+        }).join('') +
+        (cat === 'Fragments'
+          ? '<button class="rv-pl-chip rv-pl-wrap" data-wrap="1">' +
+            RV.esc(RV.t('palette.wrapFrag')) + '</button>' : '') +
+        '</div></div>';
+    });
+    d.innerHTML = html;
     try { d.open = localStorage.getItem('rv-ed-cheat') === '1'; } catch (e) {}
     d.addEventListener('toggle', function () {
       try { localStorage.setItem('rv-ed-cheat', d.open ? '1' : '0'); } catch (e) {}
+    });
+    d.querySelectorAll('.rv-pl-chip').forEach(function (btn) {
+      btn.addEventListener('click', function () {
+        if (btn.getAttribute('data-wrap')) {
+          var ta = document.querySelector('#rv-ed-panel .rv-pn-src');
+          if (ta) F.wrapFragBlock(ta); else F.toast(RV.t('palette.needTarget'));
+          return;
+        }
+        paletteInsert(groups[btn.getAttribute('data-cat')][+btn.getAttribute('data-i')][1]);
+      });
     });
     p.appendChild(d);
   }
@@ -456,6 +493,7 @@
 
   // exports (what other editor/ modules call):
   F.rvPanelSync = rvPanelSync;
+  F.appendPalette = appendPalette;
   RV.onChange('on', rvPanelSync);
   RV.onChange('sel', rvPanelSync);
   F.deleteSelected = deleteSelected;

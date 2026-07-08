@@ -29,6 +29,28 @@
     ta.selectionEnd = a + out.length;
   }
 
+  // Drop a snippet at the caret (palette chips). Cursor lands after it.
+  function insertAtCursor(ta, text) {
+    var a = ta.selectionStart, b = ta.selectionEnd;
+    ta.value = ta.value.slice(0, a) + text + ta.value.slice(b);
+    ta.focus();
+    ta.selectionStart = ta.selectionEnd = a + text.length;
+  }
+
+  // Wrap the selected whole lines (or the caret's line) in a `> frag` block —
+  // reveals that content as one fragment. Block-level, so it can't reuse wrapSel.
+  function wrapFragBlock(ta) {
+    var v = ta.value, a = ta.selectionStart, b = ta.selectionEnd;
+    var ls = v.lastIndexOf('\n', a - 1) + 1;         // start of the first line
+    var le = v.indexOf('\n', b);                     // end of the last line
+    if (le === -1) le = v.length;
+    var wrapped = '> frag\n' + v.slice(ls, le) + '\n> end: frag';
+    ta.value = v.slice(0, ls) + wrapped + v.slice(le);
+    ta.focus();
+    ta.selectionStart = ls;
+    ta.selectionEnd = ls + wrapped.length;
+  }
+
   var PALETTE = [['accent', '--rv-accent'], ['warn', '--rv-warn'],
                  ['good', '--rv-good'], ['muted', '--rv-muted-color']];
 
@@ -66,5 +88,7 @@
 
   // exports (what other editor/ modules call):
   F.formatBar = formatBar;
+  F.insertAtCursor = insertAtCursor;
+  F.wrapFragBlock = wrapFragBlock;
   RV.PALETTE = PALETTE;  // textsel.js reuses the swatch set in the bubble
 })();

@@ -447,7 +447,7 @@ html.rv-edit .reveal .slides section * { cursor: crosshair; }
 #rv-ed-panel .rv-pn-srctitle { color: #c4cbe4; margin-top: 2px; }
 #rv-ed-panel .rv-pn-src {
   width: 100%;
-  min-height: 90px;
+  min-height: 150px;
   resize: vertical;
   font: 11px/1.5 ui-monospace, monospace;
   background: #12121f;
@@ -506,11 +506,22 @@ body.rv-split #rv-ed-drawer { right: calc(var(--rv-pw) + 10px); }
 
 #rv-ed-toolbar .rv-tb-view.rv-active { background: #2a76dd; border-color: #2a76dd; }
 
-#rv-ed-panel .rv-pn-src-slide { min-height: 200px; }
+#rv-ed-panel .rv-pn-src-slide { min-height: 260px; }
 
 #rv-ed-panel .rv-pn-cheat { margin-top: 4px; border-top: 1px solid #2a3350; padding-top: 6px; }
 #rv-ed-panel .rv-pn-cheat summary { cursor: pointer; color: #c4cbe4; }
 #rv-ed-panel .rv-pn-cheat summary:hover { color: #fff; }
+#rv-ed-panel .rv-pl-hint { color: #8a93b5; font-size: 11px; margin: 4px 0 2px; }
+#rv-ed-panel .rv-pl-sec { margin: 7px 0; }
+#rv-ed-panel .rv-pl-sec > b { color: #9db7e8; font-size: 11px; text-transform: uppercase; letter-spacing: .04em; }
+#rv-ed-panel .rv-pl-chips { display: flex; flex-wrap: wrap; gap: 5px; margin-top: 5px; }
+#rv-ed-panel .rv-pl-chip {
+  font: 11px ui-monospace, monospace; background: #2a3350; color: #d7e0f5;
+  border: 1px solid #4a5580; border-radius: 5px; padding: 3px 7px; cursor: pointer;
+}
+#rv-ed-panel .rv-pl-chip:hover { background: #37436b; border-color: #2a76dd; color: #fff; }
+#rv-ed-panel .rv-pl-wrap { font-family: system-ui; border-style: dashed; border-color: #3f6b4c; color: #bfe8cf; }
+#rv-ed-panel .rv-pl-wrap:hover { background: #25402d; border-color: #3f9a6d; }
 #rv-ed-panel .rv-cs-sec { margin: 6px 0; }
 #rv-ed-panel .rv-cs-sec b { color: #9db7e8; font-size: 12px; }
 #rv-ed-panel .rv-cs-sec pre {

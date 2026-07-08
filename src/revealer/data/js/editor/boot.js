@@ -13,6 +13,18 @@
 
   F.buildToolbar();
 
+  // The grammar schema drives the side-panel command palette. Load it once;
+  // re-sync the panel if it is already open when the schema lands.
+  RV.schema = null;
+  fetch('/__rv__/schema?token=' + encodeURIComponent(TOKEN))
+    .then(function (r) { return r.ok ? r.json() : null; })
+    .then(function (j) {
+      if (!j) return;
+      RV.schema = j;
+      if (F.rvPanelSync) { S.panelFor = null; F.rvPanelSync(); }
+    })
+    .catch(function () { /* palette stays hidden until the next reload */ });
+
   var params = new URLSearchParams(location.search);
   if (params.get('rv-test-edit')) {
     // Headless smoke hook: POST the given ops through the real pipeline.
