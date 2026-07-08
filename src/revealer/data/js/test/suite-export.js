@@ -37,10 +37,8 @@
     var stale = document.getElementById('rv-ed-export');
     if (stale) stale.remove();
 
-    // Click ⬇PDF: the progress box + Cancel button appear synchronously.
-    var pdfBtn = document.querySelector('#rv-ed-toolbar .rv-tb-xpdf');
-    RVT.assert(pdfBtn, 'toolbar has a ⬇PDF button');
-    pdfBtn.click();
+    // Export ▸ Export PDF: the progress box + Cancel button appear synchronously.
+    RVT.assert(RVT.menuClick(document, 'Export', 'Export PDF'), 'Export menu has a PDF item');
 
     return RVT.until(function () {
       var box = document.getElementById('rv-ed-export');

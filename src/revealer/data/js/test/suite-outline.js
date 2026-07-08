@@ -48,7 +48,7 @@
     return untilBuilt().then(function () {
       return RVT.iframe('/?rv-edit=1', '#rv-ed-toolbar');
     }).then(function (f) {
-      f.contentDocument.querySelector('.rv-tb-outline').click();
+      f.contentDocument.querySelector('.rv-tb-slide').click();
       return RVT.until(function () {
         return f.contentDocument.querySelector('#rv-ed-outline .rv-ol-item') ? f : null;
       }, 15000, 'outline rows');
@@ -84,7 +84,7 @@
       RVT.assert(items[items.length - 1].querySelector('.rv-ol-inc'),
                  'the included slide is a navigate-only row');
       // second toolbar click closes it (toggle-by-remove preserved)
-      doc.querySelector('.rv-tb-outline').click();
+      doc.querySelector('.rv-tb-slide').click();
       RVT.assert(!doc.getElementById('rv-ed-outline'), 'toggles closed');
       f.remove();
       return true;

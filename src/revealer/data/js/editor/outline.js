@@ -162,6 +162,14 @@
     });
   }
 
+  // The source span of the current top-level slide (for the Slide ▸ New slide menu).
+  function currentSlideSpan() {
+    var h = (window.Reveal && Reveal.getIndices) ? Reveal.getIndices().h : 0;
+    var secs = topSections();
+    return secs[h] ? spanOf(secs[h]) : null;
+  }
+
   // exports (what other editor/ modules call):
   F.toggleOutline = toggleOutline;
+  F.currentSlideSpan = currentSlideSpan;
 })();

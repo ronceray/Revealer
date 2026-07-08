@@ -76,6 +76,21 @@
       }, timeoutMs || 15000, readySel + ' in iframe ' + src);
     },
 
+    // Open a menubar menu (by exact top-level label) and click the first item
+    // whose text contains `item`. Returns whether an item was clicked.
+    menuClick: function (doc, menu, item) {
+      var opened = false;
+      Array.prototype.forEach.call(doc.querySelectorAll('#rv-ed-toolbar .rv-menu-btn'), function (b) {
+        if (b.textContent.trim() === menu) { b.click(); opened = true; }
+      });
+      if (!opened) return false;
+      var hit = false;
+      Array.prototype.forEach.call(doc.querySelectorAll('#rv-ed-toolbar .rv-menu-item'), function (m) {
+        if (!hit && m.textContent.indexOf(item) !== -1) { m.click(); hit = true; }
+      });
+      return hit;
+    },
+
     run: function () {
       // Suites share the origin's sessionStorage with deck iframes; start
       // from a clean slate so editor state can't leak between runs.

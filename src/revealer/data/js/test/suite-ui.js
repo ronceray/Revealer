@@ -76,7 +76,7 @@
 
   RVT.test('history drawer opens from the toolbar with a current marker', function () {
     return RVT.iframe('/?rv-edit=1', '#rv-ed-toolbar').then(function (f) {
-      f.contentDocument.querySelector('.rv-tb-hist').click();
+      RVT.menuClick(f.contentDocument, 'History', 'Version history');
       return RVT.until(function () {
         return f.contentDocument.querySelector('#rv-ed-history .rv-hi-item');
       }, 15000, 'history entries').then(function () {
@@ -84,8 +84,8 @@
         RVT.assert(doc.querySelector('#rv-ed-history .rv-box-head'), 'factory header');
         RVT.assert(doc.querySelector('#rv-ed-history .rv-hi-current'),
                    'one entry carries the cursor marker');
-        // second toolbar click closes it (toggle-by-remove preserved)
-        doc.querySelector('.rv-tb-hist').click();
+        // reopening from the menu closes it (toggle-by-remove preserved)
+        RVT.menuClick(doc, 'History', 'Version history');
         RVT.assert(!doc.getElementById('rv-ed-history'), 'toggles closed');
         f.remove();
         return true;
@@ -101,7 +101,7 @@
     }).then(function (f) {
       var doc = f.contentDocument;
       var tok = (f.contentWindow.__RV_DEV__ || {}).token || '';
-      doc.querySelector('.rv-tb-docset').click();
+      RVT.menuClick(doc, 'View', 'Document source');
       return RVT.until(function () {
         var ta = doc.querySelector('#rv-ed-panel .rv-pn-src');
         return ta && ta.value.indexOf('> title:') !== -1 ? ta : null;
@@ -138,13 +138,13 @@
     });
   });
 
-  RVT.test('toolbar is draggable by its grip (docked view)', function () {
-    return RVT.iframe('/?rv-edit=1', '#rv-ed-toolbar').then(function (f) {
+  RVT.test('preview Edit pill is draggable by its grip', function () {
+    return RVT.iframe('/', '#rv-ed-pill').then(function (f) {
       var doc = f.contentDocument, win = f.contentWindow;
-      var tb = doc.getElementById('rv-ed-toolbar');
-      var grip = tb.querySelector('.rv-tb-grip');
-      RVT.assert(grip, 'toolbar has a drag grip');
-      var before = tb.getBoundingClientRect().left;
+      var pill = doc.getElementById('rv-ed-pill');
+      var grip = pill.querySelector('.rv-tb-grip');
+      RVT.assert(grip, 'pill has a drag grip');
+      var before = pill.getBoundingClientRect().left;
       var gr = grip.getBoundingClientRect();
       function pe(type, x, y, target) {
         (target || doc).dispatchEvent(new win.PointerEvent(type, {
@@ -154,9 +154,9 @@
       pe('pointerdown', gr.left + 5, gr.top + 5, grip);
       pe('pointermove', gr.left + 235, gr.top + 120);
       pe('pointerup', gr.left + 235, gr.top + 120);
-      var after = tb.getBoundingClientRect().left;
+      var after = pill.getBoundingClientRect().left;
       RVT.assert(after > before + 150,
-        'toolbar moved right (' + before + ' -> ' + after + ')');
+        'pill moved right (' + before + ' -> ' + after + ')');
       try { win.localStorage.removeItem('rv-ed-tbpos'); } catch (e) {}
       f.remove();
       return true;

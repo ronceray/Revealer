@@ -316,47 +316,71 @@ html.rv-edit .reveal .slides section * { cursor: crosshair; }
 
 /* --- editor shell: toolbar, panel, help, hover tag -------------------------- */
 
-#rv-ed-toolbar {
-  position: fixed;
-  top: 12px;
-  left: 12px;
-  display: flex;
-  gap: 6px;
-  align-items: center;
-  background: #1c1c2e;
-  padding: 6px 10px;
-  border-radius: 10px;
-  box-shadow: 0 6px 24px rgba(0, 0, 0, 0.35);
+/* preview: a small draggable Edit pill (only chrome when NOT editing) */
+#rv-ed-pill {
+  position: fixed; top: 12px; left: 12px; z-index: 9700;
+  display: flex; align-items: center; gap: 7px;
+  background: #1c1c2e; border: 1px solid #2a3350; border-radius: 18px;
+  padding: 5px 12px 5px 9px; box-shadow: 0 6px 20px rgba(0, 0, 0, 0.4);
   font: 13px system-ui, sans-serif;
-  z-index: 9700;
 }
-#rv-ed-toolbar .rv-tb-grip {
-  color: #6b74a0;
-  cursor: grab;
-  padding: 0 4px 0 2px;
-  font-size: 15px;
-  line-height: 1;
-  user-select: none;
-  touch-action: none;
+html.rv-edit #rv-ed-pill { display: none; }
+#rv-ed-pill .rv-tb-grip { color: #6b74a0; cursor: grab; font-size: 15px; line-height: 1; user-select: none; touch-action: none; }
+#rv-ed-pill .rv-tb-grip:active { cursor: grabbing; }
+#rv-ed-pill .rv-pill-dot { width: 8px; height: 8px; border-radius: 50%; background: #4a5580; }
+#rv-ed-pill .rv-pill-dot.rv-st-saving { background: #ffd166; }
+#rv-ed-pill .rv-pill-dot.rv-st-saved { background: #7ade7a; }
+#rv-ed-pill .rv-pill-dot.rv-st-error { background: #ff8a7a; }
+#rv-ed-pill .rv-tb-edit {
+  font: inherit; background: #2a76dd; color: #fff; border: 1px solid #2a76dd;
+  border-radius: 13px; padding: 3px 12px; cursor: pointer;
 }
-#rv-ed-toolbar .rv-tb-grip:active { cursor: grabbing; }
-#rv-ed-toolbar button {
-  font: inherit;
-  background: #2a3350;
-  color: #fff;
-  border: 1px solid #4a5580;
-  border-radius: 6px;
-  padding: 3px 10px;
-  cursor: pointer;
+#rv-ed-pill .rv-tb-edit:hover { background: #3a86ed; }
+
+/* edit mode: a full-width command band pinned to the top strip */
+#rv-ed-toolbar {
+  position: fixed; top: 0; left: 0; right: 0; height: 44px; z-index: 9700;
+  display: flex; align-items: center; gap: 8px; padding: 0 10px;
+  background: #1c1c2e; border-bottom: 1px solid #2a3350;
+  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.3); font: 13px system-ui, sans-serif;
 }
-#rv-ed-toolbar button:hover { background: #37436b; }
-#rv-ed-toolbar .rv-tb-edit.rv-active { background: #2a76dd; border-color: #2a76dd; }
+html:not(.rv-edit) #rv-ed-toolbar { display: none; }
+#rv-ed-toolbar .rv-tb-edit {
+  font: inherit; background: #2a76dd; color: #fff; border: 1px solid #2a76dd;
+  border-radius: 6px; padding: 4px 11px; cursor: pointer;
+}
+#rv-ed-toolbar .rv-tb-slide {
+  font: inherit; background: #141b2e; color: #c4cbe4; border: 1px solid #4a5580;
+  border-radius: 14px; padding: 3px 12px; cursor: pointer; max-width: 260px;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+#rv-ed-toolbar .rv-tb-slide:hover { background: #232c46; color: #fff; }
+#rv-ed-toolbar .rv-menubar { display: flex; gap: 1px; }
+#rv-ed-toolbar .rv-menu-wrap { position: relative; }
+#rv-ed-toolbar .rv-menu-btn {
+  font: inherit; background: transparent; color: #dbe2f4; border: 0;
+  border-radius: 6px; padding: 5px 10px; cursor: pointer;
+}
+#rv-ed-toolbar .rv-menu-btn:hover,
+#rv-ed-toolbar .rv-menu-wrap.rv-open .rv-menu-btn { background: #37436b; color: #fff; }
+#rv-ed-toolbar .rv-menu {
+  display: none; position: absolute; top: 100%; left: 0; margin-top: 5px;
+  min-width: 210px; background: #20233a; border: 1px solid #4a5580;
+  border-radius: 8px; box-shadow: 0 12px 30px rgba(0, 0, 0, 0.5); padding: 5px; z-index: 9690;
+}
+#rv-ed-toolbar .rv-menu-wrap.rv-open .rv-menu { display: block; }
+#rv-ed-toolbar .rv-menu-item {
+  display: block; width: 100%; text-align: left; font: inherit;
+  background: transparent; color: #e3e9f7; border: 0; border-radius: 5px;
+  padding: 6px 10px; cursor: pointer; white-space: nowrap;
+}
+#rv-ed-toolbar .rv-menu-item:hover { background: #37436b; }
+#rv-ed-toolbar .rv-menu-item:disabled { color: #6b74a0; cursor: default; background: transparent; }
+#rv-ed-toolbar .rv-menu-sep { height: 1px; background: #2a3350; margin: 4px 2px; }
+#rv-ed-toolbar .rv-tb-spacer { flex: 1; }
 #rv-ed-toolbar .rv-tb-status {
-  color: #9db7e8;
-  font-family: ui-monospace, monospace;
-  font-size: 12px;
-  padding: 0 6px;
-  white-space: nowrap;
+  color: #9db7e8; font-family: ui-monospace, monospace; font-size: 12px;
+  padding: 0 6px; white-space: nowrap;
 }
 #rv-ed-toolbar .rv-tb-status.rv-st-saving { color: #ffd166; }
 #rv-ed-toolbar .rv-tb-status.rv-st-saved { color: #7ade7a; }
@@ -584,11 +608,7 @@ body.rv-split .reveal {
   inset: 0 !important;
   z-index: 1;
 }
-body.rv-split #rv-ed-toolbar {
-  top: 10px !important;   /* split view ignores a dragged docked position */
-  left: 10px !important;
-  box-shadow: none;
-}
+body.rv-split #rv-ed-toolbar { box-shadow: none; }   /* the band is already pinned full-width */
 body.rv-split #rv-editor-layer .rv-ed-bar {
   bottom: 8px;
   left: calc((100vw - var(--rv-pw)) / 2);

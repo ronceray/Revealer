@@ -1,4 +1,5 @@
-/* shell: the editor toolbar, the status chip, the help box, and media import via the file picker */
+/* shell: the mode-aware command chrome (preview Edit pill + edit menubar band),
+ * the status chip, the help box, deck export, and media import. */
 (function () {
   'use strict';
   if (!window.__RV_DEV__) return;
@@ -7,7 +8,7 @@
   var F = RV.fn;
   var TOKEN = RV.token;
 
-  /* --- editor shell: toolbar, status chip, side panel ------------------------ */
+  /* --- editor shell ---------------------------------------------------------- */
 
   var PRES_NAME = (function () {
     var m = document.querySelector('meta[name="rv-src-file"]');
@@ -16,9 +17,9 @@
 
   function rvStatus(state, msg) {
     var chip = document.querySelector('#rv-ed-toolbar .rv-tb-status');
-    if (!chip) return;
-    chip.className = 'rv-tb-status rv-st-' + state;
-    chip.textContent = msg;
+    if (chip) { chip.className = 'rv-tb-status rv-st-' + state; chip.textContent = msg; }
+    var dot = document.querySelector('#rv-ed-pill .rv-pill-dot');   // preview save indicator
+    if (dot) dot.className = 'rv-pill-dot rv-st-' + state;
     try {
       if (state === 'saving') sessionStorage.setItem('rv-ed-lastsave', 'pending');
     } catch (e) {}
@@ -118,43 +119,67 @@
     F.toast(RV.t('toast.exportFailedErr', { error: ev.error || '?' }), 6000);
   }
 
-  function buildToolbar() {
-    if (document.getElementById('rv-ed-toolbar')) return;
-    var tb = document.createElement('div');
-    tb.id = 'rv-ed-toolbar';
-    tb.innerHTML =
-      '<span class="rv-tb-grip" title="' + RV.esc(RV.t('toolbar.dragTitle')) + '">⠿</span>' +
-      '<button class="rv-tb-edit" title="' + RV.esc(RV.t('toolbar.editTitle')) + '">' + RV.t('toolbar.edit') + '</button>' +
-      '<button class="rv-tb-undo" title="' + RV.esc(RV.t('toolbar.undoTitle')) + '">↶</button>' +
-      '<button class="rv-tb-redo" title="' + RV.esc(RV.t('toolbar.redoTitle')) + '">↷</button>' +
-      '<button class="rv-tb-frag" title="' + RV.esc(RV.t('toolbar.fragTitle')) + '">☰</button>' +
-      '<button class="rv-tb-outline" title="' + RV.esc(RV.t('toolbar.outlineTitle')) + '">▤</button>' +
-      '<button class="rv-tb-media" title="' + RV.esc(RV.t('toolbar.mediaTitle')) + '">' + RV.t('toolbar.media') + '</button>' +
-      '<button class="rv-tb-docset" title="' + RV.esc(RV.t('toolbar.settingsTitle')) + '">⚙</button>' +
-      '<button class="rv-tb-view" title="' + RV.esc(RV.t('toolbar.viewTitle')) + '">⇔</button>' +
-      '<button class="rv-tb-hist" title="' + RV.esc(RV.t('toolbar.histTitle')) + '">🕐</button>' +
-      '<button class="rv-tb-xhtml" title="' + RV.esc(RV.t('toolbar.xhtmlTitle')) + '">' + RV.t('toolbar.xhtml') + '</button>' +
-      '<button class="rv-tb-xpdf" title="' + RV.esc(RV.t('toolbar.xpdfTitle')) + '">' + RV.t('toolbar.xpdf') + '</button>' +
-      '<span class="rv-tb-status rv-st-idle">' + F.escapeHtml(PRES_NAME) + '</span>' +
-      '<button class="rv-tb-help" title="' + RV.esc(RV.t('toolbar.helpTitle')) + '">?</button>';
-    document.body.appendChild(tb);
+  /* --- the command chrome: a mode-aware menubar + a preview Edit pill -------- */
 
-    // Draggable by its grip so it can be moved off a slide title in docked
-    // view (split view forces it to the top-left corner via CSS). The
-    // position persists across reloads.
-    try {
-      var saved = JSON.parse(localStorage.getItem('rv-ed-tbpos') || 'null');
-      if (saved) { tb.style.left = saved.x + 'px'; tb.style.top = saved.y + 'px'; }
-    } catch (e) {}
-    tb.querySelector('.rv-tb-grip').addEventListener('pointerdown', function (ev) {
+  function closeMenus() {
+    var open = document.querySelectorAll('#rv-ed-toolbar .rv-menu-wrap.rv-open');
+    Array.prototype.forEach.call(open, function (w) { w.classList.remove('rv-open'); });
+  }
+  document.addEventListener('click', closeMenus);
+  document.addEventListener('keydown', function (e) { if (e.key === 'Escape') closeMenus(); });
+
+  // items: {label, onClick[, checked][, disabled, title][, cls]} or {sep:true}
+  function makeMenu(label, items) {
+    var wrap = document.createElement('div');
+    wrap.className = 'rv-menu-wrap';
+    var btn = document.createElement('button');
+    btn.className = 'rv-menu-btn';
+    btn.textContent = label;
+    wrap.appendChild(btn);
+    var dd = document.createElement('div');
+    dd.className = 'rv-menu';
+    items.forEach(function (it) {
+      if (it.sep) { var s = document.createElement('div'); s.className = 'rv-menu-sep'; dd.appendChild(s); return; }
+      var mi = document.createElement('button');
+      mi.className = 'rv-menu-item' + (it.cls ? ' ' + it.cls : '');
+      mi.textContent = (it.checked ? '✓ ' : '') + it.label;
+      if (it.disabled) { mi.disabled = true; if (it.title) mi.title = it.title; }
+      mi.addEventListener('click', function () { closeMenus(); if (!it.disabled) it.onClick(); });
+      dd.appendChild(mi);
+    });
+    wrap.appendChild(dd);
+    btn.addEventListener('click', function (ev) {
+      ev.stopPropagation();
+      var wasOpen = wrap.classList.contains('rv-open');
+      closeMenus();
+      if (!wasOpen) wrap.classList.add('rv-open');
+    });
+    return wrap;
+  }
+
+  function currentSlideLabel() {
+    if (!(window.Reveal && Reveal.getIndices)) return PRES_NAME;
+    var i = Reveal.getIndices().h;
+    var sec = Reveal.getCurrentSlide();
+    var h = sec && sec.querySelector('.slide_header,h1,h2,h3');
+    var t = (h && h.textContent) ? h.textContent.trim() : '';
+    return (i + 1) + (t ? ' · ' + t : '');
+  }
+
+  function updateSlideChip() {
+    var chip = document.querySelector('#rv-ed-toolbar .rv-tb-slide');
+    if (chip) chip.textContent = currentSlideLabel();
+  }
+
+  function gripDrag(el) {
+    el.querySelector('.rv-tb-grip').addEventListener('pointerdown', function (ev) {
       ev.preventDefault();
-      var r = tb.getBoundingClientRect();
+      var r = el.getBoundingClientRect();
       var offX = ev.clientX - r.left, offY = ev.clientY - r.top;
       function mv(e2) {
-        var x = Math.max(0, Math.min(window.innerWidth - tb.offsetWidth, e2.clientX - offX));
-        var y = Math.max(0, Math.min(window.innerHeight - tb.offsetHeight, e2.clientY - offY));
-        tb.style.left = x + 'px';
-        tb.style.top = y + 'px';
+        var x = Math.max(0, Math.min(window.innerWidth - el.offsetWidth, e2.clientX - offX));
+        var y = Math.max(0, Math.min(window.innerHeight - el.offsetHeight, e2.clientY - offY));
+        el.style.left = x + 'px'; el.style.top = y + 'px';
         try { localStorage.setItem('rv-ed-tbpos', JSON.stringify({ x: x, y: y })); } catch (e3) {}
       }
       function up() {
@@ -164,40 +189,103 @@
       document.addEventListener('pointermove', mv, true);
       document.addEventListener('pointerup', up, true);
     });
+  }
 
-    tb.querySelector('.rv-tb-edit').addEventListener('click', function () { F.setEdit(!S.on); });
-    tb.querySelector('.rv-tb-undo').addEventListener('click', function () { F.rvUndoRedo('undo'); });
-    tb.querySelector('.rv-tb-redo').addEventListener('click', function () { F.rvUndoRedo('redo'); });
-    tb.querySelector('.rv-tb-frag').addEventListener('click', function () {
-      if (!S.on) F.setEdit(true);
-      F.toggleDrawer();
+  function buildToolbar() {
+    if (document.getElementById('rv-ed-toolbar')) return;
+    var hist = window.__RV_DEV__.history === 'fallback';
+
+    // --- preview pill (CSS shows it only when NOT editing) ---
+    var pill = document.createElement('div');
+    pill.id = 'rv-ed-pill';
+    pill.innerHTML =
+      '<span class="rv-tb-grip" title="' + RV.esc(RV.t('toolbar.dragTitle')) + '">⠿</span>' +
+      '<span class="rv-pill-dot rv-st-idle"></span>' +
+      '<button class="rv-tb-edit" title="' + RV.esc(RV.t('toolbar.editTitle')) + '">' + RV.t('toolbar.edit') + '</button>';
+    document.body.appendChild(pill);
+    try {
+      var saved = JSON.parse(localStorage.getItem('rv-ed-tbpos') || 'null');
+      if (saved) { pill.style.left = saved.x + 'px'; pill.style.top = saved.y + 'px'; }
+    } catch (e) {}
+    gripDrag(pill);
+    pill.querySelector('.rv-tb-edit').addEventListener('click', function () { F.setEdit(true); });
+
+    // --- edit command band (CSS shows it only when editing) ---
+    var tb = document.createElement('div');
+    tb.id = 'rv-ed-toolbar';
+
+    var editBtn = document.createElement('button');
+    editBtn.className = 'rv-tb-edit rv-active';
+    editBtn.title = RV.t('toolbar.editTitle');
+    editBtn.textContent = RV.t('toolbar.edit');
+    editBtn.addEventListener('click', function () { F.setEdit(false); });
+    tb.appendChild(editBtn);
+
+    var slideChip = document.createElement('button');
+    slideChip.className = 'rv-tb-slide';
+    slideChip.title = RV.t('toolbar.outlineTitle');
+    slideChip.textContent = currentSlideLabel();
+    slideChip.addEventListener('click', function () { F.toggleOutline(); });
+    tb.appendChild(slideChip);
+
+    var bar = document.createElement('nav');
+    bar.className = 'rv-menubar';
+    bar.appendChild(makeMenu(RV.t('menu.insert'), [
+      { label: RV.t('menu.media'), onClick: function () { if (!S.on) F.setEdit(true); importMedia(); } },
+      { label: RV.t('menu.fragments'), onClick: function () { if (!S.on) F.setEdit(true); F.toggleDrawer(); } },
+    ]));
+    bar.appendChild(makeMenu(RV.t('menu.slide'), [
+      { label: RV.t('menu.newSlide'), onClick: function () {
+          var span = F.currentSlideSpan && F.currentSlideSpan();
+          if (span) F.openTemplateGallery(span); else F.toast(RV.t('outline.unmapped')); } },
+      { label: RV.t('menu.selector'), onClick: function () { F.toggleOutline(); } },
+    ]));
+    bar.appendChild(makeMenu(RV.t('menu.history'), [
+      { label: RV.t('menu.undo'), onClick: function () { F.rvUndoRedo('undo'); } },
+      { label: RV.t('menu.redo'), onClick: function () { F.rvUndoRedo('redo'); } },
+      { sep: true },
+      { label: RV.t('menu.versionHistory'), disabled: hist,
+        title: hist ? RV.t('toolbar.histDisabledTitle') : '',
+        onClick: function () { F.toggleHistory(); } },
+    ]));
+    bar.appendChild(makeMenu(RV.t('menu.view'), [
+      { label: RV.t('menu.splitView'), checked: S.splitPref, cls: 'rv-mi-split',
+        onClick: function () {
+          RV.set('splitPref', !S.splitPref);
+          try { localStorage.setItem('rv-ed-split', S.splitPref ? '1' : '0'); } catch (e) {} } },
+      { label: RV.t('menu.docSource'), onClick: function () { F.openDocSettings(); } },
+    ]));
+    bar.appendChild(makeMenu(RV.t('menu.export'), [
+      { label: RV.t('menu.exportHtml'), onClick: exportHtml },
+      { label: RV.t('menu.exportPdf'), onClick: startPdfExport },
+    ]));
+    bar.appendChild(makeMenu(RV.t('menu.help'), [
+      { label: RV.t('menu.howEditing'), onClick: toggleHelp },
+    ]));
+    tb.appendChild(bar);
+
+    var spacer = document.createElement('span');
+    spacer.className = 'rv-tb-spacer';
+    tb.appendChild(spacer);
+
+    var status = document.createElement('span');
+    status.className = 'rv-tb-status rv-st-idle';
+    status.textContent = PRES_NAME;
+    tb.appendChild(status);
+
+    document.body.appendChild(tb);
+
+    // Keep the Split-view checkmark honest as the preference changes.
+    RV.onChange('splitPref', function () {
+      var mi = tb.querySelector('.rv-mi-split');
+      if (mi) mi.textContent = (S.splitPref ? '✓ ' : '') + RV.t('menu.splitView');
     });
-    tb.querySelector('.rv-tb-outline').addEventListener('click', F.toggleOutline);
-    tb.querySelector('.rv-tb-docset').addEventListener('click', function () { F.openDocSettings(); });
-    tb.querySelector('.rv-tb-help').addEventListener('click', toggleHelp);
-    tb.querySelector('.rv-tb-xhtml').addEventListener('click', exportHtml);
-    if (window.__RV_DEV__.history === 'fallback') {
-      var hb = tb.querySelector('.rv-tb-hist');
-      hb.disabled = true;
-      hb.title = RV.t('toolbar.histDisabledTitle');
-      hb.style.opacity = '0.4';
-      if (!window.__rvHistToastShown) {
-        window.__rvHistToastShown = true;
-        F.toast(RV.t('toast.gitMissing'), 6000);
-      }
-    } else {
-      tb.querySelector('.rv-tb-hist').addEventListener('click', F.toggleHistory);
+    if (window.Reveal && Reveal.on) Reveal.on('slidechanged', updateSlideChip);
+
+    if (hist && !window.__rvHistToastShown) {
+      window.__rvHistToastShown = true;
+      F.toast(RV.t('toast.gitMissing'), 6000);
     }
-    tb.querySelector('.rv-tb-xpdf').addEventListener('click', startPdfExport);
-    tb.querySelector('.rv-tb-media').addEventListener('click', function () {
-      if (!S.on) F.setEdit(true);
-      importMedia();
-    });
-    tb.querySelector('.rv-tb-view').addEventListener('click', function () {
-      RV.set('splitPref', !S.splitPref);
-      try { localStorage.setItem('rv-ed-split', S.splitPref ? '1' : '0'); } catch (e) {}
-      if (!S.on && S.splitPref) F.setEdit(true);
-    });
     try {
       if (sessionStorage.getItem('rv-ed-lastsave') === 'pending') {
         sessionStorage.removeItem('rv-ed-lastsave');
@@ -264,6 +352,7 @@
   // exports (what other editor/ modules call):
   F.rvStatus = rvStatus;
   F.buildToolbar = buildToolbar;
+  F.updateSlideChip = updateSlideChip;
   F.onExportProgress = onExportProgress;
   F.onExportDone = onExportDone;
   F.onExportCancelled = onExportCancelled;
