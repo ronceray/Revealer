@@ -1577,6 +1577,20 @@ def _contentify_legacy(html: str, src: list | None = None) -> str:
             m = re.match(r"^(\s*)\*\s(.*)", line)
             if m:
                 indent, text = m.group(1), m.group(2)
+                # `* + text` / `* +N text` reveals this single bullet as a
+                # reveal.js fragment (consistent with the `+` flag on every
+                # construct); `* \+ text` writes a literal leading "+".
+                li_cls = li_attr = ""
+                if text[:2] == "\\+":
+                    text = text[1:]                       # drop the escape backslash
+                else:
+                    fm = re.match(r"\+(\d*)\s+(.*)$", text)
+                    if fm:
+                        li_cls = ' class="fragment"'
+                        if fm.group(1):
+                            li_attr = ' data-fragment-index="{0}"'.format(fm.group(1))
+                        text = fm.group(2)
+                li_tag = "<li{0}{1}>".format(li_cls, li_attr)
                 # Define level: 0 spaces -> level 1; 2 spaces -> level 2; etc.
                 level = max(1, (len(indent) // 2) + 1)
 
@@ -1596,14 +1610,14 @@ def _contentify_legacy(html: str, src: list | None = None) -> str:
                         ul_stack.append(L)
                         li_open.append(False)
                     # Open li for this item
-                    html += "<li>" + text
+                    html += li_tag + text
                     li_open[-1] = True
                 elif level == cur and cur > 0:
                     # Close previous li at this level then open new li
                     if li_open[-1]:
                         html += "</li>"
                         li_open[-1] = False
-                    html += "<li>" + text
+                    html += li_tag + text
                     li_open[-1] = True
                 else:  # level < cur
                     # Close deeper levels
@@ -1619,14 +1633,14 @@ def _contentify_legacy(html: str, src: list | None = None) -> str:
                         html += "</li>"
                         li_open[-1] = False
                     if li_open:
-                        html += "<li>" + text
+                        html += li_tag + text
                         li_open[-1] = True
                     else:
                         # No ul open at all (level == 0), open a top-level ul
                         html += '<ul class="rv-list lvl-1">'
                         ul_stack.append(1)
                         li_open.append(True)
-                        html += "<li>" + text
+                        html += li_tag + text
                 index += 1
                 continue
 
