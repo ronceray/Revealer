@@ -24,8 +24,9 @@
     var p = panelEl();
     p.style.display = S.on ? 'flex' : 'none';
     if (!S.on) { S.panelFor = null; return; }
+    if (S.sel) S.docSel = false;             // selecting anything exits doc-settings
     var sec = window.Reveal && Reveal.getCurrentSlide && Reveal.getCurrentSlide();
-    var key = S.sel || sec;
+    var key = S.docSel ? 'docsettings' : (S.sel || sec);
     if (key === S.panelFor) return;
     S.panelFor = key;
     renderPanel();
@@ -44,6 +45,7 @@
 
   function renderPanel() {
     var p = panelEl();
+    if (S.docSel) { renderDocSettings(p); return; }
     var el = S.sel;
     if (!el || !document.contains(el)) {
       var sec = window.Reveal && Reveal.getCurrentSlide && Reveal.getCurrentSlide();
@@ -165,6 +167,70 @@
     appendPalette(p);
   }
 
+
+  /* --- document settings (the .pres header block) edited in the panel ------ */
+
+  function docFirstSlideLine() {
+    var sec = document.querySelector('.reveal .slides > section[data-rv-src]');
+    return sec ? parseInt(sec.getAttribute('data-rv-src'), 10) : null;
+  }
+
+  function renderDocSettings(p) {
+    var first = docFirstSlideLine() || 1;
+    var hasBlock = first > 1;                 // false when the deck opens on a slide
+    p.innerHTML =
+      '<div class="rv-pn-head"><b>' + RV.esc(RV.t('docset.title')) + '</b></div>' +
+      '<div class="rv-pn-hint">' + RV.esc(RV.t('docset.hint')) + '</div>' +
+      '<div class="rv-pn-srctitle">' + RV.esc(RV.t('panel.source')) + '</div>' +
+      '<div class="rv-fmt-slot"></div>' +
+      '<textarea class="rv-pn-src rv-pn-src-slide" spellcheck="false"></textarea>' +
+      '<button class="rv-pn-apply">' + RV.esc(RV.t('docset.apply')) + '</button>' +
+      '<div class="rv-pn-foot">' + RV.esc(RV.t('panel.autosave')) + '</div>';
+    var ta = p.querySelector('.rv-pn-src');
+    var slot = p.querySelector('.rv-fmt-slot');
+    if (slot) slot.appendChild(F.formatBar(ta));
+    var applyBtn = p.querySelector('.rv-pn-apply');
+    var bounds = null;
+    applyBtn.disabled = true;
+    if (hasBlock) {
+      F.fetchSrc(1, first - 1, function (j) {
+        if (!j.lines || !S.docSel) return;   // panel navigated away
+        ta.value = j.lines.join('\n');
+        bounds = { start: j.start, end: j.end };
+        applyBtn.disabled = false;
+      });
+    } else {
+      ta.placeholder = '> title: My talk\n> author: First author\n> theme: revealer';
+      applyBtn.disabled = false;
+    }
+    applyBtn.addEventListener('click', function () {
+      var lines = ta.value.split('\n');
+      if (bounds) {
+        F.rvPostEdit([{ op: 'replace_lines', start: bounds.start, end: bounds.end, text: lines }]);
+      } else {
+        if (!ta.value.replace(/\s/g, '')) return;   // ignore an empty box
+        F.rvPostEdit([{ op: 'insert_lines',
+          at: { insert_before: 1, container_kind: 'deck' }, text: lines.concat(['']) }]);
+      }
+    });
+    appendPalette(p);
+  }
+
+  // Entry point (the View ▸ Document source menu / the ⚙ button call this).
+  function openDocSettings() {
+    S.docSel = true;
+    RV.set('sel', null);            // clear any selection (rvPanelSync keeps docSel on a null sel)
+    if (!S.on) F.setEdit(true);     // emits 'on' -> rvPanelSync renders doc settings
+    S.panelFor = null;
+    F.rvPanelSync();
+  }
+
+  // Navigating to another slide leaves doc-settings.
+  if (window.Reveal && Reveal.on) {
+    Reveal.on('slidechanged', function () {
+      if (S.docSel) { S.docSel = false; S.panelFor = null; rvPanelSync(); }
+    });
+  }
 
   // Preferred category order for the palette; unknown categories append after.
   var PALETTE_ORDER = ['Slides', 'Layout', 'Media', 'Components',
@@ -494,6 +560,7 @@
   // exports (what other editor/ modules call):
   F.rvPanelSync = rvPanelSync;
   F.appendPalette = appendPalette;
+  F.openDocSettings = openDocSettings;
   RV.onChange('on', rvPanelSync);
   RV.onChange('sel', rvPanelSync);
   F.deleteSelected = deleteSelected;

@@ -103,13 +103,13 @@
       var tok = (f.contentWindow.__RV_DEV__ || {}).token || '';
       doc.querySelector('.rv-tb-docset').click();
       return RVT.until(function () {
-        var ta = doc.querySelector('#rv-ed-docset .rv-ds-src');
+        var ta = doc.querySelector('#rv-ed-panel .rv-pn-src');
         return ta && ta.value.indexOf('> title:') !== -1 ? ta : null;
       }, 15000, 'settings editor showing the title').then(function (ta) {
         RVT.assert(ta.value.indexOf('> title: JS harness') !== -1,
           'settings block is shown: ' + JSON.stringify(ta.value));
         ta.value = ta.value.replace('JS harness', 'Edited Header');
-        doc.querySelector('#rv-ed-docset .rv-ds-apply').click();
+        doc.querySelector('#rv-ed-panel .rv-pn-apply').click();
         function poll(n) {
           return RVT.fetch('/__rv__/src?start=1&end=1&token=' + encodeURIComponent(tok))
             .then(function (r) { return r.json(); })

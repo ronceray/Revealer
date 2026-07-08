@@ -22,6 +22,7 @@
     splitPref: false,   // split-view preference (seeded from localStorage below)
     nudgeFlush: null,   // pending nudge commit fn (flushNudge runs it early)
     panelFor: null,     // element the side panel currently renders
+    docSel: false,      // panel is editing the document settings block
     nudgeTimer: null,   // debounce timer for arrow-key nudges
   };
   RV.ui = {};
