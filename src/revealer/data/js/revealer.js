@@ -344,6 +344,12 @@ function rv_resetVideos(el) {
 Reveal.on('slidechanged', function (event) {
   set_fixed(event.currentSlide);
   fitSlide(event.currentSlide);
+  // The first pass can run while the incoming slide is still being laid out
+  // (forward navigation), measuring a transient content height and
+  // over-shrinking the font. Re-fit once layout settles (same mitigation as
+  // the 'ready' handler) so the fit is stable regardless of direction.
+  requestAnimationFrame(function () { fitSlide(Reveal.getCurrentSlide()); });
+  setTimeout(function () { fitSlide(Reveal.getCurrentSlide()); }, 250);
   if (event.previousSlide) rv_resetVideos(event.previousSlide);
   // Autoplay videos that are visible immediately (not gated behind a fragment).
   rv_videosIn(event.currentSlide).forEach(function (v) {
