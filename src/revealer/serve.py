@@ -60,6 +60,7 @@ EDITOR_JS: tuple[str, ...] = (
     "editor/textsel.js",
     "editor/inline-edit.js",
     "editor/panel.js",
+    "editor/templates.js",
     "editor/history.js",
     "editor/outline.js",
     "editor/shell.js",

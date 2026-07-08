@@ -129,9 +129,7 @@
     var span = spanOf(secs[i]);
     if (!span || isInc(secs[i])) return;  // included slides are navigate-only
     if (act === 'add') {
-      F.rvPostEdit([{ op: 'insert_lines',
-        at: { insert_before: span.e + 1, container_kind: 'deck' },
-        text: ['', '=== New slide', '', 'Text'] }]);
+      F.openTemplateGallery(span, F.fileOf ? F.fileOf(secs[i]) : '');
     } else if (act === 'dup') {
       F.fetchSrc(span.s, span.e, function (j) {
         F.rvPostEdit([{ op: 'insert_lines',

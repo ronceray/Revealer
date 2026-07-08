@@ -522,6 +522,30 @@ body.rv-split #rv-ed-drawer { right: calc(var(--rv-pw) + 10px); }
 #rv-ed-panel .rv-pl-chip:hover { background: #37436b; border-color: #2a76dd; color: #fff; }
 #rv-ed-panel .rv-pl-wrap { font-family: system-ui; border-style: dashed; border-color: #3f6b4c; color: #bfe8cf; }
 #rv-ed-panel .rv-pl-wrap:hover { background: #25402d; border-color: #3f9a6d; }
+
+/* --- new-slide template gallery ------------------------------------------- */
+#rv-ed-templates { max-width: 720px; }
+#rv-ed-templates .rv-box-body { max-height: 78vh; overflow-y: auto; }
+#rv-ed-templates .rv-tpl-gh {
+  color: #9db7e8; font-size: 11px; font-weight: 700; text-transform: uppercase;
+  letter-spacing: .05em; margin: 12px 2px 7px;
+}
+#rv-ed-templates .rv-tpl-grid {
+  display: grid; grid-template-columns: repeat(auto-fill, minmax(138px, 1fr)); gap: 10px;
+}
+#rv-ed-templates .rv-tpl-card {
+  background: #191926; border: 1px solid #2a3350; border-radius: 8px; padding: 7px;
+  cursor: pointer; transition: .12s;
+}
+#rv-ed-templates .rv-tpl-card:hover {
+  border-color: #2a76dd; background: #1d1d2e; transform: translateY(-2px);
+}
+#rv-ed-templates .rv-tpl-thumb {
+  background: #f4f6fb; border-radius: 4px; height: 74px; padding: 7px 8px;
+  display: flex; flex-direction: column; gap: 4px; overflow: hidden;
+}
+#rv-ed-templates .rv-tpl-card .nm { font-size: 12px; font-weight: 600; color: #e7ecf7; margin: 6px 2px 1px; }
+#rv-ed-templates .rv-tpl-card .ds { font-size: 10.5px; color: #8a93b5; margin: 0 2px; line-height: 1.3; }
 #rv-ed-panel .rv-cs-sec { margin: 6px 0; }
 #rv-ed-panel .rv-cs-sec b { color: #9db7e8; font-size: 12px; }
 #rv-ed-panel .rv-cs-sec pre {

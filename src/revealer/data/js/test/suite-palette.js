@@ -46,4 +46,31 @@
       }
     });
   });
+
+  RVT.test('template gallery: 13 cards, insert on click, closes', function () {
+    RVT.assert(RV.fn.TEMPLATES.length === 13, 'expected 13 templates');
+    var ids = RV.fn.TEMPLATES.map(function (t) { return t.id; });
+    RVT.assert(new Set(ids).size === 13, 'template ids are unique');
+    var orig = RV.fn.rvPostEdit, captured = null;
+    RV.fn.rvPostEdit = function (edits, file) { captured = { edits: edits, file: file }; return Promise.resolve(true); };
+    try {
+      var pre = document.getElementById('rv-ed-templates');
+      if (pre) pre.remove();
+      RV.fn.openTemplateGallery({ s: 1, e: 4 }, '');
+      var box = document.getElementById('rv-ed-templates');
+      RVT.assert(box, 'gallery box opened');
+      RVT.assert(box.querySelectorAll('.rv-tpl-card').length === 13, 'renders 13 cards');
+      box.querySelector('.rv-tpl-card[data-id="content"]').click();
+      RVT.assert(captured && captured.edits[0].op === 'insert_lines', 'posted insert_lines');
+      RVT.assert(captured.edits[0].at.insert_before === 5, 'inserts after e (=4)');
+      RVT.assert(JSON.stringify(captured.edits[0].text) ===
+                 JSON.stringify(['', '=== Title', '', 'Your text here.']),
+                 'content body, got ' + JSON.stringify(captured.edits[0].text));
+      RVT.assert(!document.getElementById('rv-ed-templates'), 'gallery closes after a pick');
+    } finally {
+      RV.fn.rvPostEdit = orig;
+      var b = document.getElementById('rv-ed-templates');
+      if (b) b.remove();
+    }
+  });
 })();

@@ -108,28 +108,30 @@
     });
   });
 
-  RVT.test('add-after inserts a "=== New slide" after the first slide', function () {
+  RVT.test('add-after opens the gallery; a picked template lands after the first slide', function () {
     var n0;
     return srcAll().then(function (j) {
       n0 = slideMarks(j).length;
       return openOutline();
     }).then(function (f) {
-      f.contentDocument.querySelector('#rv-ed-outline .rv-ol-item button[data-act="add"]')
-        .click();
-      var deadline = Date.now() + 20000;
-      function poll() {
-        return srcAll().then(function (j) {
-          var marks = slideMarks(j);
-          if (marks.length === n0 + 1 && marks[1].text === '=== New slide') return true;
-          RVT.assert(Date.now() < deadline,
-                     'expected "=== New slide" as the second marker, have: ' +
-                     marks.map(function (m) { return m.text; }).join(' | '));
-          return new Promise(function (res) { setTimeout(res, 250); }).then(poll);
-        });
-      }
-      return poll().then(function () {
-        f.remove();
-        return true;
+      var doc = f.contentDocument;
+      doc.querySelector('#rv-ed-outline .rv-ol-item button[data-act="add"]').click();
+      return RVT.until(function () {
+        return doc.querySelector('#rv-ed-templates .rv-tpl-card[data-id="content"]');
+      }, 10000, 'template gallery to open').then(function (card) {
+        card.click();                                  // pick the "content" template
+        var deadline = Date.now() + 20000;
+        function poll() {
+          return srcAll().then(function (j) {
+            var marks = slideMarks(j);
+            if (marks.length === n0 + 1 && marks[1].text === '=== Title') return true;
+            RVT.assert(Date.now() < deadline,
+                       'expected "=== Title" as the second marker, have: ' +
+                       marks.map(function (m) { return m.text; }).join(' | '));
+            return new Promise(function (res) { setTimeout(res, 250); }).then(poll);
+          });
+        }
+        return poll().then(function () { f.remove(); return true; });
       });
     });
   });
