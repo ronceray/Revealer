@@ -125,7 +125,10 @@
       stageTransform(STAGE.left, STAGE.top, sw, sh, 16, document.getElementById('rv-ed-frame'));
     } else {
       // docked edit: full-width stage below the band, no gray frame.
-      stageTransform(0, STRIP, window.innerWidth, window.innerHeight - STRIP, 0, null);
+      var fr = document.getElementById('rv-ed-frame');
+      if (fr) fr.style.display = 'none';        // clear a frame left over from split
+      stageTransform(0, STRIP, window.innerWidth,
+                     Math.max(40, window.innerHeight - STRIP), 0, null);
     }
   }
 

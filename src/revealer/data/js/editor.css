@@ -4,8 +4,9 @@
     9000 #rv-editor-layer (grips/outlines live inside its own context)
     9400 #rv-ed-slotbar
     9600 #rv-ed-drawer #rv-ed-outline    9610 #rv-ed-panel    9650 #rv-ed-divider
-    9700 #rv-ed-toolbar
+    9700 #rv-ed-toolbar (edit band) / #rv-ed-pill (preview)
     9810 #rv-ed-help       9820 #rv-ed-history
+    9840 #rv-ed-templates (new-slide gallery modal)
     9850 #rv-ed-bubble (selection bubble: above panel/help, below hovertag)
     9860 #rv-ed-export (PDF export progress + Cancel)
     9900 #rv-ed-hovertag
@@ -168,8 +169,10 @@ html.rv-edit .reveal .slides section * { cursor: crosshair; }
    The fine-pointer look above is untouched — this only widens on touch. */
 @media (pointer: coarse) {
   #rv-editor-layer .rv-ed-grip { width: 20px; height: 20px; }
-  #rv-ed-toolbar { padding: 8px 12px; gap: 2px; }
-  #rv-ed-toolbar button { padding: 8px 14px; font-size: 15px; }
+  #rv-ed-toolbar { gap: 4px; }   /* keep the band's fixed height; only widen targets */
+  #rv-ed-toolbar .rv-menu-btn, #rv-ed-toolbar .rv-tb-edit,
+  #rv-ed-pill .rv-tb-edit { padding: 7px 12px; font-size: 15px; }
+  #rv-ed-toolbar .rv-menu-item { padding: 9px 12px; }
   #rv-ed-panel .rv-pn-fld input,
   #rv-ed-panel .rv-pn-actions button,
   #rv-ed-panel .rv-pn-apply { min-height: 36px; }
@@ -539,7 +542,13 @@ body.rv-split #rv-ed-drawer { right: calc(var(--rv-pw) + 10px); }
 #rv-ed-panel .rv-pl-wrap:hover { background: #25402d; border-color: #3f9a6d; }
 
 /* --- new-slide template gallery ------------------------------------------- */
-#rv-ed-templates { max-width: 720px; }
+#rv-ed-templates {
+  position: fixed; top: 56px; left: 50%; transform: translateX(-50%);
+  width: min(720px, calc(100vw - 32px));
+  background: #1c1c2e; color: #fff; border: 1px solid #2a3350; border-radius: 10px;
+  box-shadow: 0 16px 44px rgba(0, 0, 0, 0.5); z-index: 9840;
+  font: 13px system-ui, sans-serif;
+}
 #rv-ed-templates .rv-box-body { max-height: 78vh; overflow-y: auto; }
 #rv-ed-templates .rv-tpl-gh {
   color: #9db7e8; font-size: 11px; font-weight: 700; text-transform: uppercase;

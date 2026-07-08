@@ -29,6 +29,7 @@ same registry:
 
 ```text
 > fill
+> space
 > row
 > col
 || columns
@@ -60,6 +61,7 @@ $$display$$
 `code`
 [link](url)
 [x]{.accent}
+[x]{color}
 {.title/.lede/.sm/.fine}
 > size:
 > align:

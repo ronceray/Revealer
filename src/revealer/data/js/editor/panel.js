@@ -170,14 +170,7 @@
 
   /* --- document settings (the .pres header block) edited in the panel ------ */
 
-  function docFirstSlideLine() {
-    var sec = document.querySelector('.reveal .slides > section[data-rv-src]');
-    return sec ? parseInt(sec.getAttribute('data-rv-src'), 10) : null;
-  }
-
   function renderDocSettings(p) {
-    var first = docFirstSlideLine() || 1;
-    var hasBlock = first > 1;                 // false when the deck opens on a slide
     p.innerHTML =
       '<div class="rv-pn-head"><b>' + RV.esc(RV.t('docset.title')) + '</b></div>' +
       '<div class="rv-pn-hint">' + RV.esc(RV.t('docset.hint')) + '</div>' +
@@ -192,25 +185,35 @@
     var applyBtn = p.querySelector('.rv-pn-apply');
     var bounds = null;
     applyBtn.disabled = true;
-    if (hasBlock) {
-      F.fetchSrc(1, first - 1, function (j) {
-        if (!j.lines || !S.docSel) return;   // panel navigated away
-        ta.value = j.lines.join('\n');
-        bounds = { start: j.start, end: j.end };
+    // The settings block is the main file's lines before its first slide /
+    // include directive. Derive it from the main SOURCE — a DOM section's
+    // data-rv-src is file-local when the first slide is itself included, so
+    // reading it as a main-file line would edit the wrong span.
+    F.fetchSrc(1, 1, function (j0) {
+      var total = (j0 && j0.total) || 1;      // the /src endpoint rejects end > total
+      F.fetchSrc(1, total, function (j) {
+        if (!j.lines || !S.docSel) return;    // panel navigated away
+        var lines = j.lines, first = 0;
+        for (var i = 0; i < lines.length; i++) {
+          if (/^\s*(===|%%%|>>>|>\s*include\s*:)/.test(lines[i])) { first = i + 1; break; }
+        }
+        if (first > 1) {
+          ta.value = lines.slice(0, first - 1).join('\n');
+          bounds = { start: 1, end: first - 1 };
+        } else {
+          ta.placeholder = '> title: My talk\n> author: First author\n> theme: revealer';
+        }
         applyBtn.disabled = false;
       });
-    } else {
-      ta.placeholder = '> title: My talk\n> author: First author\n> theme: revealer';
-      applyBtn.disabled = false;
-    }
+    });
     applyBtn.addEventListener('click', function () {
-      var lines = ta.value.split('\n');
+      var out = ta.value.split('\n');
       if (bounds) {
-        F.rvPostEdit([{ op: 'replace_lines', start: bounds.start, end: bounds.end, text: lines }]);
+        F.rvPostEdit([{ op: 'replace_lines', start: bounds.start, end: bounds.end, text: out }]);
       } else {
         if (!ta.value.replace(/\s/g, '')) return;   // ignore an empty box
         F.rvPostEdit([{ op: 'insert_lines',
-          at: { insert_before: 1, container_kind: 'deck' }, text: lines.concat(['']) }]);
+          at: { insert_before: 1, container_kind: 'deck' }, text: out.concat(['']) }]);
       }
     });
     appendPalette(p);

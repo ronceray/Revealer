@@ -276,6 +276,7 @@ STATIC_CHEAT: tuple[tuple[str, str, str], ...] = (
     ("Slides", ">>> first:", ">>> first: Deck title\n"),
     ("Slides", ">>> biblio", ">>> biblio\n"),
     ("Layout", "> fill", "> fill\n"),
+    ("Layout", "> space", "> space: 30px\n"),
     ("Text & math", "* bullet", "* "),
     ("Text & math", "[ highlight ]", "[ text ]"),
     ("Text & math", "$inline$", "$x$"),
@@ -287,6 +288,7 @@ STATIC_CHEAT: tuple[tuple[str, str, str], ...] = (
     ("Inline format", "`code`", "`code`"),
     ("Inline format", "[link](url)", "[text](https://url)"),
     ("Inline format", "[x]{.accent}", "[text]{.accent}"),
+    ("Inline format", "[x]{color}", "[text]{color=#f00}"),
     # Sizes are a theme-defined scale, not literally "big"/"small"
     # (`.lede` is smaller than body text in some themes, e.g. SFI).
     ("Inline format", "{.title/.lede/.sm/.fine}", "[text]{.lede}"),

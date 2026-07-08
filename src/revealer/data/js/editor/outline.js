@@ -165,8 +165,9 @@
   // The source span of the current top-level slide (for the Slide ▸ New slide menu).
   function currentSlideSpan() {
     var h = (window.Reveal && Reveal.getIndices) ? Reveal.getIndices().h : 0;
-    var secs = topSections();
-    return secs[h] ? spanOf(secs[h]) : null;
+    var sec = topSections()[h];
+    if (!sec || isInc(sec)) return null;   // included slides are navigate-only (P8)
+    return spanOf(sec);
   }
 
   // exports (what other editor/ modules call):
