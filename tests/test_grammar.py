@@ -79,3 +79,18 @@ def test_schema_shape():
     assert labels["box-warn"] == "warn box"
     assert labels["rv-cell"] == "card (plain)"
     assert sch["directives"]["size"]["onFill"] is True
+
+
+def test_cheat_is_three_field_and_lede_neutral():
+    """Cheat metadata is (category, chip, insert); the misleading 'big lede' is gone."""
+    sch = grammar.schema()
+    sc = sch["staticCheat"]
+    assert sc and all(len(e) == 3 for e in sc)
+    for spec in sch["constructs"].values():
+        assert all(len(e) == 3 for e in spec["cheat"])
+    chips = " ".join(chip for _cat, chip, _ins in grammar.STATIC_CHEAT).lower()
+    assert ".lede" in chips          # sizes still documented
+    assert "big" not in chips        # ...but not mislabelled 'big'
+    # A Fragments group exists for the * + bullet marker.
+    assert any(cat == "Fragments" and "* +" in chip
+               for cat, chip, _ in grammar.STATIC_CHEAT)

@@ -266,6 +266,18 @@ Revealer opens and closes the corresponding `<ul>` and `<li>` tags.
 
 <img class="rv-snapshot" src="_static/snapshots/bullets.svg" alt="Snapshot of a rendered nested bullet list">
 
+Prefix a bullet's text with `+` (optionally `+N`) to reveal that single item as
+a fragment — it appears on click, in document order or at step `N`, just like the
+`+` flag on cards, layers and callouts:
+
+```html
+* Shown immediately
+* + Revealed on the next click
+* +2 Revealed at step 2
+```
+
+Write `* \+ text` for a literal leading "+".
+
 ### Highlighted block
 
 Use `[ ... ]` on a single line to produce a highlighted block.

@@ -126,11 +126,11 @@ def _cheat_card(g) -> list[str]:
         if line not in groups[cat]:
             groups[cat].append(line)
 
-    for cat, line in g.STATIC_CHEAT:
-        add(cat, line)
+    for cat, chip, _ins in g.STATIC_CHEAT:
+        add(cat, chip)
     for spec in g.REGISTRY.values():
-        for cat, line in spec.cheat:
-            add(cat, line)
+        for cat, chip, _ins in spec.cheat:
+            add(cat, chip)
 
     out = ["## Quick syntax card", "",
            "The cheatsheet built into the browser editor, generated from the",
@@ -211,8 +211,8 @@ def _construct_section(spec, g) -> list[str]:
         out.append("Examples:")
         out.append("")
         out.append("```text")
-        for _cat, line in spec.cheat:
-            out.append(line)
+        for _cat, _chip, ins in spec.cheat:
+            out.append(ins.rstrip("\n"))
         out.append("```")
         out.append("")
 

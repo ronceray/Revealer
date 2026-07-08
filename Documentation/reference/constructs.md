@@ -18,10 +18,10 @@ same registry:
 **Slides**
 
 ```text
-=== Slide title
---- vertical sub-slide
-%%% Section divider
->>> first: Deck title
+=== title
+--- sub-slide
+%%% section
+>>> first:
 >>> biblio
 ```
 
@@ -29,52 +29,60 @@ same registry:
 
 ```text
 > fill
-> row h=400 24px
-> col 2/5 center
-|| 40%   (text columns)
-| 55%
-||
+> row
+> col
+|| columns
 ```
 
 **Text & math**
 
 ```text
-* bullet (2 spaces = nested)
-[ highlighted line ]
-$inline$  $$display$$
-@@ python … @@
+* bullet
+[ highlight ]
+$inline$
+$$display$$
+@@ code
+```
+
+**Fragments**
+
+```text
+* +
+* +N
+> frag
 ```
 
 **Inline format**
 
 ```text
-**bold**  *italic*  `code`
-[text](https://url)
-[text]{.accent}  [x]{color=#f00}
-[big]{.lede}  [small]{.sm}
-> size: lede   (paragraph scope)
-> align: center
-escape: \* \` \[
+**bold**
+*italic*
+`code`
+[link](url)
+[x]{.accent}
+{.title/.lede/.sm/.fine}
+> size:
+> align:
+escape \* \` \[
 ```
 
 **Components**
 
 ```text
 > table(2,3)
-> grid(2,2) compact / > card +
-> pin: 50% 50% 20% +
-> info Title … > end: info
-> warn / > good
-> eq +  … > end: eq
-> stack h=300 / > layer + clear
-> frag 2 … > end: frag
+> grid(2,2)
+> pin
+> info
+> warn / good
+> eq
+> stack
 ```
 
 **Media**
 
 ```text
-! img.png fill h=200px +2 | caption
-!! movie.mp4 loop
+! image
+!! movie
 ```
 
 ## Construct index
@@ -150,7 +158,12 @@ Parameters (whitespace-separated head tokens after the opener, unless noted):
 Examples:
 
 ```text
-> grid(2,2) compact / > card +
+> grid(2,2)
+> card
+A
+> card
+B
+> end: grid
 ```
 
 Opener pattern (the exact regex the parser and editor share):
@@ -183,7 +196,9 @@ Parameters (whitespace-separated head tokens after the opener, unless noted):
 Examples:
 
 ```text
-> pin: 50% 50% 20% +
+> pin: 50% 50% 20%
+
+> end: pin
 ```
 
 Opener pattern (the exact regex the parser and editor share):
@@ -220,7 +235,10 @@ Parameters (whitespace-separated head tokens after the opener, unless noted):
 Examples:
 
 ```text
-> row h=400 24px
+> row h=400
+> col
+
+> end: row
 ```
 
 Opener pattern (the exact regex the parser and editor share):
@@ -253,8 +271,12 @@ Parameters (whitespace-separated head tokens after the opener, unless noted):
 Examples:
 
 ```text
-> info Title … > end: info
-> warn / > good
+> info Title
+
+> end: info
+> warn Title
+
+> end: warn
 ```
 
 Opener pattern (the exact regex the parser and editor share):
@@ -287,7 +309,9 @@ Parameters (whitespace-separated head tokens after the opener, unless noted):
 Examples:
 
 ```text
-> eq +  … > end: eq
+> eq
+
+> end: eq
 ```
 
 Opener pattern (the exact regex the parser and editor share):
@@ -321,7 +345,10 @@ Parameters (whitespace-separated head tokens after the opener, unless noted):
 Examples:
 
 ```text
-> stack h=300 / > layer + clear
+> stack h=300
+> layer
+
+> end: stack
 ```
 
 Opener pattern (the exact regex the parser and editor share):
@@ -349,7 +376,9 @@ Opener pattern (the exact regex the parser and editor share):
 Examples:
 
 ```text
-> frag 2 … > end: frag
+> frag
+
+> end: frag
 ```
 
 Opener pattern (the exact regex the parser and editor share):
@@ -385,7 +414,7 @@ Parameters (whitespace-separated head tokens after the opener, unless noted):
 Examples:
 
 ```text
-! img.png fill h=200px +2 | caption
+! image.png fill | Caption
 !! movie.mp4 loop
 ```
 
@@ -534,8 +563,10 @@ Parameters (whitespace-separated head tokens after the opener, unless noted):
 Examples:
 
 ```text
-|| 40%   (text columns)
-| 55%
+|| 50%
+
+| 50%
+
 ||
 ```
 
@@ -562,7 +593,9 @@ Opener pattern (the exact regex the parser and editor share):
 Examples:
 
 ```text
-@@ python … @@
+@@ python
+
+@@
 ```
 
 Opener pattern (the exact regex the parser and editor share):

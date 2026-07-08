@@ -78,7 +78,7 @@ class ConstructSpec:
     frag_target: str | None = None       # construct name for set_fragment_index
     css_classes: tuple[str, ...] = ()
     body: str = "legacy"                 # doc label: legacy | verbatim | math | cells | none
-    cheat: tuple[tuple[str, str], ...] = ()
+    cheat: tuple[tuple[str, str, str], ...] = ()   # (category, chip, insert)
 
 
 @dataclass(frozen=True)
@@ -108,7 +108,7 @@ REGISTRY: dict[str, ConstructSpec] = {s.name: s for s in [
         end_token="table", atomic=True, passthrough="table", movable=True,
         sub_items=("cell",), implicit_first=True,
         css_classes=("rv-table-wrap",), body="cells",
-        cheat=(("Components", "> table(2,3)"),),
+        cheat=(("Components", "> table(2,3)", "> table(2,3)\n"),),
     )),
     _c(ConstructSpec(
         "grid", "grid",
@@ -119,7 +119,8 @@ REGISTRY: dict[str, ConstructSpec] = {s.name: s for s in [
         sub_items=("card",), implicit_first=True,
         head=(TokenSpec("gap", r".+", "gap", label="gap", op="set_grid_gap"),),
         css_classes=("rv-grid-wrap",), body="cells",
-        cheat=(("Components", "> grid(2,2) compact / > card +"),),
+        cheat=(("Components", "> grid(2,2)",
+                "> grid(2,2)\n> card\nA\n> card\nB\n> end: grid\n"),),
     )),
     _c(ConstructSpec(
         "pin", "pin",
@@ -128,7 +129,7 @@ REGISTRY: dict[str, ConstructSpec] = {s.name: s for s in [
         end_token="pin", atomic=True, passthrough="macro", movable=True,
         head=(_FRAG,),
         css_classes=("rv-pin",),
-        cheat=(("Components", "> pin: 50% 50% 20% +"),),
+        cheat=(("Components", "> pin", "> pin: 50% 50% 20%\n\n> end: pin\n"),),
     )),
     _c(ConstructSpec(
         "row", "row",
@@ -140,7 +141,7 @@ REGISTRY: dict[str, ConstructSpec] = {s.name: s for s in [
                         op="set_row_height", coerce="int"),
               TokenSpec("gap", r".+", "gap", label="gap", op="set_row_gap")),
         css_classes=("row",),
-        cheat=(("Layout", "> row h=400 24px"),),
+        cheat=(("Layout", "> row", "> row h=400\n> col\n\n> end: row\n"),),
     )),
     _c(ConstructSpec(
         "box", "callout",
@@ -149,8 +150,8 @@ REGISTRY: dict[str, ConstructSpec] = {s.name: s for s in [
         end_token="{variant}", atomic=True, passthrough="macro", movable=True,
         head=(_FRAG,),
         css_classes=("box-info", "box-warn", "box-good"),
-        cheat=(("Components", "> info Title … > end: info"),
-               ("Components", "> warn / > good")),
+        cheat=(("Components", "> info", "> info Title\n\n> end: info\n"),
+               ("Components", "> warn / good", "> warn Title\n\n> end: warn\n")),
     )),
     _c(ConstructSpec(
         "eq", "equation",
@@ -158,7 +159,7 @@ REGISTRY: dict[str, ConstructSpec] = {s.name: s for s in [
         end_token="eq", atomic=True, passthrough="macro", movable=True,
         head=(_FRAG,),
         css_classes=("math-box",), body="math",
-        cheat=(("Components", "> eq +  … > end: eq"),),
+        cheat=(("Components", "> eq", "> eq\n\n> end: eq\n"),),
     )),
     _c(ConstructSpec(
         "stack", "stack",
@@ -168,7 +169,7 @@ REGISTRY: dict[str, ConstructSpec] = {s.name: s for s in [
         head=(TokenSpec("height", H_TOKEN, "height", label="height px",
                         op="set_stack_height", coerce="int"),),
         css_classes=("rv-stack",),
-        cheat=(("Components", "> stack h=300 / > layer + clear"),),
+        cheat=(("Components", "> stack", "> stack h=300\n> layer\n\n> end: stack\n"),),
     )),
     _c(ConstructSpec(
         "frag", "fragment",
@@ -176,7 +177,7 @@ REGISTRY: dict[str, ConstructSpec] = {s.name: s for s in [
         end_token="frag", nesting=Nesting.SELF, atomic=True, passthrough="macro",
         movable=True,
         css_classes=("fragment",),
-        cheat=(("Components", "> frag 2 … > end: frag"),),
+        cheat=(("Fragments", "> frag", "> frag\n\n> end: frag\n"),),
     )),
     # --- single-line / sub-item constructs (not in the macro union) ---
     _c(ConstructSpec(
@@ -192,8 +193,8 @@ REGISTRY: dict[str, ConstructSpec] = {s.name: s for s in [
                                   "loop", "autoplay", "controls"))),
         caption_sep="|",
         css_classes=("rv-fig", "rv-media", "rv-media-fill"),
-        cheat=(("Media", "! img.png fill h=200px +2 | caption"),
-               ("Media", "!! movie.mp4 loop")),
+        cheat=(("Media", "! image", "! image.png fill | Caption\n"),
+               ("Media", "!! movie", "!! movie.mp4 loop\n")),
     )),
     _c(ConstructSpec(
         "col", "column",
@@ -205,7 +206,7 @@ REGISTRY: dict[str, ConstructSpec] = {s.name: s for s in [
               TokenSpec("keywords", r".+", "keyword",
                         keywords=("center", "relative", "clip"))),
         css_classes=("region",),
-        cheat=(("Layout", "> col 2/5 center"),),
+        cheat=(("Layout", "> col", "> col 2/5 center\n"),),
     )),
     _c(ConstructSpec(
         "card", "card",
@@ -240,15 +241,14 @@ REGISTRY: dict[str, ConstructSpec] = {s.name: s for s in [
         head=(TokenSpec("width", r".+", "size", label="width",
                         op="set_block_width"),),
         css_classes=("column",),
-        cheat=(("Layout", "|| 40%   (text columns)"), ("Layout", "| 55%"),
-               ("Layout", "||")),
+        cheat=(("Layout", "|| columns", "|| 50%\n\n| 50%\n\n||\n"),),
     )),
     _c(ConstructSpec(
         "code", "code block",
         opener=r"@@",
         terminator=Terminator.TOGGLE, atomic=True,
         body="verbatim",
-        cheat=(("Text & math", "@@ python … @@"),),
+        cheat=(("Text & math", "@@ code", "@@ python\n\n@@\n"),),
     )),
 ]}
 
@@ -267,23 +267,32 @@ DIRECTIVES: dict[str, DirectiveSpec] = {d.name: d for d in [
 ]}
 
 # Cheatsheet lines with no owning construct.
-STATIC_CHEAT: tuple[tuple[str, str], ...] = (
-    ("Slides", "=== Slide title"),
-    ("Slides", "--- vertical sub-slide"),
-    ("Slides", "%%% Section divider"),
-    ("Slides", ">>> first: Deck title"),
-    ("Slides", ">>> biblio"),
-    ("Layout", "> fill"),
-    ("Text & math", "* bullet (2 spaces = nested)"),
-    ("Text & math", "[ highlighted line ]"),
-    ("Text & math", "$inline$  $$display$$"),
-    ("Inline format", "**bold**  *italic*  `code`"),
-    ("Inline format", "[text](https://url)"),
-    ("Inline format", "[text]{.accent}  [x]{color=#f00}"),
-    ("Inline format", "[big]{.lede}  [small]{.sm}"),
-    ("Inline format", "> size: lede   (paragraph scope)"),
-    ("Inline format", "> align: center"),
-    ("Inline format", "escape: \\* \\` \\["),
+# Cheatsheet entries with no owning construct: (category, chip, insert).
+# `chip` is the short palette button label; `insert` is dropped at the cursor.
+STATIC_CHEAT: tuple[tuple[str, str, str], ...] = (
+    ("Slides", "=== title", "=== Title\n"),
+    ("Slides", "--- sub-slide", "--- Sub-slide title\n"),
+    ("Slides", "%%% section", "%%% Section title\n"),
+    ("Slides", ">>> first:", ">>> first: Deck title\n"),
+    ("Slides", ">>> biblio", ">>> biblio\n"),
+    ("Layout", "> fill", "> fill\n"),
+    ("Text & math", "* bullet", "* "),
+    ("Text & math", "[ highlight ]", "[ text ]"),
+    ("Text & math", "$inline$", "$x$"),
+    ("Text & math", "$$display$$", "$$ x $$"),
+    ("Fragments", "* +", "* + "),
+    ("Fragments", "* +N", "* +2 "),
+    ("Inline format", "**bold**", "**bold**"),
+    ("Inline format", "*italic*", "*italic*"),
+    ("Inline format", "`code`", "`code`"),
+    ("Inline format", "[link](url)", "[text](https://url)"),
+    ("Inline format", "[x]{.accent}", "[text]{.accent}"),
+    # Sizes are a theme-defined scale, not literally "big"/"small"
+    # (`.lede` is smaller than body text in some themes, e.g. SFI).
+    ("Inline format", "{.title/.lede/.sm/.fine}", "[text]{.lede}"),
+    ("Inline format", "> size:", "> size: lede\n"),
+    ("Inline format", "> align:", "> align: center\n"),
+    ("Inline format", "escape \\* \\` \\[", "\\"),
 )
 
 
