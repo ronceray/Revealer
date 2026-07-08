@@ -267,40 +267,40 @@ html.rv-edit .reveal .slides section * { cursor: crosshair; }
 
 /* --- slide outline sidebar --------------------------------------------------- */
 
+/* the slide selector: a horizontal filmstrip dropping from the command band */
 #rv-ed-outline {
   position: fixed;
-  top: 60px;
-  left: 12px;
-  bottom: 12px;
-  width: 240px;
-  overflow-y: auto;
+  top: 44px;              /* just below the band */
+  left: 0;
+  right: 0;
   background: #1c1c2e;
   color: #fff;
-  border-radius: 10px;
+  border-bottom: 1px solid #2a3350;
   font: 13px system-ui, sans-serif;
-  box-shadow: 0 10px 32px rgba(0, 0, 0, 0.4);
+  box-shadow: 0 12px 24px rgba(0, 0, 0, 0.4);
   z-index: 9600;
 }
-#rv-ed-outline .rv-box-body { padding: 0 0 8px; }
+#rv-ed-outline .rv-box-body { padding: 0; }
+#rv-ed-outline .rv-ol-list {
+  display: flex; flex-direction: row; gap: 8px;
+  overflow-x: auto; padding: 8px 10px 10px;
+}
 .rv-ol-item {
-  display: flex;
-  align-items: center;
-  gap: 0.5em;
-  padding: 0.35em 0.8em;
-  border-top: 1px solid #2a3350;
-  border-left: 3px solid transparent;
+  flex: 0 0 auto; width: 152px;
+  display: flex; flex-direction: column; gap: 5px;
+  padding: 7px 9px;
+  background: #191926;
+  border: 1px solid #2a3350; border-radius: 7px;
   cursor: pointer;
 }
-.rv-ol-item:hover { background: #252c48; }
-.rv-ol-item.rv-ol-current {
-  background: rgba(94, 156, 255, 0.12);
-  border-left-color: #5e9cff;
-}
-.rv-ol-num { color: #8a93b5; flex: 0 0 1.4em; text-align: right; }
+.rv-ol-item:hover { background: #232c46; }
+.rv-ol-item.rv-ol-current { background: rgba(94, 156, 255, 0.12); border-color: #5e9cff; }
+.rv-ol-head { display: flex; align-items: baseline; gap: 6px; }
+.rv-ol-num { color: #8a93b5; flex: 0 0 auto; }
 .rv-ol-title { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .rv-ol-kids, .rv-ol-unmapped { color: #8a93b5; font-size: 11px; }
 .rv-ol-inc { color: #d9c8ff; }
-.rv-ol-acts { display: flex; gap: 2px; }
+.rv-ol-acts { display: flex; gap: 3px; }
 #rv-ed-outline button {
   font: inherit;
   background: #2a3350;
@@ -520,7 +520,6 @@ body.rv-split #rv-ed-drawer { right: calc(var(--rv-pw) + 10px); }
 }
 #rv-ed-divider:hover { background: rgba(42, 118, 221, 0.35); }
 
-#rv-ed-toolbar .rv-tb-view.rv-active { background: #2a76dd; border-color: #2a76dd; }
 
 #rv-ed-panel .rv-pn-src-slide { min-height: 260px; }
 

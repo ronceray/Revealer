@@ -86,10 +86,10 @@
       var kids = innerSections(sec).length;
       var row = document.createElement('div');
       row.className = 'rv-ol-item' + (i === cur ? ' rv-ol-current' : '');
-      var html = '<span class="rv-ol-num">' + (i + 1) + '</span>' +
+      var html = '<div class="rv-ol-head"><span class="rv-ol-num">' + (i + 1) + '</span>' +
         '<span class="rv-ol-title">' + RV.esc(titleOf(sec, i)) +
         (kids ? ' <span class="rv-ol-kids">▤ ' + kids + '</span>' : '') +
-        '</span>';
+        '</span></div>';
       if (span && isInc(sec)) {
         html += '<span class="rv-ol-unmapped rv-ol-inc">' + RV.esc(RV.t('outline.included')) + '</span>';
       } else if (span) {

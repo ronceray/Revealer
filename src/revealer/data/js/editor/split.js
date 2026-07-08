@@ -43,8 +43,6 @@
       });
     }
     if (div) div.style.display = on ? 'block' : 'none';
-    var btn = document.querySelector('#rv-ed-toolbar .rv-tb-view');
-    if (btn) btn.classList.toggle('rv-active', S.splitPref);
     relayout();
   }
 
@@ -77,27 +75,18 @@
     if (frame) frame.style.display = 'none';
   }
 
-  function fitStage() {
-    if (!document.querySelector('.reveal')) return;
-    if (!(S.splitPref && S.on)) { clearStage(); return; }
-    var pw = parseInt(getComputedStyle(document.documentElement)
-      .getPropertyValue('--rv-pw'), 10) || 320;
-    var sx = STAGE.left, sy = STAGE.top;
-    var sw = Math.max(40, window.innerWidth - pw - STAGE.left - STAGE.gapRight);
-    var sh = Math.max(40, window.innerHeight - STAGE.top - STAGE.bottom);
-    var stage = document.getElementById('rv-ed-stage');
-    if (stage) {
-      stage.style.left = sx + 'px'; stage.style.top = sy + 'px';
-      stage.style.width = sw + 'px'; stage.style.height = sh + 'px';
-    }
-    // Scale the full window into the stage, with a gutter so the gray always
-    // frames the deck. The box has the WINDOW's aspect (the header/footer are
-    // part of the deck), so the preview matches the real full-screen look.
-    var pad = 16;
+  // Reserved top strip for the command band (matches #rv-ed-toolbar height in
+  // editor.css). The deck is bottom-docked below it in edit mode.
+  var STRIP = 44;
+
+  // Map the whole window uniformly into a box within [sx,sy,sw,sh], bottom-
+  // aligned so all vertical slack collects at the top (reclaimed for the band +
+  // filmstrip), and optionally size the gray frame to match.
+  function stageTransform(sx, sy, sw, sh, pad, frame) {
     var W = window.innerWidth, H = window.innerHeight;
     var f = Math.min((sw - pad * 2) / W, (sh - pad * 2) / H);
     var boxW = W * f, boxH = H * f;
-    var tx = sx + (sw - boxW) / 2, ty = sy + (sh - boxH) / 2;
+    var tx = sx + (sw - boxW) / 2, ty = sy + (sh - boxH) - pad;   // bottom-aligned
     // Measure untransformed positions first, then map each element uniformly
     // (window point p -> box point t + f*p).
     var els = chromeEls();
@@ -113,11 +102,30 @@
       // header / footer / logos (they sit at the deck's own z-index).
       el.style.setProperty('z-index', '1', 'important');
     });
-    var frame = document.getElementById('rv-ed-frame');
     if (frame) {
       frame.style.display = 'block';
       frame.style.left = tx + 'px'; frame.style.top = ty + 'px';
       frame.style.width = boxW + 'px'; frame.style.height = boxH + 'px';
+    }
+  }
+
+  function fitStage() {
+    if (!document.querySelector('.reveal')) return;
+    if (!S.on) { clearStage(); return; }         // preview: plain centered reveal.js
+    if (S.splitPref) {
+      var pw = parseInt(getComputedStyle(document.documentElement)
+        .getPropertyValue('--rv-pw'), 10) || 320;
+      var sw = Math.max(40, window.innerWidth - pw - STAGE.left - STAGE.gapRight);
+      var sh = Math.max(40, window.innerHeight - STAGE.top - STAGE.bottom);
+      var stage = document.getElementById('rv-ed-stage');
+      if (stage) {
+        stage.style.left = STAGE.left + 'px'; stage.style.top = STAGE.top + 'px';
+        stage.style.width = sw + 'px'; stage.style.height = sh + 'px';
+      }
+      stageTransform(STAGE.left, STAGE.top, sw, sh, 16, document.getElementById('rv-ed-frame'));
+    } else {
+      // docked edit: full-width stage below the band, no gray frame.
+      stageTransform(0, STRIP, window.innerWidth, window.innerHeight - STRIP, 0, null);
     }
   }
 
