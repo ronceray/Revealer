@@ -47,6 +47,48 @@ Math check $x^2$ trails words.
 * alpha bullet
 * beta bullet
 
+=== Fit cards
+
+> grid(2,2)
+
+> card + | First quadrant title
+
+* first long bullet line with enough words to wrap onto another line
+* second long bullet line with enough words to wrap onto another line
+* third long bullet line with enough words to wrap onto another line
+* fourth long bullet line with enough words to wrap onto another line
+* fifth long bullet line with enough words to wrap onto another line
+* sixth long bullet line with enough words to wrap onto another line
+
+> card + | Second quadrant title
+
+* first long bullet line with enough words to wrap onto another line
+* second long bullet line with enough words to wrap onto another line
+* third long bullet line with enough words to wrap onto another line
+* fourth long bullet line with enough words to wrap onto another line
+* fifth long bullet line with enough words to wrap onto another line
+* sixth long bullet line with enough words to wrap onto another line
+
+> card + | Third quadrant title
+
+* first long bullet line with enough words to wrap onto another line
+* second long bullet line with enough words to wrap onto another line
+* third long bullet line with enough words to wrap onto another line
+* fourth long bullet line with enough words to wrap onto another line
+* fifth long bullet line with enough words to wrap onto another line
+* sixth long bullet line with enough words to wrap onto another line
+
+> card + | Fourth quadrant title
+
+* first long bullet line with enough words to wrap onto another line
+* second long bullet line with enough words to wrap onto another line
+* third long bullet line with enough words to wrap onto another line
+* fourth long bullet line with enough words to wrap onto another line
+* fifth long bullet line with enough words to wrap onto another line
+* sixth long bullet line with enough words to wrap onto another line
+
+> end: grid
+
 > include: inc.pres
 """
 

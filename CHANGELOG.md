@@ -1,5 +1,23 @@
 # Changelog
 
+## Unreleased
+
+### Runtime
+
+- **Content auto-fit made timing-proof.** reveal.css transitions *all*
+  properties on fragments, so any fit pass landing within ~200 ms of a
+  fragment reveal read stale heights on every probe of its font-scale
+  search and either collapsed blocks to microscopic text (the floor
+  scale) or left them overflowing — and the bad value stuck, since
+  fragment steps never re-fitted. Fragment transitions are now
+  paint-only, an `html.rv-measuring` guard makes measurements immune to
+  any stylesheet's transitions, `rv_fitBlock` refuses unresponsive
+  measurements instead of trusting them, and every trigger (including
+  fragment steps and `document.fonts.ready`) funnels through one
+  coalescing scheduler that cancels stale deferred passes. Fits are now
+  deterministic: the same slide state yields the same scale regardless
+  of navigation speed or direction.
+
 ## 0.3.0 — 2026-07-06
 
 The maturity release: everything built during the fork sprint was

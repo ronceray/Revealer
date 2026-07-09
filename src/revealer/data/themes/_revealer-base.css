@@ -486,6 +486,31 @@ footer {
   font-size: calc(1em * var(--rv-fontscale, 1));
 }
 
+/* reveal.css transitions ALL properties on fragments (`transition: all .2s`),
+   so a `--rv-fontscale` change would reach the layout ~200ms late: a fit pass
+   landing mid-fade reads a stale height on every probe of its search and
+   either collapses the scale to its floor or false-fits an overflowing block.
+   Fragments only ever animate paint — fades, grow/zoom transforms, highlight
+   colours — never layout, so restrict their transitions accordingly: font and
+   geometry changes always apply synchronously. */
+.reveal .slides section .fragment {
+  transition-property: opacity, visibility, transform, color, background-color,
+    fill, stroke, box-shadow, filter;
+}
+
+/* While the runtime measures (fitSlide sets html.rv-measuring), no transition
+   or animation from any stylesheet may delay layout changes: each probe must
+   read its own effect. Paint-only properties stay animatable so a concurrent
+   re-fit does not snap in-flight fades (fragments, `> animate:` SVG steps). */
+html.rv-measuring .reveal .slides section,
+html.rv-measuring .reveal .slides section *,
+html.rv-measuring body > header,
+html.rv-measuring body > footer {
+  transition-property: opacity, visibility, transform, color, background-color,
+    fill, stroke, stroke-width, stroke-dashoffset, box-shadow, filter !important;
+  animation-play-state: paused !important;
+}
+
 /* Paragraphs stack vertically with a spacing a bit larger than a line break. */
 .rv-content-inner .rv-paragraph {
   width: 100%;

@@ -85,10 +85,22 @@ function rv_blockContentHeight(col) {
 }
 
 // Reduce the block font size until its content fits the available height.
-// Returns the applied font scale (<= 1).
+// Returns the applied font scale (<= 1), or NaN when the layout does not
+// respond to probes (measurement unreliable — the caller schedules a retry).
 function rv_fitBlock(col, avail) {
+  var prev = parseFloat(col.style.getPropertyValue('--rv-fontscale'));
   col.style.setProperty('--rv-fontscale', 1);
-  if (rv_blockContentHeight(col) <= avail + 0.5) return 1;
+  var full = rv_blockContentHeight(col);
+  if (full <= avail + 0.5) return 1;
+  // Sanity: a probe must move the measurement before the search can be
+  // trusted. A frozen read (in-flight transition, collapsed box...) would
+  // otherwise send every probe the same way and the search would return the
+  // floor; keep the last applied scale instead of persisting garbage.
+  col.style.setProperty('--rv-fontscale', 0.2);
+  if (rv_blockContentHeight(col) >= full) {
+    col.style.setProperty('--rv-fontscale', isFinite(prev) ? prev : 1);
+    return NaN;
+  }
   var lo = 0.2, hi = 1;
   for (var i = 0; i < 20; i++) {
     var mid = (lo + hi) / 2;
@@ -114,6 +126,33 @@ function fitSlide(slide) {
   var slidesEl = rv_slidesElement();
   if (!slidesEl) return;
 
+  // Measurement guard: while fitting, CSS transitions/animations must not
+  // delay layout changes, or every probe below reads a stale height (see the
+  // html.rv-measuring rules in the base stylesheet).
+  document.documentElement.classList.add('rv-measuring');
+  try {
+    rv_fitSlideMeasured(slide, content, inner, slidesEl);
+  } finally {
+    document.documentElement.classList.remove('rv-measuring');
+  }
+
+  // Re-fit once media with intrinsic size has loaded (images / videos), since
+  // their natural dimensions are unknown before that.
+  if (!content._rvMediaBound) {
+    content._rvMediaBound = true;
+    var media = content.querySelectorAll('img, video');
+    media.forEach(function (m) {
+      var refit = function () { fitSlide(slide); };
+      if (m.tagName === 'IMG') {
+        if (!m.complete) m.addEventListener('load', refit);
+      } else {
+        m.addEventListener('loadedmetadata', refit);
+      }
+    });
+  }
+}
+
+function rv_fitSlideMeasured(slide, content, inner, slidesEl) {
   var cfg = Reveal.getConfig();
   var W = cfg.width;
   var H = cfg.height;
@@ -170,6 +209,7 @@ function fitSlide(slide) {
       multi.querySelectorAll(':scope > .column')
     );
     var widthMode = slide.getAttribute('data-rv-column-width') || 'equal';
+    var unreliable = false;
 
     cols.forEach(function (c) { c.style.flex = '1 1 0'; });
 
@@ -183,6 +223,7 @@ function fitSlide(slide) {
         void multi.offsetHeight;
         var scales = cols.map(function (c) { return rv_fitBlock(c, c.clientHeight); });
         var next = weights.map(function (w, i) {
+          if (!isFinite(scales[i])) { unreliable = true; return w; }
           return w / Math.sqrt(Math.max(scales[i], 0.05));
         });
         var sum = next.reduce(function (a, b) { return a + b; }, 0);
@@ -193,23 +234,20 @@ function fitSlide(slide) {
 
     void multi.offsetHeight;
     cols.forEach(function (col) {
-      rv_fitBlock(col, col.clientHeight);
+      if (!isFinite(rv_fitBlock(col, col.clientHeight))) unreliable = true;
     });
-  }
 
-  // Re-fit once media with intrinsic size has loaded (images / videos), since
-  // their natural dimensions are unknown before that.
-  if (!content._rvMediaBound) {
-    content._rvMediaBound = true;
-    var media = content.querySelectorAll('img, video');
-    media.forEach(function (m) {
-      var refit = function () { fitSlide(slide); };
-      if (m.tagName === 'IMG') {
-        if (!m.complete) m.addEventListener('load', refit);
-      } else {
-        m.addEventListener('loadedmetadata', refit);
+    // A block whose measurements did not respond keeps its previous scale;
+    // retry on the next frame (bounded, so a pathological slide cannot loop).
+    if (unreliable) {
+      var n = (slide._rvFitRetries || 0) + 1;
+      if (n <= 3) {
+        slide._rvFitRetries = n;
+        requestAnimationFrame(function () { fitSlide(slide); });
       }
-    });
+    } else {
+      slide._rvFitRetries = 0;
+    }
   }
 }
 
@@ -341,15 +379,30 @@ function rv_resetVideos(el) {
   });
 }
 
+/* One entry point for every fit trigger. Each request fits now (so the new
+ * state paints correctly), once on the next frame (post-layout), and once
+ * after async renderers settle (web fonts, KaTeX, media). Re-arming cancels
+ * the pending deferred passes, so a stale timer armed for one slide state can
+ * never fire in the middle of another (the old scattered timers did exactly
+ * that: a leftover slidechanged pass fired just as a fragment faded in). */
+var rv_pendingFit = { raf: 0, settle: 0 };
+function rv_queueFit() {
+  if (rv_pendingFit.raf) cancelAnimationFrame(rv_pendingFit.raf);
+  if (rv_pendingFit.settle) clearTimeout(rv_pendingFit.settle);
+  fitSlide(Reveal.getCurrentSlide());
+  rv_pendingFit.raf = requestAnimationFrame(function () {
+    rv_pendingFit.raf = 0;
+    fitSlide(Reveal.getCurrentSlide());
+  });
+  rv_pendingFit.settle = setTimeout(function () {
+    rv_pendingFit.settle = 0;
+    fitSlide(Reveal.getCurrentSlide());
+  }, 300);
+}
+
 Reveal.on('slidechanged', function (event) {
   set_fixed(event.currentSlide);
-  fitSlide(event.currentSlide);
-  // The first pass can run while the incoming slide is still being laid out
-  // (forward navigation), measuring a transient content height and
-  // over-shrinking the font. Re-fit once layout settles (same mitigation as
-  // the 'ready' handler) so the fit is stable regardless of direction.
-  requestAnimationFrame(function () { fitSlide(Reveal.getCurrentSlide()); });
-  setTimeout(function () { fitSlide(Reveal.getCurrentSlide()); }, 250);
+  rv_queueFit();
   if (event.previousSlide) rv_resetVideos(event.previousSlide);
   // Autoplay videos that are visible immediately (not gated behind a fragment).
   rv_videosIn(event.currentSlide).forEach(function (v) {
@@ -362,27 +415,30 @@ Reveal.on('slidechanged', function (event) {
 Reveal.on('fragmentshown', function (event) {
   revealerApplyFragment(event.fragment, false);
   rv_playVideos(event.fragment);
+  rv_queueFit();
 });
 
 Reveal.on('fragmenthidden', function (event) {
   revealerApplyFragment(event.fragment, true);
   rv_resetVideos(event.fragment);
+  rv_queueFit();
 });
 
 Reveal.on('ready', function (event) {
   set_fixed(event.currentSlide);
-  fitSlide(event.currentSlide);
-  // Re-fit after asynchronous rendering (KaTeX math, web fonts) settles.
-  requestAnimationFrame(function () { fitSlide(Reveal.getCurrentSlide()); });
-  setTimeout(function () { fitSlide(Reveal.getCurrentSlide()); }, 250);
+  rv_queueFit();
+  // Web fonts change text metrics when they land; re-fit once they are in.
+  if (document.fonts && document.fonts.ready && document.fonts.ready.then) {
+    document.fonts.ready.then(function () { rv_queueFit(); });
+  }
 });
 
 Reveal.on('resize', function () {
-  fitSlide(Reveal.getCurrentSlide());
+  rv_queueFit();
 });
 
 window.addEventListener('load', function () {
-  fitSlide(Reveal.getCurrentSlide());
+  rv_queueFit();
 });
 
 $(document).ready(function () {

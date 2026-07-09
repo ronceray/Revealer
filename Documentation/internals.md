@@ -103,6 +103,38 @@ and editor metadata. From this one table derive:
 Behaviour (body rendering, emission templates, provenance attachment)
 stays in `build.py`; the registry holds patterns and metadata only.
 
+## The fit engine
+
+`fitSlide` (in `src/revealer/data/js/revealer.js`) positions each slide's
+body between the fixed header and footer, then shrinks every block's
+`--rv-fontscale` with a binary search until its content fits its box. The
+engine rests on three invariants; break one and slides render with
+collapsed (floor-scale) or overflowing text:
+
+- **Measurements must respond synchronously.** A probe sets
+  `--rv-fontscale` and immediately reads `scrollHeight`, so no CSS
+  transition or animation may delay layout changes on slide content.
+  reveal.css transitions *all* properties on `.fragment`s; the base
+  stylesheet restricts that to paint-only properties (opacity, visibility,
+  transform, colours), and while fitting, an `html.rv-measuring` guard
+  class enforces the same restriction on every element, whatever the
+  stylesheet. `rv_fitBlock` additionally verifies that its first probe
+  moved the measurement before trusting a search, and keeps the previous
+  scale (retrying next frame, bounded) when it did not.
+- **Every layout-changing event re-fits.** All triggers — `ready`,
+  `slidechanged`, `fragmentshown`/`fragmenthidden`, `resize`, media
+  loads, `document.fonts.ready` — funnel through one scheduler
+  (`rv_queueFit`): a synchronous pass so the new state paints fitted, a
+  next-frame pass, and a 300 ms pass for async renderers (web fonts,
+  KaTeX). Re-arming cancels the pending deferred passes, so a timer armed
+  for one slide state can never fire in the middle of another.
+- **Fits are idempotent.** `rv_fitBlock` re-measures from scale 1 each
+  time, so repeated passes converge to the same value regardless of what
+  was applied before — arrival timing must never change the final layout.
+
+The regression suite for all three lives in
+`src/revealer/data/js/test/suite-fit.js`.
+
 ## Editor architecture
 
 The browser editor is thirteen small JavaScript IIFE modules under
