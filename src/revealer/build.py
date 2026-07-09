@@ -1149,7 +1149,13 @@ def _contentify_legacy(html: str, src: list | None = None) -> str:
             index += 1
 
         wrap_cls = "rv-grid-wrap compact" if compact else "rv-grid-wrap"
-        row_tmpl = "auto" if compact else "minmax(0,1fr)"
+        # NB: `minmax(min-content,1fr)`, not `minmax(0,1fr)`. On a normal slide a
+        # grid nested among paragraphs has an indefinite parent height, so a `1fr`
+        # row with a 0 minimum resolves to zero and the cells collapse to nothing
+        # (invisible grid). Flooring the minimum at the cells' content height keeps
+        # them visible at natural size there, while still stretching to fill when
+        # the grid *does* have a definite height (fill slides, grid-only slides).
+        row_tmpl = "auto" if compact else "minmax(min-content,1fr)"
         out = (
             "<style>"
             ".rv-content-inner:has(> .rv-grid-wrap){{height:100%;}}"
