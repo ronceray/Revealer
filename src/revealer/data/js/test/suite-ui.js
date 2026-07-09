@@ -74,6 +74,37 @@
     });
   });
 
+  RVT.test('slide chip never renders NaN while reveal has no indices', function () {
+    // Regression: on heavy decks the toolbar is built before reveal's first
+    // layout, when getIndices().h is still undefined — the chip rendered
+    // "NaN" and nothing refreshed it until the first slidechanged. The boot
+    // race cannot be reproduced reliably here, so force the during-init
+    // indices instead and exercise the exported refresh directly.
+    return RVT.iframe('/?rv-edit=1', '#rv-ed-toolbar').then(function (f) {
+      var w = f.contentWindow;
+      return RVT.until(function () {
+        return w.Reveal && w.Reveal.isReady && w.Reveal.isReady() &&
+               w.RV && w.RV.fn && w.RV.fn.updateSlideChip ? f : null;
+      }, 15000, 'reveal + editor ready').then(function () {
+        var chip = f.contentDocument.querySelector('#rv-ed-toolbar .rv-tb-slide');
+        RVT.assert(chip, 'slide chip exists');
+        var orig = w.Reveal.getIndices;
+        w.Reveal.getIndices = function () { return { h: undefined }; };
+        w.RV.fn.updateSlideChip();
+        var during = chip.textContent;
+        w.Reveal.getIndices = orig;
+        w.RV.fn.updateSlideChip();
+        var after = chip.textContent.trim();
+        RVT.assert(during.indexOf('NaN') === -1,
+          'chip rendered "' + during + '" while indices were unavailable');
+        RVT.assert(/^\d+/.test(after),
+          'chip recovers to a slide number (got "' + after + '")');
+        f.remove();
+        return true;
+      });
+    });
+  });
+
   RVT.test('history drawer opens from the toolbar with a current marker', function () {
     return RVT.iframe('/?rv-edit=1', '#rv-ed-toolbar').then(function (f) {
       RVT.menuClick(f.contentDocument, 'History', 'Version history');

@@ -8,6 +8,10 @@
   The filmstrip was full-width, so its right end (later slides and the
   close button) slid under the docked panel; it now aligns with the stage
   box and follows the divider as it is dragged.
+- **Slide chip no longer shows "NaN".** On heavy decks the command band is
+  built before reveal's first layout, when the slide indices are still
+  undefined; the chip now falls back to the deck name and fills in the
+  number on reveal's `ready`.
 
 ### Runtime
 

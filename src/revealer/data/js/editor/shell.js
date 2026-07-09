@@ -159,7 +159,10 @@
 
   function currentSlideLabel() {
     if (!(window.Reveal && Reveal.getIndices)) return PRES_NAME;
+    // Before reveal's first layout the indices are undefined (the toolbar is
+    // built early); show the deck name until the 'ready' refresh below.
     var i = Reveal.getIndices().h;
+    if (!isFinite(i)) return PRES_NAME;
     var sec = Reveal.getCurrentSlide();
     var h = sec && sec.querySelector('.slide_header,h1,h2,h3');
     var t = (h && h.textContent) ? h.textContent.trim() : '';
@@ -280,7 +283,13 @@
       var mi = tb.querySelector('.rv-mi-split');
       if (mi) mi.textContent = (S.splitPref ? '✓ ' : '') + RV.t('menu.splitView');
     });
-    if (window.Reveal && Reveal.on) Reveal.on('slidechanged', updateSlideChip);
+    if (window.Reveal && Reveal.on) {
+      // 'slidechanged' never fires for the initial slide; 'ready' fills in
+      // the number the chip could not compute when the toolbar was built.
+      Reveal.on('ready', updateSlideChip);
+      Reveal.on('slidechanged', updateSlideChip);
+      if (Reveal.isReady && Reveal.isReady()) updateSlideChip();
+    }
 
     if (hist && !window.__rvHistToastShown) {
       window.__rvHistToastShown = true;
