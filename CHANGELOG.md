@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+### Editor
+
+- **Split mode: the slide selector spans only the area above the slide.**
+  The filmstrip was full-width, so its right end (later slides and the
+  close button) slid under the docked panel; it now aligns with the stage
+  box and follows the divider as it is dragged.
+
 ### Runtime
 
 - **Content auto-fit made timing-proof.** reveal.css transitions *all*

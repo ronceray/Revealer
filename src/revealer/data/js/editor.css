@@ -512,6 +512,13 @@ body.rv-split #rv-ed-panel {
 }
 body.rv-split #rv-ed-drawer { right: calc(var(--rv-pw) + 10px); }
 
+/* the filmstrip spans only the area above the slide: aligned with the stage
+   box (10px insets, see STAGE in split.js), clear of the docked panel */
+body.rv-split #rv-ed-outline {
+  left: 10px;
+  right: calc(var(--rv-pw) + 10px);
+}
+
 #rv-ed-divider {
   position: fixed;
   top: 0;

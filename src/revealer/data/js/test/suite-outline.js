@@ -174,4 +174,30 @@
       });
     });
   });
+
+  RVT.test('split mode: the filmstrip spans the stage, clear of the panel', function () {
+    return untilBuilt().then(function () {
+      return RVT.iframe('/?rv-edit=1&rv-split=1&rv-outline=1', '#rv-ed-toolbar');
+    }).then(function (f) {
+      return RVT.until(function () {
+        var d = f.contentDocument;
+        return d.querySelector('#rv-ed-outline .rv-ol-item') &&
+               d.getElementById('rv-ed-stage') ? f : null;
+      }, 15000, 'split filmstrip + stage');
+    }).then(function (f) {
+      var d = f.contentDocument;
+      var strip = d.getElementById('rv-ed-outline').getBoundingClientRect();
+      var stage = d.getElementById('rv-ed-stage').getBoundingClientRect();
+      var panel = d.getElementById('rv-ed-panel').getBoundingClientRect();
+      RVT.assert(strip.right <= panel.left + 0.5,
+        'filmstrip slides under the panel (strip.right=' + strip.right +
+        ' panel.left=' + panel.left + ')');
+      RVT.assert(Math.abs(strip.left - stage.left) <= 2 &&
+                 Math.abs(strip.right - stage.right) <= 2,
+        'filmstrip should align with the stage (strip ' + strip.left + '..' +
+        strip.right + ', stage ' + stage.left + '..' + stage.right + ')');
+      f.remove();
+      return true;
+    });
+  });
 })();
