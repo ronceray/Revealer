@@ -97,9 +97,17 @@ function rv_fitBlock(col, avail) {
   // otherwise send every probe the same way and the search would return the
   // floor; keep the last applied scale instead of persisting garbage.
   col.style.setProperty('--rv-fontscale', 0.2);
-  if (rv_blockContentHeight(col) >= full) {
+  var floorH = rv_blockContentHeight(col);
+  if (!(floorH < full)) {
     col.style.setProperty('--rv-fontscale', isFinite(prev) ? prev : 1);
     return NaN;
+  }
+  if (floorH > avail + 0.5) {
+    // Nothing fits even at the floor (fixed-height content dominates the
+    // block): full-size overflow is legible and diagnosable; floor-size
+    // text is neither. Keep scale 1.
+    col.style.setProperty('--rv-fontscale', 1);
+    return 1;
   }
   var lo = 0.2, hi = 1;
   for (var i = 0; i < 20; i++) {
@@ -169,9 +177,15 @@ function rv_fitSlideMeasured(slide, content, inner, slidesEl) {
   var hlogos = document.getElementById('hlogos');
 
   var hh = rv_num(slide, 'data-rv-header-height', NaN);
-  if (isFinite(hh) && header) header.style.height = (hh * slidesRect.height) + 'px';
+  if (header) {
+    if (isFinite(hh)) header.style.height = (hh * slidesRect.height) + 'px';
+    else header.style.removeProperty('height');  // don't inherit a previous slide's
+  }
   var fh = rv_num(slide, 'data-rv-footer-height', NaN);
-  if (isFinite(fh) && footer) footer.style.height = (fh * slidesRect.height) + 'px';
+  if (footer) {
+    if (isFinite(fh)) footer.style.height = (fh * slidesRect.height) + 'px';
+    else footer.style.removeProperty('height');
+  }
 
   var topReserve = Math.max(
     rv_bandFromTop(header, slidesRect, scale),
@@ -203,13 +217,13 @@ function rv_fitSlideMeasured(slide, content, inner, slidesEl) {
   inner.style.transform = 'translate(-50%, -50%) scale(1)';
 
   var multi = inner.querySelector(':scope > .multi-column');
+  var unreliable = false;
   if (multi) {
     multi.style.setProperty('--rv-column-spacing', (columnSpacing * 100) + '%');
     var cols = Array.prototype.slice.call(
       multi.querySelectorAll(':scope > .column')
     );
     var widthMode = slide.getAttribute('data-rv-column-width') || 'equal';
-    var unreliable = false;
 
     cols.forEach(function (c) { c.style.flex = '1 1 0'; });
 
@@ -236,18 +250,23 @@ function rv_fitSlideMeasured(slide, content, inner, slidesEl) {
     cols.forEach(function (col) {
       if (!isFinite(rv_fitBlock(col, col.clientHeight))) unreliable = true;
     });
+  } else if (slide.classList.contains('rv-fill')) {
+    // `> fill` slides put rows/paragraphs directly in the inner box; fit it
+    // as one block (the base CSS scales .rv-fill's inner font accordingly).
+    var unreliableFill = !isFinite(rv_fitBlock(inner, boxH));
+    unreliable = unreliableFill;
+  }
 
-    // A block whose measurements did not respond keeps its previous scale;
-    // retry on the next frame (bounded, so a pathological slide cannot loop).
-    if (unreliable) {
-      var n = (slide._rvFitRetries || 0) + 1;
-      if (n <= 3) {
-        slide._rvFitRetries = n;
-        requestAnimationFrame(function () { fitSlide(slide); });
-      }
-    } else {
-      slide._rvFitRetries = 0;
+  // A block whose measurements did not respond keeps its previous scale;
+  // retry on the next frame (bounded, so a pathological slide cannot loop).
+  if (unreliable) {
+    var n = (slide._rvFitRetries || 0) + 1;
+    if (n <= 3) {
+      slide._rvFitRetries = n;
+      requestAnimationFrame(function () { fitSlide(slide); });
     }
+  } else {
+    slide._rvFitRetries = 0;
   }
 }
 
@@ -532,6 +551,15 @@ $(document).ready(function () {
       'background:var(--r-background-color,#fff);}' +
       '.rv-grid-scaler{position:absolute;top:0;left:0;transform-origin:top left;' +
       'pointer-events:none;}' +
+      /* Clones carry the runtime's inline left/top/transform on .rv-content /
+         .rv-content-inner; those are slide-box coordinates, so the same
+         positioning context must exist here or every visited slide's
+         thumbnail is displaced by half a slide. */
+      '#rv-grid section>.rv-content{position:absolute;left:0;top:0;width:100%;height:100%;' +
+      'box-sizing:border-box;overflow:visible;}' +
+      '#rv-grid section>.rv-content>.rv-content-inner{position:absolute;left:50%;top:50%;' +
+      'width:100%;box-sizing:border-box;transform:translate(-50%,-50%);' +
+      'transform-origin:center center;}' +
       '.rv-grid-label{padding:5px 9px;font:12px system-ui,sans-serif;color:#1c2233;' +
       'background:#eef1f6;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}';
     var st = document.createElement('style');
@@ -602,6 +630,13 @@ $(document).ready(function () {
       });
       Array.prototype.forEach.call(clone.querySelectorAll('video'), function (v) {
         v.removeAttribute('autoplay'); v.pause && v.pause();
+        // A clone must never (re)download media: opening the overview used to
+        // trigger a full preload of every video in the deck.
+        v.setAttribute('preload', 'none');
+        v.removeAttribute('src');
+        Array.prototype.forEach.call(v.querySelectorAll('source'), function (s) {
+          s.removeAttribute('src');
+        });
       });
       scaler.appendChild(clone);
       thumb.appendChild(scaler);
@@ -685,6 +720,12 @@ $(document).ready(function () {
     if (moved) {
       markSel();
       if (cells[sel]) cells[sel].cell.scrollIntoView({ block: 'nearest' });
+      ev.preventDefault();
+      ev.stopPropagation();
+    } else if (!ev.ctrlKey && !ev.metaKey && !ev.altKey) {
+      // While the overlay is open, plain keys must not reach reveal —
+      // Space/N/PageDown were advancing the deck underneath the grid,
+      // stranding the presenter on an unexpected slide on close.
       ev.preventDefault();
       ev.stopPropagation();
     }

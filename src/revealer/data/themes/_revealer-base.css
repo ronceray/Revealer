@@ -785,6 +785,11 @@ h1.relief {
   --rv-card-border: #e0e2e8;
   --rv-gap-row: 0.8em;
   --rv-gap-col: 1.2em;
+  /* build.py emits these unprefixed names inline on rows/regions; themes
+     (sfi) may override them. */
+  --gap-row: var(--rv-gap-row);
+  --gap-col: var(--rv-gap-col);
+  --rv-box-text: #1a1a2e;
 }
 
 /* Layout primitives (used by `> row` / `> col`, also handy from raw HTML) */
@@ -793,6 +798,13 @@ h1.relief {
 .col { flex-direction: column; gap: var(--rv-gap-row); }
 .row > *, .col > * { min-width: 0; min-height: 0; }
 .region { display: flex; flex-direction: column; min-width: 0; min-height: 0; }
+
+/* `> fill` slides fit their whole body as one block: the runtime sets
+   --rv-fontscale on .rv-content-inner (columns are fitted individually on
+   normal slides, but a fill body has no columns). */
+.reveal section.rv-fill .rv-content-inner {
+  font-size: calc(1em * var(--rv-fontscale, 1));
+}
 
 /* `> fill`: the slide body becomes a full-height flex column, so rows and
    regions can resolve their heights against the canvas. */
@@ -851,6 +863,14 @@ h1.relief {
   border-radius: 0 8px 8px 0; padding: 0.4em 0.65em; }
 .box-good { background: var(--rv-good-bg); border-left: 5px solid var(--rv-good);
   border-radius: 0 8px 8px 0; padding: 0.4em 0.65em; }
+/* Cards / callouts / equation boxes keep their pale backgrounds even on
+   `> style: dark` slides — pin their text color so it stays readable there
+   (the slide's near-white inherited color was invisible on them). */
+.rv-card, .box-info, .box-warn, .box-good, .math-box,
+.rv-stack > .rv-layer.rv-opaque {
+  color: var(--rv-box-text);
+}
+
 .box-title { font-size: 0.7em; font-weight: 700; line-height: 1.2; margin-bottom: 0.2em;
   color: var(--rv-accent); }
 .box-warn .box-title { color: var(--rv-warn); }

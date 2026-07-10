@@ -97,6 +97,56 @@
     });
   });
 
+  function slideByText(win, needle) {
+    var slides = win.document.querySelectorAll('.reveal .slides > section');
+    for (var i = 0; i < slides.length; i++) {
+      if (slides[i].textContent.indexOf(needle) !== -1) return i;
+    }
+    return -1;
+  }
+
+  RVT.test('fill slides shrink their body to fit', function () {
+    return RVT.iframe('/', '.reveal .slides section').then(function (f) {
+      var win = f.contentWindow;
+      return whenFitReady(f).then(function () {
+        var idx = slideByText(win, 'fill body cannot hold');
+        RVT.assert(idx > 0, 'deck needs the fill-overflow slide');
+        win.Reveal.slide(idx);
+        return wait(600);
+      }).then(function () {
+        var inner = win.Reveal.getCurrentSlide()
+          .querySelector('.rv-content-inner');
+        var fs = parseFloat(inner.style.getPropertyValue('--rv-fontscale')) || 1;
+        RVT.assert(fs < 0.999,
+          'fill body must shrink (fontscale=' + fs + ')');
+        RVT.assert(contentHeight(inner) <= inner.clientHeight + 4,
+          'fill body fits after shrinking');
+        f.remove();
+        return true;
+      });
+    });
+  });
+
+  RVT.test('content that cannot fit at any scale keeps scale 1', function () {
+    return RVT.iframe('/', '.reveal .slides section').then(function (f) {
+      var win = f.contentWindow;
+      return whenFitReady(f).then(function () {
+        var idx = slideByText(win, 'cannot fit the box at any font scale');
+        RVT.assert(idx > 0, 'deck needs the unfittable slide');
+        win.Reveal.slide(idx);
+        return wait(600);
+      }).then(function () {
+        var col = win.Reveal.getCurrentSlide()
+          .querySelector('.multi-column > .column');
+        var fs = parseFloat(col.style.getPropertyValue('--rv-fontscale')) || 1;
+        RVT.assert(fs === 1,
+          'fixed-height overflow keeps legible scale 1, got ' + fs);
+        f.remove();
+        return true;
+      });
+    });
+  });
+
   RVT.test('fragment steps trigger a re-fit', function () {
     return RVT.iframe('/', '.reveal .slides section').then(function (f) {
       var win = f.contentWindow;

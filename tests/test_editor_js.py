@@ -96,6 +96,41 @@ Math check $x^2$ trails words.
 
 Stepping recolours the dot, then dims it.
 
+=== Fill overflow
+> fill
+
+first long paragraph with enough words that the fill body cannot hold
+everything at full size and the fitter has to shrink the whole block
+
+second long paragraph with enough words that the fill body cannot hold
+everything at full size and the fitter has to shrink the whole block
+
+third long paragraph with enough words that the fill body cannot hold
+everything at full size and the fitter has to shrink the whole block
+
+fourth long paragraph with enough words that the fill body cannot hold
+everything at full size and the fitter has to shrink the whole block
+
+fifth long paragraph with enough words that the fill body cannot hold
+everything at full size and the fitter has to shrink the whole block
+
+sixth long paragraph with enough words that the fill body cannot hold
+everything at full size and the fitter has to shrink the whole block
+
+seventh long paragraph with enough words that the fill body cannot hold
+everything at full size and the fitter has to shrink the whole block
+
+=== Unfittable
+
+> row h=900px
+> col
+
+Fixed tall row that cannot fit the box at any font scale.
+
+> end: row
+
+Caption that must stay legible instead of collapsing to the floor.
+
 > include: inc.pres
 """
 

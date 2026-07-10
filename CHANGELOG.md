@@ -80,6 +80,27 @@
   body may be undrained (keep-alive desync); the served deck is read under
   the session lock (no truncated page during a slow rebuild).
 
+### Themes & fit
+
+- **`> row` / `> col` gutters survive every theme**: the emitted inline gaps
+  reference `--gap-row`/`--gap-col`, which only the sfi theme defined — under
+  revealer/ljp all rows and columns collapsed to zero gap. The base
+  stylesheet now defines them (as aliases of `--rv-gap-*`).
+- **Callouts, cards, equation boxes and opaque layers are readable on
+  `> style: dark` slides**: their pale backgrounds now pin a dark text color
+  (`--rv-box-text`) instead of inheriting the slide's near-white.
+- **`> fill` slides now auto-fit like everything else** (their body was
+  never font-fitted and simply overflowed the footer).
+- **When nothing fits even at the minimum font scale** (a fixed-height row
+  or iframe taller than the box), the fitter keeps scale 1 — legible,
+  diagnosable overflow instead of microscopic text that still overflows.
+- A slide's `> header-height:`/`footer-height:` no longer leaks onto every
+  following slide.
+- **Esc overview**: visited slides' thumbnails render in place (they were
+  displaced by half a slide); plain keys (Space, N, PageDown…) no longer
+  advance the deck underneath the open overlay; cloned videos no longer
+  re-download the whole deck's media on every open.
+
 ### Runtime
 
 - **`> animate:` SVG steps are now a pure function of the visible fragments.**
