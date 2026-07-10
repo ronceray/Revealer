@@ -102,8 +102,9 @@
       var s = S.sel.getAttribute('data-rv-src');
       var e = S.sel.getAttribute('data-rv-src-end');
       el.querySelector('.rv-ed-kind').textContent = F.kindOf(S.sel);
+      var selFile = F.fileOf(S.sel);
       el.querySelector('.rv-ed-line').textContent =
-        '.pres:' + s + (e ? '–' + e : '');
+        (selFile || '.pres') + ':' + s + (e ? '–' + e : '');
       bar.hidden = false;
     } else {
       bar.hidden = true;
@@ -251,7 +252,8 @@
      typing guard keeps every shortcut away from inputs/textareas — arrows
      must not nudge and Ctrl+Z must stay the field's own undo. */
   function isTypingTarget(t) {
-    return !!(t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.isContentEditable));
+    return !!(t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' ||
+                    t.tagName === 'SELECT' || t.isContentEditable));
   }
 
   document.addEventListener('keydown', function (ev) {

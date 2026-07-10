@@ -92,6 +92,13 @@
     if (!choice) { F.syncChrome(); return; }
     var construct = F.constructOf(el);
     if (construct === 'region') construct = 'paragraph';
+    // Lines in one op are coordinates of ONE file: a block cannot move
+    // between the main deck and an include (or two includes) in-place.
+    if (F.fileOf(el) !== F.fileOf(choice.target.el)) {
+      F.toast('Blocks cannot move between source files');
+      F.syncChrome();
+      return;
+    }
     F.rvPostEdit([{
       op: 'move_block',
       src: [F.srcOf(el), F.srcEndOf(el)],
@@ -101,7 +108,7 @@
         container: [F.srcOf(choice.target.el), F.srcEndOf(choice.target.el)],
         container_kind: choice.target.kind,
       },
-    }]);
+    }], F.fileOf(el));
   }
 
   /* --- OS file drag-drop --------------------------------------------------------------------- */
@@ -134,7 +141,7 @@
         kind: isVideo ? 'video' : 'img',
         path: j.path,
         flags: choice.target.kind === 'col' ? ['fill'] : [],
-      }]);
+      }], F.fileOf(choice.target.el));
     }).catch(function () { F.toast('Upload failed'); });
   });
 

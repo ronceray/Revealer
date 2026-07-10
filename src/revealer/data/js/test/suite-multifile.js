@@ -192,4 +192,40 @@
       return true;
     });
   });
+
+  RVT.test('included pin: gesture commits route to inc.pres, not the main file', function () {
+    // Regression: drag/nudge/block-move/drawer commits called rvPostEdit
+    // with no file argument, so a gesture on an included element rewrote
+    // the MAIN .pres at the include's file-local line numbers.
+    var f;
+    return openDeck().then(function (fr) {
+      f = fr;
+      return gotoSlideWith(f, 'inc text');
+    }).then(function () {
+      var w = f.contentWindow;
+      var pin = w.Reveal.getCurrentSlide().querySelector('.rv-pin');
+      clickEl(f, pin);
+      return RVT.until(function () {
+        return w.RV.state.sel === pin ? pin : null;
+      }, 15000, 'pin selected').then(function () {
+        var posted = [];
+        var orig = w.RV.fn.rvPostEdit;
+        w.RV.fn.rvPostEdit = function (edits, file) {
+          posted.push({ edits: edits, file: file });
+          return Promise.resolve(true);   // intercept: never reach the server
+        };
+        // The arrow-key nudge commit is the same plumbing every drag uses.
+        w.RV.fn.nudgeSelected(new w.KeyboardEvent('keydown', { key: 'ArrowRight' }));
+        w.RV.fn.flushNudge();
+        w.RV.fn.rvPostEdit = orig;
+        RVT.assert(posted.length === 1, 'nudge posted one edit');
+        RVT.assert(posted[0].edits[0].op === 'set_pin', 'op is set_pin');
+        RVT.assert(posted[0].file === 'inc.pres',
+          'edit must target inc.pres, got "' + posted[0].file + '"');
+        f.remove();
+        clearRestore();
+        return true;
+      });
+    });
+  });
 })();

@@ -29,6 +29,23 @@
 
 ### Editor
 
+- **Gesture edits on included slides now rewrite the right file.** Pin drags
+  and nudges, media resizes, row/stack height drags, column splits, block
+  moves, fragment reorders and media drops posted their edits with no file,
+  so on a `> include:`d slide they were applied to the main `.pres` at the
+  include's file-local line numbers — rejected at best, silently rewriting
+  the wrong file on a line collision. Every commit path now routes to the
+  element's owning file (block moves across files are refused explicitly),
+  and the selection info bar names that file instead of always `.pres`.
+- **Typing can no longer be discarded by a live-reload.** An SSE reload now
+  defers while an in-place editing session is open, and the 5-second force
+  reload commits the session instead of dropping the text.
+- **The save status tells the truth on network failure**: the chip flips to
+  "Not saved ✗" and the pending-save marker is cleared, so a later reload
+  can no longer report "Saved ✓" for an edit that never landed.
+- Keyboard fixes: dropdown `<select>`s keep their arrow keys (they nudged
+  the selected element instead); interrupted touch drags (`pointercancel`)
+  end the gesture instead of wedging it on the next tap.
 - **Split mode: the slide selector spans only the area above the slide.**
   The filmstrip was full-width, so its right end (later slides and the
   close button) slid under the docked panel; it now aligns with the stage

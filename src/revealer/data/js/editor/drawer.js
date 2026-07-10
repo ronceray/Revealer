@@ -76,12 +76,13 @@
     if (mapped.length !== order.length) {
       F.toast(RV.t('drawer.rawHtml'));
     }
+    if (!mapped.length) return;
     F.rvPostEdit([{
       op: 'reorder_fragments',
       order: mapped.map(function (el) {
         return { line: F.srcOf(el), construct: fragConstruct(el) };
       }),
-    }]);
+    }], F.fileOf(mapped[0]));
   }
 
   // exports (what other editor/ modules call):

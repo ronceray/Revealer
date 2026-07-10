@@ -103,6 +103,7 @@
     if (kind === 'block-move') F.buildDropTargets(el);
     document.addEventListener('pointermove', onDragMove, true);
     document.addEventListener('pointerup', onDragUp, true);
+    document.addEventListener('pointercancel', onDragUp, true);
     clearHandles();
   }
 
@@ -141,6 +142,7 @@
   function onDragUp(ev) {
     document.removeEventListener('pointermove', onDragMove, true);
     document.removeEventListener('pointerup', onDragUp, true);
+    document.removeEventListener('pointercancel', onDragUp, true);
     var d = S.drag;
     S.drag = null;
     if (!d) return;
@@ -160,15 +162,15 @@
       } else if (w && w.indexOf('%') !== -1) {
         op.w = w;
       }
-      F.rvPostEdit([op]);
+      F.rvPostEdit([op], F.fileOf(el));
     } else if (d.kind === 'media-size') {
       var target = el.tagName === 'FIGURE' ? el.querySelector('img,video') : el;
       var hpx = Math.round(target.getBoundingClientRect().height / d.scale);
-      F.rvPostEdit([{ op: 'set_media_size', line: line, dim: 'h', value: hpx + 'px' }]);
+      F.rvPostEdit([{ op: 'set_media_size', line: line, dim: 'h', value: hpx + 'px' }], F.fileOf(el));
     } else if (d.kind === 'row-height' || d.kind === 'stack-height') {
       var hh = Math.round(el.getBoundingClientRect().height / d.scale);
       F.rvPostEdit([{ op: (d.kind === 'row-height' ? 'set_row_height' : 'set_stack_height'),
-                    line: line, value: hh }]);
+                    line: line, value: hh }], F.fileOf(el));
     } else if (d.kind === 'col-split') {
       commitColSplit(d);
     } else if (d.kind === 'block-move') {
@@ -225,7 +227,7 @@
     F.rvPostEdit([
       { op: 'set_col_size', line: lineA, new: opA },
       { op: 'set_col_size', line: lineB, new: opB },
-    ]);
+    ], F.fileOf(d.el));
   }
 
   /* --- keyboard nudging --------------------------------------------------------------- */
@@ -275,7 +277,7 @@
         var cy = Math.round((r.top + r.height / 2 - pr.top) / pr.height * 200) / 2;
         var op = { op: 'set_pin', line: F.srcOf(el), x: cx + '%', y: cy + '%' };
         if (el.style.width && el.style.width.indexOf('%') !== -1) op.w = el.style.width;
-        F.rvPostEdit([op]);
+        F.rvPostEdit([op], F.fileOf(el));
       });
     } else if (kind === 'media' || kind === 'row' || kind === 'stack') {
       var target = (kind === 'media' && el.tagName === 'FIGURE') ? el.querySelector('img,video') : el;
@@ -288,7 +290,8 @@
         var hpx = Math.round(target.getBoundingClientRect().height / rvScale());
         F.rvPostEdit([kind === 'media'
           ? { op: 'set_media_size', line: F.srcOf(el), dim: 'h', value: hpx + 'px' }
-          : { op: (kind === 'row' ? 'set_row_height' : 'set_stack_height'), line: F.srcOf(el), value: hpx }]);
+          : { op: (kind === 'row' ? 'set_row_height' : 'set_stack_height'), line: F.srcOf(el), value: hpx }],
+          F.fileOf(el));
       });
     }
     F.syncChrome();

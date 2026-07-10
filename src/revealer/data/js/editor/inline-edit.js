@@ -151,6 +151,9 @@
     ed.el.removeEventListener('blur', onBlur);
     ed.el.removeAttribute('contenteditable');
     ed.el.classList.remove('rv-ed-editing');
+    // Ending the session releases any reload deferred to protect the typing
+    // (next tick, so a commit's edit enters the queue first).
+    if (F.maybeReload) setTimeout(function () { F.maybeReload(); }, 0);
     return ed;
   }
 
@@ -204,4 +207,6 @@
 
   // exports (what other editor/ modules call):
   F.reverseRender = reverseRender;
+  F.inlineEditing = function () { return !!editing; };
+  F.commitInlineEdit = commit;
 })();

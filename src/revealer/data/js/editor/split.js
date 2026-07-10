@@ -37,9 +37,11 @@
         function up() {
           document.removeEventListener('pointermove', mv, true);
           document.removeEventListener('pointerup', up, true);
+          document.removeEventListener('pointercancel', up, true);
         }
         document.addEventListener('pointermove', mv, true);
         document.addEventListener('pointerup', up, true);
+        document.addEventListener('pointercancel', up, true);
       });
     }
     if (div) div.style.display = on ? 'block' : 'none';

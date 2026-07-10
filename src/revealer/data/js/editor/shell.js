@@ -188,9 +188,11 @@
       function up() {
         document.removeEventListener('pointermove', mv, true);
         document.removeEventListener('pointerup', up, true);
+        document.removeEventListener('pointercancel', up, true);
       }
       document.addEventListener('pointermove', mv, true);
       document.addEventListener('pointerup', up, true);
+      document.addEventListener('pointercancel', up, true);
     });
   }
 
@@ -330,7 +332,7 @@
       method: 'PUT', headers: { 'X-RV-Token': TOKEN }, body: file,
     }).then(function (r) { return r.json(); }).then(function (j) {
       if (!j.ok) { F.toast(RV.t('toast.uploadRejected', { error: j.error || '?' })); return; }
-      var sel = S.sel, at = null, flags = [];
+      var sel = S.sel, at = null, flags = [], atFile = '';
       var sec = window.Reveal && Reveal.getCurrentSlide();
       function spanDest(container, kind) {
         return { insert_before: F.srcEndOf(container) + 1,
@@ -342,6 +344,7 @@
            F.hasCls(sel, 'rv-layer') || F.hasCls(sel, 'column'))) {
         at = spanDest(sel, F.hasCls(sel, 'column') ? 'column' : 'col');
         flags = F.hasCls(sel, 'column') ? [] : ['fill'];
+        atFile = F.fileOf(sel);
       } else if (sel && sel.hasAttribute('data-rv-src') && sel.tagName !== 'SECTION') {
         var cont = F.containerOf(sel) || sec;
         at = { insert_before: F.srcEndOf(sel) + 1,
@@ -349,12 +352,14 @@
                container_kind: F.hasCls(cont, 'column') ? 'column' :
                                (cont.tagName === 'SECTION' ? 'slide' : 'col') };
         flags = cont.tagName === 'SECTION' || F.hasCls(cont, 'column') ? [] : ['fill'];
+        atFile = F.fileOf(cont);
       } else if (sec && sec.hasAttribute('data-rv-src')) {
         at = spanDest(sec, 'slide');
+        atFile = F.fileOf(sec);
       }
       if (!at) { F.toast(RV.t('toast.uploadHint', { path: j.path })); return; }
       F.rvPostEdit([{ op: 'insert_media', at: at, kind: isVideo ? 'video' : 'img',
-                    path: j.path, flags: flags }]);
+                    path: j.path, flags: flags }], atFile);
     }).catch(function () { F.toast(RV.t('toast.uploadFailed')); });
   }
 

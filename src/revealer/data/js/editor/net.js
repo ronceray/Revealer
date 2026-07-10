@@ -93,6 +93,10 @@
     }).catch(function () {
       editInFlight = false;
       clearEditQueue();
+      F.rvStatus('error', 'Not saved \u2717');
+      // A stale 'saving' marker would resurrect after reload as "Saved \u2713"
+      // for an edit that never reached the disk.
+      try { sessionStorage.removeItem('rv-ed-lastsave'); } catch (e2) {}
       F.toast('Edit failed: server unreachable');
       maybeReload();
       return false;
@@ -108,6 +112,7 @@
   function maybeReload() {
     if (!pendingReload) return;
     if (editsBusy() || S.drag || S.dropState) return;
+    if (F.inlineEditing && F.inlineEditing()) return;  // never yank mid-typing
     pendingReload = false;
     if (reloadForceTimer) { clearTimeout(reloadForceTimer); reloadForceTimer = null; }
     F.hideError();
@@ -120,7 +125,13 @@
     if (!reloadForceTimer) {
       reloadForceTimer = setTimeout(function () {
         reloadForceTimer = null;
-        if (pendingReload) { pendingReload = false; F.hideError(); F.saveStateAndReload(); }
+        if (!pendingReload) return;
+        // The force-fire exists so a wedged flag can't suppress reloads
+        // forever — but typed text is not a wedged flag: commit it first.
+        if (F.inlineEditing && F.inlineEditing()) F.commitInlineEdit();
+        pendingReload = false;
+        F.hideError();
+        F.saveStateAndReload();
       }, 5000);
     }
     maybeReload();
