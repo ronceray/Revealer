@@ -197,23 +197,26 @@ def generate_index_html(reveal_dir: str, extensions: list[str]) -> None:
             dependencies.append(spec["dependency"])
         needs_fa = needs_fa or spec.get("needs_fa", False)
 
-        if needs_fa:
-                css.append("fonts/fontawesome.min.css")
+    # NB: everything below is loop-independent — it used to sit inside the
+    # loop, so an empty extension list left `html` unbound (every build
+    # crashed) and fontawesome was linked once per extension.
+    if needs_fa:
+        css.append("fonts/fontawesome.min.css")
 
-        css_links = []
-        for h in css:
-            attrs = ' id="rv-theme"' if h == 'dist/theme/__THEME__.css' else ''
-            css_links.append('<link rel="stylesheet"{0} href="{1}">'.format(attrs, h))
-        css_html = "\n    ".join(css_links)
-        scripts_html = "\n    ".join('<script src="{0}"></script>'.format(s) for s in scripts)
+    css_links = []
+    for h in css:
+        attrs = ' id="rv-theme"' if h == 'dist/theme/__THEME__.css' else ''
+        css_links.append('<link rel="stylesheet"{0} href="{1}">'.format(attrs, h))
+    css_html = "\n    ".join(css_links)
+    scripts_html = "\n    ".join('<script src="{0}"></script>'.format(s) for s in scripts)
 
-        plugins_html = "[ " + ", ".join(inits) + " ]"
-        deps_html = ""
-        if dependencies:
-                deps = ", ".join("{{ src: 'reveal.js/{0}' }}".format(d) for d in dependencies)
-                deps_html = "\n        dependencies: [{0}],".format(deps)
+    plugins_html = "[ " + ", ".join(inits) + " ]"
+    deps_html = ""
+    if dependencies:
+        deps = ", ".join("{{ src: 'reveal.js/{0}' }}".format(d) for d in dependencies)
+        deps_html = "\n        dependencies: [{0}],".format(deps)
 
-        html = """<!doctype html>
+    html = """<!doctype html>
 <html lang="en">
     <head>
         <meta charset="utf-8">

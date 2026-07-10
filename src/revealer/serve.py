@@ -161,11 +161,16 @@ def _watch(sess: DevSession, stop: threading.Event, log=print) -> None:
     """Poll the .pres content hash (and deck assets) and rebuild on change."""
     last_asset_scan = 0.0
     asset_state: dict[str, float] = {}
+    primed = False
 
     def scan_assets() -> tuple[bool, bool]:
         """Returns (needs_rebuild, needs_reload) based on asset mtimes."""
+        nonlocal primed
         rebuild = reload_ = False
-        first = not asset_state
+        # Only the very first scan primes silently; `not asset_state` would
+        # also swallow the first asset ever added to an asset-less deck.
+        first = not primed
+        primed = True
         for root, dirs, files in os.walk(sess.pdir):
             dirs[:] = [d for d in dirs if d not in _SKIP_DIRS]
             for name in files:
@@ -200,8 +205,10 @@ def _watch(sess: DevSession, stop: threading.Event, log=print) -> None:
         # last-good content still rebuilds (clearing the error overlay).
         try:
             sha = _sha_bytes(sess.pres.read_bytes())
-        except FileNotFoundError:
-            continue  # atomic save in progress; retry next tick
+        except OSError:
+            # Atomic save in progress, or a transient cloud-sync/AV lock —
+            # the watcher must survive and retry, never die silently.
+            continue
         if sha != sess.attempted_sha:
             if sha == pending_sha:
                 pending_sha = None
@@ -215,7 +222,10 @@ def _watch(sess: DevSession, stop: threading.Event, log=print) -> None:
         now = time.monotonic()
         if now - last_asset_scan >= ASSET_SCAN_INTERVAL_S:
             last_asset_scan = now
-            needs_rebuild, needs_reload = scan_assets()
+            try:
+                needs_rebuild, needs_reload = scan_assets()
+            except OSError:
+                continue
             if needs_rebuild:
                 _rebuild(sess, log=log)
             elif needs_reload:
@@ -536,8 +546,31 @@ _BUILDING_PAGE = """<!doctype html><html><head><meta charset="utf-8">
 <body style="font-family: sans-serif; padding: 3em;">
 <h2>First build failed</h2>
 <p>Fix the error below and save — this page reloads automatically.</p>
-<pre id="err" style="background:#f6f6f6;padding:1em;white-space:pre-wrap;"></pre>
+<pre id="err" style="background:#f6f6f6;padding:1em;white-space:pre-wrap;">__ERROR__</pre>
+<script>
+(function () {
+  var es = new EventSource('__PREFIX__/events?token=' + encodeURIComponent(__TOKEN__));
+  es.onmessage = function (m) {
+    try {
+      var d = JSON.parse(m.data);
+      if (d.type === 'reload') { es.close(); location.reload(); }
+      else if (d.type === 'build-error') {
+        document.getElementById('err').textContent = d.message || '';
+      }
+    } catch (e) {}
+  };
+})();
+</script>
 </body></html>"""
+
+
+def _building_page(sess: DevSession) -> str:
+    err = (sess.build_error or {}).get("message") or "(building…)"
+    err = err.replace("&", "&amp;").replace("<", "&lt;")
+    return (_BUILDING_PAGE
+            .replace("__ERROR__", err)
+            .replace("__PREFIX__", DEV_PREFIX)
+            .replace("__TOKEN__", json.dumps(sess.token).replace("</", "<\\/")))
 
 
 class _Handler(http.server.SimpleHTTPRequestHandler):
@@ -573,6 +606,12 @@ class _Handler(http.server.SimpleHTTPRequestHandler):
         return urlsplit(self.path).path
 
     def _send_json(self, code: int, obj: dict) -> None:
+        # An error response sent before draining a request body would desync
+        # the HTTP/1.1 keep-alive stream (leftover bytes parse as the next
+        # request line) — drop the connection instead of reusing it.
+        if (code >= 400 and self.command in ("POST", "PUT")
+                and self.headers.get("Content-Length")):
+            self.close_connection = True
         body = json.dumps(obj).encode()
         self.send_response(code)
         self.send_header("Content-Type", "application/json")
@@ -721,7 +760,8 @@ class _Handler(http.server.SimpleHTTPRequestHandler):
             return self._send_json(400, {"error": "bad json"})
         sha = str(req.get("sha256", ""))
         edits = req.get("edits", [])
-        if not isinstance(edits, list) or not edits:
+        if (not isinstance(edits, list) or not edits
+                or not all(isinstance(e, dict) for e in edits)):
             return self._send_json(400, {"error": "no edits"})
         with sess.lock:
             # P8: a batch targets exactly one file — the main .pres by
@@ -730,27 +770,34 @@ class _Handler(http.server.SimpleHTTPRequestHandler):
             if target is None:
                 return self._send_json(422, {"error": "unknown_file",
                                              "file": req.get("file")})
-            before_text = target.read_text(encoding="utf-8")
+            before_bytes = target.read_bytes()
             try:
                 result = edit_mod.apply_edits(target, sha, edits)
             except edit_mod.EditError as exc:
                 return self._send_json(exc.status, exc.payload)
+            except Exception as exc:
+                # A malformed op (wrong types, missing keys) must surface as a
+                # rejected edit, never kill the connection with no response.
+                return self._send_json(422, {"error": "bad_op",
+                                             "detail": str(exc)[:500]})
             # Undo state: the rebuild's auto-commit records this edit in the
             # shadow git; without git, keep a single before-image slot
             # (main file only — include edits have no fallback undo).
             if sess.history_mode != "git" and target == sess.pres:
-                sess.fallback_undo = before_text.encode("utf-8")
+                sess.fallback_undo = before_bytes
             _rebuild(sess, log=self._log)
             if sess.build_error:
                 # The edit produced an unbuildable deck — engine bug or bad op.
-                # Roll it back so the user is never stuck on a broken file.
-                target.write_text(before_text, encoding="utf-8")
+                # Capture ITS error before the rollback rebuild clears it, and
+                # roll back byte-exact (write_text would normalize CRLF).
+                fail_detail = sess.build_error.get("message")
+                target.write_bytes(before_bytes)
                 if target == sess.pres:
                     sess.fallback_undo = None
                 _rebuild(sess, log=self._log)
                 return self._send_json(422, {
                     "error": "edit_breaks_build",
-                    "detail": sess.build_error and sess.build_error.get("message"),
+                    "detail": fail_detail,
                 })
             return self._send_json(200, {"ok": True, "sha256": result["sha256"],
                                          "file": str(req.get("file") or "")})
@@ -768,7 +815,10 @@ class _Handler(http.server.SimpleHTTPRequestHandler):
             if target is None:
                 return self._send_json(422, {"error": "unknown_file"})
             data = target.read_bytes()
-            lines = data.decode("utf-8").replace("\r\n", "\n").split("\n")
+            try:
+                lines = data.decode("utf-8").replace("\r\n", "\n").split("\n")
+            except UnicodeDecodeError:
+                return self._send_json(422, {"error": "not_utf8"})
             if not (1 <= start <= end <= len(lines)):
                 return self._send_json(422, {"error": "line_out_of_range"})
             return self._send_json(200, {
@@ -798,7 +848,10 @@ class _Handler(http.server.SimpleHTTPRequestHandler):
             if target is None:
                 return self._send_json(422, {"error": "unknown_file"})
             data = target.read_bytes()
-            lines = data.decode("utf-8").replace("\r\n", "\n").split("\n")
+            try:
+                lines = data.decode("utf-8").replace("\r\n", "\n").split("\n")
+            except UnicodeDecodeError:
+                return self._send_json(422, {"error": "not_utf8"})
             if not (1 <= start <= end <= len(lines)):
                 return self._send_json(422, {"error": "line_out_of_range"})
             out = []
@@ -910,12 +963,23 @@ class _Handler(http.server.SimpleHTTPRequestHandler):
                 if sess.export_job is not None:
                     return self._send_json(409, {"error": "export_in_progress",
                                                  "job": sess.export_job})
+                # Claim the one-at-a-time slot: two synchronous exports (or a
+                # sync one racing a job) would run two Chrome renders onto the
+                # same output path.
+                job = "sync-" + secrets.token_hex(4)
+                sess.export_job = job
 
             def progress(done, total):
                 _broadcast(sess, {"type": "export-progress",
                                   "done": done, "total": total})
 
-            out = pdf_mod.export_pdf(html, log=lambda *a: None, progress=progress)
+            try:
+                out = pdf_mod.export_pdf(html, log=lambda *a: None,
+                                         progress=progress)
+            finally:
+                with sess.lock:
+                    if sess.export_job == job:
+                        sess.export_job = None
         except Exception as exc:
             return self._send_json(500, {"error": str(exc)})
         return self._send_json(200, {"ok": True, "path": out})
@@ -1087,9 +1151,12 @@ class _Handler(http.server.SimpleHTTPRequestHandler):
 
     def _serve_deck(self) -> None:
         sess = self.sess
-        if sess.html_path is None or not sess.html_path.is_file():
-            return self._send_html(_BUILDING_PAGE, 200)
-        html = sess.html_path.read_text(encoding="utf-8")
+        # Under the lock: _rebuild writes the artifact in place, so a refresh
+        # racing a slow rebuild could otherwise read a truncated file.
+        with sess.lock:
+            if sess.html_path is None or not sess.html_path.is_file():
+                return self._send_html(_building_page(sess), 200)
+            html = sess.html_path.read_text(encoding="utf-8")
         self._send_html(_inject_dev(html, sess))
 
     def _test_runner(self) -> None:

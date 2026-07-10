@@ -55,6 +55,31 @@
   undefined; the chip now falls back to the deck name and fills in the
   number on reveal's `ready`.
 
+### Dev server & CLI
+
+- **The "first build failed" page is now alive**: it shows the actual error
+  and reloads itself the moment a save fixes the deck (it used to be a dead
+  page with an empty error box and no reload hookup).
+- **Malformed edit requests and non-UTF-8 sources get proper 4xx answers**
+  instead of killing the HTTP connection with no response.
+- **A build-breaking edit now reports why** (the failing build's message was
+  read after the rollback rebuild had cleared it → `detail: null`), and the
+  rollback / no-git undo restore the exact bytes — a CRLF deck is no longer
+  silently rewritten to LF.
+- **The file watcher survives transient read errors** (cloud-sync/antivirus
+  locks — decks in Dropbox routinely hit these); it used to die silently,
+  ending live-rebuild for the session. The first asset ever added to a deck
+  without media now triggers the reload it used to swallow.
+- **`extensions = []` in `.revealer.toml` no longer crashes every build**
+  (the index assembly sat inside the extension loop), and fontawesome is
+  linked once instead of once per plugin.
+- **A corrupted `config.toml` no longer bricks the CLI** (ignored and healed
+  on the next save, which is now atomic).
+- Concurrent PDF exports are refused instead of racing two Chrome renders
+  onto the same file; error responses close the connection when a request
+  body may be undrained (keep-alive desync); the served deck is read under
+  the session lock (no truncated page during a slow rebuild).
+
 ### Runtime
 
 - **`> animate:` SVG steps are now a pure function of the visible fragments.**

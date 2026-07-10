@@ -26,14 +26,22 @@ def load() -> dict:
     path = config_path()
     if not path.exists():
         return {}
-    with open(path, "rb") as fid:
-        return tomllib.load(fid)
+    try:
+        with open(path, "rb") as fid:
+            return tomllib.load(fid)
+    except (tomllib.TOMLDecodeError, OSError):
+        # A corrupted config must not brick every CLI command; it only holds
+        # conveniences (root, recents) that the next save() rewrites.
+        return {}
 
 
 def save(data: dict) -> None:
     config_dir().mkdir(parents=True, exist_ok=True)
-    with open(config_path(), "wb") as fid:
+    # Write-then-rename so a crash mid-write can't leave a truncated file.
+    tmp = config_path().with_suffix(".toml.tmp")
+    with open(tmp, "wb") as fid:
         tomli_w.dump(data, fid)
+    os.replace(tmp, config_path())
 
 
 def get_root() -> Path | None:
