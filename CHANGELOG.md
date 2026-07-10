@@ -40,6 +40,20 @@
 
 ### Runtime
 
+- **`> animate:` SVG steps are now a pure function of the visible fragments.**
+  The old applier only reacted to per-step events, so any non-linear path —
+  Esc-grid jumps, deep links, entering a slide backward, the PDF exporter's
+  force-shown fragments — rendered the SVG in the wrong state, and stepping
+  back deleted the element's original attributes. The runtime now resets the
+  animated elements to a pristine snapshot and replays the currently visible
+  steps in order (idempotent), re-syncing on every navigation event and — via
+  a class observer — on the silent flips reveal performs when fragments are
+  disabled. Stepping back lands on the previous step's exact values; leaving
+  the slide restores the authored SVG. Fragment-gated videos play/reset on
+  visibility edges under the same mechanism, so they also work on jumps.
+- **PDF exports render every `> animate:` state correctly** in both modes,
+  and page captures are transition-free (a screenshot can no longer race a
+  half-played fade or SVG step).
 - **Content auto-fit made timing-proof.** reveal.css transitions *all*
   properties on fragments, so any fit pass landing within ~200 ms of a
   fragment reveal read stale heights on every probe of its font-scale

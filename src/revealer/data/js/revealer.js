@@ -285,75 +285,95 @@ function revealerParseAttrs(spec) {
     });
 }
 
-function revealerApplyFragment(fragment, restore) {
-  if (!fragment.classList || !fragment.classList.contains('revealer-svg-anim')) {
-    return;
-  }
+/* The SVG animation state is DERIVED, never accumulated: on every relevant
+ * event the animated elements are reset to a pristine snapshot and the steps
+ * whose fragments are currently `.visible` are re-applied in fragment order.
+ * This makes the result independent of HOW a state was reached — linear
+ * stepping, stepping back (lands on the previous step's values, pristine at
+ * zero), Esc-grid jumps, deep links, and the PDF exporter's force-shown
+ * fragments all render the same thing. */
 
+function rv_snapshotSvgProp(el, name) {
+  if (!el._rvSvgOrig) el._rvSvgOrig = {};
+  if (!(name in el._rvSvgOrig)) {
+    el._rvSvgOrig[name] = {
+      attr: el.getAttribute(name),
+      style: el.style ? el.style.getPropertyValue(name) : '',
+    };
+  }
+}
+
+function rv_resetSvgProps(el) {
+  var orig = el._rvSvgOrig;
+  if (!orig) return;
+  Object.keys(orig).forEach(function (name) {
+    if (orig[name].attr === null) el.removeAttribute(name);
+    else el.setAttribute(name, orig[name].attr);
+    if (el.style) {
+      if (orig[name].style) el.style.setProperty(name, orig[name].style);
+      else el.style.removeProperty(name);
+    }
+  });
+}
+
+function rv_applySvgStep(fragment) {
   var duration = fragment.getAttribute('data-svg-duration') || '0.5s';
   var attrs = revealerParseAttrs(fragment.getAttribute('data-svg-attrs'));
-
   revealerSvgTargets(fragment).forEach(function (el) {
-    if (!el._revealerOrig) el._revealerOrig = {};
-    if (!el._revealerOrigStyle) el._revealerOrigStyle = {};
-
     el.style.transition = 'all ' + duration + ' ease';
-
     attrs.forEach(function (pair) {
       var name = pair[0];
       var value = pair[1];
-
-      // If the element supports the property via style (e.g. opacity), prefer
-      // to read/write it on `el.style` so inline `style="opacity:0"` is handled.
-      var usesStyle = false;
-      try {
-        if (el.style && (name in el.style)) usesStyle = true;
-      } catch (e) {
-        usesStyle = false;
-      }
-
-      // Remember the original value the first time we touch this attribute/style.
-      if (usesStyle) {
-        if (!(name in el._revealerOrigStyle)) {
-          el._revealerOrigStyle[name] = el.style.getPropertyValue(name) || null;
-        }
-      } else {
-        if (!(name in el._revealerOrig)) {
-          el._revealerOrig[name] = el.getAttribute(name);
-        }
-      }
-
-      if (restore) {
-        if (usesStyle) {
-          var origStyle = el._revealerOrigStyle[name];
-          if (origStyle === null || origStyle === '') {
-            el.style.removeProperty(name);
-            el.removeAttribute(name);
-          } else {
-            el.style.setProperty(name, origStyle);
-            el.setAttribute(name, origStyle);
-          }
-        } else {
-          var orig = el._revealerOrig[name];
-          if (orig === null) {
-            el.removeAttribute(name);
-            el.style.removeProperty(name);
-          } else {
-            el.setAttribute(name, orig);
-            el.style.setProperty(name, orig);
-          }
-        }
-      } else {
-        try {
-          el.style.setProperty(name, value);
-        } catch (e) {
-        }
-        try {
-          el.setAttribute(name, value);
-        } catch (e) {
-        }
-      }
+      rv_snapshotSvgProp(el, name);
+      try { el.style.setProperty(name, value); } catch (e) {}
+      try { el.setAttribute(name, value); } catch (e) {}
     });
+  });
+}
+
+// Fragments in presentation order (reveal normalizes data-fragment-index on
+// sync, so the attribute is authoritative; DOM order breaks ties).
+function rv_fragmentsInOrder(slide) {
+  var frags = Array.prototype.slice.call(slide.querySelectorAll('.fragment'));
+  return frags
+    .map(function (f, i) {
+      var idx = parseInt(f.getAttribute('data-fragment-index'), 10);
+      return { f: f, idx: isFinite(idx) ? idx : 1e9, dom: i };
+    })
+    .sort(function (a, b) { return (a.idx - b.idx) || (a.dom - b.dom); })
+    .map(function (e) { return e.f; });
+}
+
+function rv_syncFragmentEffects(slide) {
+  if (!slide) return;
+  var frags = rv_fragmentsInOrder(slide);
+
+  // SVG steps: reset every touched element, then replay the visible steps.
+  var anims = frags.filter(function (f) {
+    return f.classList.contains('revealer-svg-anim');
+  });
+  if (anims.length) {
+    var touched = [];
+    anims.forEach(function (f) {
+      revealerSvgTargets(f).forEach(function (el) {
+        if (touched.indexOf(el) === -1) touched.push(el);
+      });
+    });
+    touched.forEach(rv_resetSvgProps);
+    anims.forEach(function (f) {
+      if (f.classList.contains('visible')) rv_applySvgStep(f);
+    });
+  }
+
+  // Fragment-gated videos: play/reset on visibility EDGES only, so a video
+  // is not restarted by every later fragment step on the same slide.
+  frags.forEach(function (f) {
+    var active = f.classList.contains('visible');
+    if (active === !!f._rvActive) return;
+    f._rvActive = active;
+    if (!rv_videosIn(f).length) return;
+    if (active) rv_playVideos(f);
+    else rv_resetVideos(f);
   });
 }
 
@@ -402,8 +422,15 @@ function rv_queueFit() {
 
 Reveal.on('slidechanged', function (event) {
   set_fixed(event.currentSlide);
+  rv_syncFragmentEffects(event.currentSlide);
   rv_queueFit();
-  if (event.previousSlide) rv_resetVideos(event.previousSlide);
+  if (event.previousSlide) {
+    rv_resetVideos(event.previousSlide);
+    // Re-arm the edge detection so gated videos replay on a later re-entry.
+    event.previousSlide.querySelectorAll('.fragment').forEach(function (f) {
+      f._rvActive = false;
+    });
+  }
   // Autoplay videos that are visible immediately (not gated behind a fragment).
   rv_videosIn(event.currentSlide).forEach(function (v) {
     if (!(v.closest && v.closest('.fragment'))) {
@@ -412,20 +439,46 @@ Reveal.on('slidechanged', function (event) {
   });
 });
 
-Reveal.on('fragmentshown', function (event) {
-  revealerApplyFragment(event.fragment, false);
-  rv_playVideos(event.fragment);
+Reveal.on('fragmentshown', function () {
+  rv_syncFragmentEffects(Reveal.getCurrentSlide());
   rv_queueFit();
 });
 
-Reveal.on('fragmenthidden', function (event) {
-  revealerApplyFragment(event.fragment, true);
-  rv_resetVideos(event.fragment);
+Reveal.on('fragmenthidden', function () {
+  rv_syncFragmentEffects(Reveal.getCurrentSlide());
   rv_queueFit();
 });
+
+/* Fragment visibility can change without any reveal event: `fragments:false`
+ * (the PDF exporter's force-shown variant) and Fragments.disable() flip the
+ * `.visible` classes silently, and the timing relative to 'ready' is a race.
+ * Since the SVG/video effects derive from those classes, observe the classes
+ * themselves — every silent flip re-syncs the current slide (coalesced). */
+function rv_armFragmentObserver() {
+  var slides = rv_slidesElement();
+  if (!slides || slides._rvFragObs) return;
+  var pending = 0;
+  slides._rvFragObs = new MutationObserver(function (muts) {
+    if (pending) return;
+    for (var i = 0; i < muts.length; i++) {
+      var t = muts[i].target;
+      if (t.classList && t.classList.contains('fragment')) {
+        pending = requestAnimationFrame(function () {
+          pending = 0;
+          rv_syncFragmentEffects(Reveal.getCurrentSlide());
+        });
+        return;
+      }
+    }
+  });
+  slides._rvFragObs.observe(slides,
+    { subtree: true, attributes: true, attributeFilter: ['class'] });
+}
 
 Reveal.on('ready', function (event) {
   set_fixed(event.currentSlide);
+  rv_armFragmentObserver();
+  rv_syncFragmentEffects(event.currentSlide);
   rv_queueFit();
   // Web fonts change text metrics when they land; re-fit once they are in.
   if (document.fonts && document.fonts.ready && document.fonts.ready.then) {

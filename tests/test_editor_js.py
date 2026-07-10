@@ -89,8 +89,18 @@ Math check $x^2$ trails words.
 
 > end: grid
 
+=== Anim
+> svg: anim.svg
+> animate: #dot fill:#00cc00
+> animate: #dot fill:#cccc00; opacity:0.5
+
+Stepping recolours the dot, then dims it.
+
 > include: inc.pres
 """
+
+ANIM_SVG = (b'<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100">'
+            b'<circle id="dot" cx="50" cy="50" r="20" fill="#cc0000"/></svg>')
 
 # A second source file, pulled in via `> include:`. Its pin (line 2) and
 # plain paragraph (line 6) let suite-multifile.js exercise per-file editing.
@@ -115,7 +125,7 @@ def chrome():
 def js_deck(deck):
     if not (REVEAL / "dist" / "reveal.js").is_file():
         pytest.skip("needs a reveal.js checkout at Demo/reveal.js")
-    pdir = deck(PRES, name="js", media={"inc.pres": INC})
+    pdir = deck(PRES, name="js", media={"inc.pres": INC, "anim.svg": ANIM_SVG})
     shutil.rmtree(pdir / "reveal.js")
     shutil.copytree(REVEAL, pdir / "reveal.js",
                     ignore=shutil.ignore_patterns(

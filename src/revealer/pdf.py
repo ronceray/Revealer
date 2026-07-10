@@ -44,17 +44,31 @@ def _find_chrome() -> str | None:
 _INIT_RE = re.compile(r"Reveal\.initialize\(\{")
 
 
-def _make_variant(html_path: Path) -> Path:
-    """Write a sibling HTML with fragment gating disabled (all content shown)."""
+def _make_variant(html_path: Path, force_fragments: bool = True) -> Path:
+    """Write a sibling HTML prepared for static page captures.
+
+    Transitions/animations are disabled in every mode: each page is one
+    screenshot, and a capture racing a 0.5s transition (fragment fades,
+    `> animate:` SVG steps) would otherwise show a transient state. With
+    ``force_fragments`` the variant additionally disables fragment gating so
+    every step is shown (the classic one-page-per-slide export).
+    """
     h = html_path.read_text(encoding="utf-8")
-    if not _INIT_RE.search(h):
-        raise RuntimeError(
-            "cannot locate Reveal.initialize() in the built HTML — "
-            "the PDF variant injection anchor is gone")
-    h = _INIT_RE.sub("Reveal.initialize({ fragments: false,", h, count=1)
+    if force_fragments:
+        if not _INIT_RE.search(h):
+            raise RuntimeError(
+                "cannot locate Reveal.initialize() in the built HTML — "
+                "the PDF variant injection anchor is gone")
+        h = _INIT_RE.sub("Reveal.initialize({ fragments: false,", h, count=1)
+        h = h.replace(
+            "</head>",
+            "<style>.fragment{opacity:1!important;visibility:visible!important;}"
+            "</style></head>",
+        )
     h = h.replace(
         "</head>",
-        "<style>.fragment{opacity:1!important;visibility:visible!important;}</style></head>",
+        "<style>*{transition:none !important;animation:none !important;}"
+        "</style></head>",
     )
     variant = html_path.with_name(
         "._pdf_variant-{0}.html".format(secrets.token_hex(6)))
@@ -175,9 +189,10 @@ def export_pdf(pres_or_html: str, out: str | None = None, width: int = 1920,
     html_text = html_path.read_text(encoding="utf-8")
     shots = _shot_list(html_text, separate)
     if separate:
-        # fragment states are addressed on the UNMODIFIED deck (#/h/v/f);
-        # a force-show variant would defeat the whole point
-        variant = html_path
+        # Fragment states are addressed by hash (#/h/v/f), so gating must stay
+        # enabled — the variant only strips transitions, so a capture can
+        # never show a half-played step.
+        variant = _make_variant(html_path, force_fragments=False)
         log("Rendering {0} pages (fragments separated) to PDF...".format(len(shots)))
     else:
         variant = _make_variant(html_path)
