@@ -2,6 +2,31 @@
 
 ## Unreleased
 
+### Language & build
+
+- **Stray markup characters no longer corrupt decks.** A `<` in prose or a
+  title ("the x < y case") used to be parsed as a tag and swallowed
+  everything after it; bare `&` produced invalid HTML. Both are now escaped
+  wherever author text lands — body, slide/deck titles, subtitle, author /
+  affiliation / event — while real inline HTML tags (`<u>…</u>`, `<br>`)
+  and entity escapes (`&nbsp;`, `&#61;`) still pass through. Titles and
+  identity fields now also render inline markdown, like every other text.
+- **Code blocks are literal.** `@@ … @@` bodies are HTML-escaped: `a < b`,
+  `&&`, or a literal `</section>` display as written instead of corrupting
+  the slide (or the PDF page count). The fence line still takes language
+  names / reveal attributes, minus anything that could close the tag.
+- **Settings can no longer break the page.** `> color:` and notes sizes are
+  CSS-sanitized; `background:`, `background-video:`, `theme:`, `codeTheme:`,
+  `logo:` are attribute-escaped; `slideNumber:` and every forwarded reveal
+  option are emitted as proper JS literals (`</` neutralized); markdown link
+  URLs cannot escape their `href`.
+- **Two `> notes:` blocks on one slide no longer crash the build** (they
+  merge; the first non-empty value is the size).
+- `***bold italic***` now renders properly nested (`<b><i>…</i></b>`) and
+  keeps its editor source map.
+- `.bib` files are read as UTF-8 regardless of locale; a non-UTF-8 `.pres`
+  reports file and byte offset instead of a raw UnicodeDecodeError.
+
 ### Editor
 
 - **Split mode: the slide selector spans only the area above the slide.**

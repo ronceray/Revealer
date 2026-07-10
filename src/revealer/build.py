@@ -193,7 +193,7 @@ class Bibtex:
             self.error = 'Bibtex file "{:s}" not found.'.format(bfile)
             return
 
-        with open(bfile) as bibtex_file:
+        with open(bfile, encoding="utf-8") as bibtex_file:
             try:
                 import bibtexparser
             except ImportError:
@@ -422,12 +422,44 @@ def _run_build_hooks(pdir: str, pres_text: str) -> None:
                     cmd, (proc.stderr or proc.stdout).strip()[-800:]))
 
 
-_MD_PROTECT_RE = re.compile(r"(\$\$.+?\$\$|\$[^$\n]+\$|<[^>]*>)")
+# Only plausible HTML tags (`<letter…>` / `</letter…>`) are protected as raw
+# passthrough; a stray `<` in prose ("x < y") is text and gets escaped.
+_MD_PROTECT_RE = re.compile(r"(\$\$.+?\$\$|\$[^$\n]+\$|</?[A-Za-z][^>]*>)")
 _MD_SPAN_RE = re.compile(r"\[([^\[\]]+)\]\{([^{}]+)\}")
 _MD_LINK_RE = re.compile(r"\[([^\[\]]+)\]\(([^()\s]+)\)")
 _MD_CODE_RE = re.compile(r"`([^`]+)`")
+_MD_BOLDITAL_RE = re.compile(r"\*\*\*(\S(?:[^*]*?\S)?)\*\*\*")
 _MD_BOLD_RE = re.compile(r"\*\*(\S(?:[^*]*?\S)?)\*\*")
 _MD_ITAL_RE = re.compile(r"(?<![\w*])\*(\S(?:[^*]*?\S)?)\*(?![\w*])")
+
+# A bare `&` in prose is escaped; something already entity-shaped (&nbsp;,
+# &#233;, &#xE9;) is the author writing HTML and passes through.
+_BARE_AMP_RE = re.compile(r"&(?![a-zA-Z][a-zA-Z0-9]*;|#\d+;|#[xX][0-9a-fA-F]+;)")
+
+
+def _escape_text(seg: str) -> str:
+    """Escape stray & / < in visible text (real tags are split out upstream)."""
+    return _BARE_AMP_RE.sub("&amp;", seg).replace("<", "&lt;")
+
+
+def _escape_plain(text: str) -> str:
+    """Text escape for tag-free contexts (<title>, code blocks): tags are
+    neutralized, but entity-shaped `&x;` passes — it is the author's escape
+    hatch for characters the parser would otherwise eat (e.g. `&#61;&#61;&#61;`
+    to show a literal slide marker inside a code block)."""
+    return _escape_text(text).replace(">", "&gt;")
+
+
+def _css_value(value) -> str:
+    """A value emitted inside a <style> block: keep only what a CSS colour /
+    length / function can contain, so it can neither close the rule nor the
+    element."""
+    return re.sub(r"[^-#%(),.\w\s]", "", str(value))
+
+
+def _md_link_sub(m):
+    return '<a href="{0}" target="_blank">{1}</a>'.format(
+        m.group(2).replace('"', "&quot;"), m.group(1))
 
 
 def _md_span_sub(m):
@@ -450,10 +482,12 @@ def _md_span_sub(m):
 
 
 def _md_segment(seg: str) -> str:
+    seg = _escape_text(seg)
     seg = seg.replace("\\*", "\x00").replace("\\`", "\x01").replace("\\[", "\x02")
     seg = _MD_CODE_RE.sub(r"<code>\1</code>", seg)
     seg = _MD_SPAN_RE.sub(_md_span_sub, seg)
-    seg = _MD_LINK_RE.sub(r'<a href="\2" target="_blank">\1</a>', seg)
+    seg = _MD_LINK_RE.sub(_md_link_sub, seg)
+    seg = _MD_BOLDITAL_RE.sub(r"<b><i>\1</i></b>", seg)
     seg = _MD_BOLD_RE.sub(r"<b>\1</b>", seg)
     seg = _MD_ITAL_RE.sub(r"<i>\1</i>", seg)
     return seg.replace("\x00", "*").replace("\x01", "`").replace("\x02", "[")
@@ -467,7 +501,8 @@ def _inline_md(text: str) -> str:
     """
     if not _MARKDOWN or not text:
         return text
-    if "*" not in text and "`" not in text and "[" not in text:
+    if ("*" not in text and "`" not in text and "[" not in text
+            and "<" not in text and "&" not in text):
         return text
     parts = _MD_PROTECT_RE.split(text)
     for i in range(0, len(parts), 2):
@@ -495,7 +530,9 @@ _MD_UNESCAPE = {"\x00\x1a": "*", "\x00\x1b": "`", "\x00\x1c": "["}
 def _seg_text(raw: str) -> str:
     for sent, ch in _MD_UNESCAPE.items():
         raw = raw.replace(sent, ch)
-    return raw
+    # Mirror _md_segment's stray-character escaping so the self-validation
+    # byte-compare in inline_segments keeps matching.
+    return _escape_text(raw)
 
 
 def _md_tokenize(seg: str, base: int, out: list) -> None:
@@ -508,12 +545,12 @@ def _md_tokenize(seg: str, base: int, out: list) -> None:
     while pos < len(seg):
         matches = []
         for name, regex in (("code", _MD_CODE_RE), ("span", _MD_SPAN_RE),
-                            ("link", _MD_LINK_RE), ("bold", _MD_BOLD_RE),
-                            ("ital", _MD_ITAL_RE)):
+                            ("link", _MD_LINK_RE), ("boldital", _MD_BOLDITAL_RE),
+                            ("bold", _MD_BOLD_RE), ("ital", _MD_ITAL_RE)):
             m = regex.search(seg, pos)
             if m:
-                matches.append((m.start(), ("code", "span", "link", "bold",
-                                            "ital").index(name), name, m))
+                matches.append((m.start(), ("code", "span", "link", "boldital",
+                                            "bold", "ital").index(name), name, m))
         if not matches:
             out.append([base + pos, base + len(seg), _seg_text(seg[pos:]), "text"])
             return
@@ -543,10 +580,15 @@ def _md_tokenize(seg: str, base: int, out: list) -> None:
                 out.append([base + a + 1 + len(m.group(1)), base + b,
                             "</span>", "markup"])
         elif name == "link":
-            open_tag = '<a href="{0}" target="_blank">'.format(m.group(2))
+            open_tag = '<a href="{0}" target="_blank">'.format(
+                _escape_text(m.group(2)).replace('"', "&quot;"))
             out.append([base + a, base + a + 1, open_tag, "markup"])
             _md_tokenize(m.group(1), base + a + 1, out)
             out.append([base + a + 1 + len(m.group(1)), base + b, "</a>", "markup"])
+        elif name == "boldital":
+            out.append([base + a, base + a + 3, "<b><i>", "markup"])
+            _md_tokenize(m.group(1), base + a + 3, out)
+            out.append([base + b - 3, base + b, "</i></b>", "markup"])
         elif name == "bold":
             out.append([base + a, base + a + 2, "<b>", "markup"])
             _md_tokenize(m.group(1), base + a + 2, out)
@@ -563,7 +605,8 @@ def inline_segments(text: str):
     if not text:
         return []
     if not _MARKDOWN or ("*" not in text and "`" not in text and "[" not in text
-                         and "$" not in text and "<" not in text):
+                         and "$" not in text and "<" not in text
+                         and "&" not in text):
         return [[0, len(text), text, "text"]]
     segs: list = []
     last = 0
@@ -1515,15 +1558,19 @@ def _contentify_legacy(html: str, src: list | None = None) -> str:
                 codemode = False
             else:
                 _close_lists()
+                # The fence token is emitted as raw <code> attributes (documented:
+                # language names / reveal attrs) — strip only what could close
+                # or reopen the tag.
+                fence = re.sub(r"[<>]", "", line[2:].strip())
                 html += '<pre><code class="codeblock"{:s}>'.format(
-                    " " + line[2:].strip() if len(line) > 2 else ""
+                    " " + fence if fence else ""
                 )
                 codemode = True
             index += 1
             continue
 
         if codemode:
-            html += line
+            html += _escape_plain(line)
 
         else:
 
@@ -1952,7 +1999,14 @@ def _read_pres(pfile: str) -> tuple[str, str]:
     map derived from this text is valid exactly as long as the hash matches.
     """
     data = Path(pfile).read_bytes()
-    return data.decode("utf-8"), hashlib.sha256(data).hexdigest()
+    try:
+        text = data.decode("utf-8")
+    except UnicodeDecodeError as exc:
+        raise RuntimeError(
+            "{0} is not valid UTF-8 (byte 0x{1:02x} at offset {2}). "
+            "Re-save the file as UTF-8 and rebuild.".format(
+                pfile, data[exc.start], exc.start)) from None
+    return text, hashlib.sha256(data).hexdigest()
 
 
 def build(pfile: str, dev: bool = False) -> str:
@@ -2221,13 +2275,17 @@ def _build(pfile: str, dev: bool) -> str:
 
     # --- Settings substitution
 
+    # Theme names land in href attributes; anything not name/path-like is
+    # dropped rather than escaped (a corrupted name should 404, not inject).
+    def _safe_name(value):
+        return re.sub(r"[^\w./-]", "", str(value))
+
     rList = [
-        ("<title>reveal.js</title>", "<title>" + setting["title"] + "</title>"),
-        ("__CODE_THEME__", setting["codeTheme"]),
-        ("__THEME__", setting["theme"]),
+        ("<title>reveal.js</title>",
+         "<title>" + _escape_plain(str(setting["title"])) + "</title>"),
+        ("__CODE_THEME__", _safe_name(setting["codeTheme"])),
+        ("__THEME__", _safe_name(setting["theme"])),
     ]
-    if "slideNumber" in setting:
-        rList.append(("slideNumber: false,", "slideNumber: '{:s}',".format(setting["slideNumber"])))
     for old, new in rList:
         out = out.replace(old, new)
 
@@ -2254,7 +2312,14 @@ def _build(pfile: str, dev: bool) -> str:
                 return s
         except Exception:
             pass
-        return "'" + s.replace("\\", "\\\\").replace("'", "\\'") + "'"
+        # `</` must not close the surrounding <script> element.
+        return "'" + (s.replace("\\", "\\\\").replace("'", "\\'")
+                       .replace("</", "<\\/")) + "'"
+
+    if "slideNumber" in setting:
+        out = out.replace(
+            "slideNumber: false,",
+            "slideNumber: {0},".format(_to_js_literal(setting["slideNumber"])))
 
     skip_keys = {
         "title",
@@ -2398,17 +2463,20 @@ def _build(pfile: str, dev: bool) -> str:
 
             if "background" in S["param"]:
                 if S["param"]["background"].find(".") == -1:
-                    opt += ' data-background-color="{:s}"'.format(S["param"]["background"])
+                    opt += ' data-background-color="{:s}"'.format(
+                        _escape_attr(S["param"]["background"]))
                 else:
-                    opt += ' data-background-image="{:s}"'.format(S["param"]["background"])
+                    opt += ' data-background-image="{:s}"'.format(
+                        _escape_attr(S["param"]["background"]))
 
             if "background-video" in S["param"]:
                 opacity = S["param"].get("background-opacity", "1")
                 opt += (
-                    " data-background-video='{0}' data-background-video-loop "
-                    "data-background-video-muted data-background-opacity={1} "
-                    "data-background-transition='none'".format(
-                        S["param"]["background-video"], opacity
+                    ' data-background-video="{0}" data-background-video-loop '
+                    'data-background-video-muted data-background-opacity="{1}" '
+                    'data-background-transition="none"'.format(
+                        _escape_attr(S["param"]["background-video"]),
+                        _escape_attr(str(opacity))
                     )
                 )
 
@@ -2433,7 +2501,7 @@ def _build(pfile: str, dev: bool) -> str:
                 content += (
                     "<style>.slide_{0} section, .slide_{0} h1, .slide_{0} h2, "
                     ".slide_{0} h3, .slide_{0} p {{ color: {1}; }}</style>".format(
-                        k, S["param"]["color"]
+                        k, _css_value(S["param"]["color"])
                     )
                 )
 
@@ -2450,13 +2518,13 @@ def _build(pfile: str, dev: bool) -> str:
                     logos = setting["logo"] if isinstance(setting["logo"], list) else [setting["logo"]]
                     headers += '<div id="hlogos">'
                     for logo in logos:
-                        headers += '<img src="{:s}">'.format(logo)
+                        headers += '<img src="{:s}">'.format(_escape_attr(logo))
                     headers += "</div>"
                     content += '<style>.slide_{:d} #hlogos {{ display: flex; }}</style>'.format(k)
 
-                body += "<h1>" + S["title"] + "</h1>"
+                body += "<h1>" + _inline_md(S["title"]) + "</h1>"
                 if "subtitle" in S["param"]:
-                    body += "<h2>" + S["param"]["subtitle"] + "</h2>"
+                    body += "<h2>" + _inline_md(S["param"]["subtitle"]) + "</h2>"
                 body += "<br>"
 
                 if "author" in setting:
@@ -2478,24 +2546,29 @@ def _build(pfile: str, dev: bool) -> str:
                                 body += '<div class="rv-author-photo rv-author-photo-missing">{:s}</div>'.format(
                                     _initials(author)
                                 )
-                            body += '<div class="rv-author-name">{:s}</div></div>'.format(author)
+                            body += '<div class="rv-author-name">{:s}</div></div>'.format(
+                                _inline_md(author))
                         body += "</div>"
                     else:
-                        body += '<div id="author">' + ", ".join(authors) + "</div>"
+                        body += ('<div id="author">'
+                                 + ", ".join(_inline_md(a) for a in authors)
+                                 + "</div>")
 
                 if "affiliation" in setting:
                     affils = setting["affiliation"] if isinstance(setting["affiliation"], list) else [setting["affiliation"]]
-                    body += '<div id="affiliation">' + "<br>".join(affils) + "</div>"
+                    body += ('<div id="affiliation">'
+                             + "<br>".join(_inline_md(a) for a in affils)
+                             + "</div>")
 
                 if "event" in setting:
-                    body += '<div id="event">' + setting["event"] + "</div>"
+                    body += '<div id="event">' + _inline_md(setting["event"]) + "</div>"
 
             case "section":
                 S["param"]["header"] = "none"
                 if S["param"].get("relief") == "none":
-                    body += "<h1>" + S["title"] + "</h1>"
+                    body += "<h1>" + _inline_md(S["title"]) + "</h1>"
                 else:
-                    body += '<h1 class="relief">' + S["title"] + "</h1>"
+                    body += '<h1 class="relief">' + _inline_md(S["title"]) + "</h1>"
 
             case "biblio":
                 if biblio is not None:
@@ -2505,7 +2578,7 @@ def _build(pfile: str, dev: bool) -> str:
                     for i in range(npages):
                         content += '<section data-transition="none" data-state="slide_{:d}"{:s}>'.format(
                             k + i, _src_attr(S.get("src")))
-                        title = S["param"].get("title", S["title"])
+                        title = _inline_md(S["param"].get("title", S["title"]))
                         if npages == 1:
                             content += '<div class="slide_header">{:s}</div>'.format(title)
                         else:
@@ -2522,7 +2595,8 @@ def _build(pfile: str, dev: bool) -> str:
                 continue
 
             case _:
-                content += '<div class="slide_header">{:s}</div>'.format(S["title"])
+                content += '<div class="slide_header">{:s}</div>'.format(
+                    _inline_md(S["title"]))
 
         if S["param"].get("header") == "none":
             content += "<style>.slide_{:d} header {{ display: none; }}</style>".format(k)
@@ -2553,7 +2627,13 @@ def _build(pfile: str, dev: bool) -> str:
 
         notes_html = ""
         if len(S["notes"]):
+            # `> notes:` doubles as the per-slide size param; a second block on
+            # the same slide turns the param into a list (never a size).
             nS = S["param"].get("notes", setting["notesSize"])
+            if isinstance(nS, list):
+                nS = next((v for v in nS if str(v).strip()), "")
+            nS = (re.sub(r"[^\w.%-]", "", str(nS).strip())
+                  or re.sub(r"[^\w.%-]", "", str(setting["notesSize"])) or "24px")
             notes_html = (
                 '<aside class="notes"><style>.speaker-controls-notes {font-size: '
                 + nS
