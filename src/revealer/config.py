@@ -14,7 +14,11 @@ import tomli_w
 
 
 def config_dir() -> Path:
-    base = os.environ.get("XDG_CONFIG_HOME") or os.path.expanduser("~/.config")
+    base = os.environ.get("XDG_CONFIG_HOME")
+    if not base and os.name == "nt":
+        base = os.environ.get("APPDATA")
+    if not base:
+        base = os.path.expanduser("~/.config")
     return Path(base) / "revealer"
 
 

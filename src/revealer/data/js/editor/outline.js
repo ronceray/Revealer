@@ -135,7 +135,7 @@
         F.rvPostEdit([{ op: 'insert_lines',
           at: { insert_before: span.e + 1, container_kind: 'deck' },
           text: [''].concat(j.lines || []) }]);
-      });
+      }, '', 'outline');
     } else if (act === 'up') {
       var prev = spanOf(secs[i - 1]);
       if (!prev || isInc(secs[i - 1])) return;

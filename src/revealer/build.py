@@ -363,6 +363,44 @@ _BLOCK_END_RE = re.compile(r"^>\s*end\s*:\s*\w+\s*$")
 
 
 _MARKDOWN = True  # set per-build from `> markdown:` (default on)
+_PDIR = ""        # deck folder of the build in progress (media existence checks)
+
+
+def _warn(lineno, msg: str) -> None:
+    """Build diagnostic: silent content loss is the worst failure mode of a
+    line-oriented DSL, so anything the parser DROPS gets a warning (printed
+    by the CLI and the dev server's terminal)."""
+    where = "line {0}: ".format(lineno) if lineno else ""
+    print("Warning: {0}{1}".format(where, msg))
+
+
+_OPENER_RE = re.compile(
+    r"^>\s*(info|warn|good|eq|grid|stack|row|pin|table)\b")
+
+
+def _warn_swallowed(kind, opener_line, content, content_src):
+    """An unclosed callout/eq that ran to the end of its slice is fine when it
+    just hit a boundary (sanctioned auto-close style) — but if it absorbed
+    another construct opener, that block silently nested inside it."""
+    for i, ln in enumerate(content):
+        m = _OPENER_RE.match(ln.strip()) if ln else None
+        if m:
+            at = content_src[i] if i < len(content_src) else None
+            _warn(opener_line,
+                  "'> {0}' is never closed and swallowed '> {1}'{2} — "
+                  "add '> end: {0}' before it".format(
+                      kind, m.group(1),
+                      " (line {0})".format(at) if at else ""))
+            return
+
+
+# Construct children that only mean something inside their parent — the
+# fallthrough warning names the missing parent instead of a generic message.
+_CHILD_HINTS = {
+    "card": "> card belongs inside a > grid(...) block",
+    "layer": "> layer belongs inside a > stack block",
+    "col": "> col belongs inside a > row block",
+}
 
 _PDIR = ""  # deck folder of the build in progress (set per-build)
 
@@ -1200,9 +1238,6 @@ def _contentify_legacy(html: str, src: list | None = None) -> str:
         # the grid *does* have a definite height (fill slides, grid-only slides).
         row_tmpl = "auto" if compact else "minmax(min-content,1fr)"
         out = (
-            "<style>"
-            ".rv-content-inner:has(> .rv-grid-wrap){{height:100%;}}"
-            "</style>"
             '<div class="{wrap_cls}" style="padding:{margin};">'
             '<div class="rv-grid" style="grid-template-columns:repeat({cols},minmax(0,1fr));'
             'grid-template-rows:repeat({rows},{row_tmpl});gap:{gap};">'
@@ -1421,6 +1456,8 @@ def _contentify_legacy(html: str, src: list | None = None) -> str:
             content.append(line)
             content_src.append(src[index])
             index += 1
+        else:
+            _warn_swallowed(kind, src[start_index], content, content_src)
         body = _contentify_legacy("\n".join(content), src=content_src) if content else ""
         title_html = '<div class="box-title">{0}</div>'.format(_inline_md(title)) if title else ""
         out = '<div class="{bc}{fcls}"{fattr}{sa}>{title}{body}</div>'.format(
@@ -1442,6 +1479,9 @@ def _contentify_legacy(html: str, src: list | None = None) -> str:
                 break
             content.append(line)
             index += 1
+        else:
+            _warn_swallowed("eq", src[start_index], content,
+                            src[start_index + 1:index])
         body = "\n".join(content).strip()
         if body and "$$" not in body and "$" not in body:
             body = "$$" + body + "$$"
@@ -1618,7 +1658,13 @@ def _contentify_legacy(html: str, src: list | None = None) -> str:
             if dispatched:
                 continue
 
-            if re.match(r"^>\s*end\s*:\s*\w+\s*$", line):
+            stray_end = re.match(r"^>\s*end\s*:\s*(\w+)\s*$", line)
+            if stray_end:
+                # Construct parsers consume their own end token; one reaching
+                # this point closes nothing (typo'd name or nothing open).
+                _warn(src[index] if index < len(src) else None,
+                      "stray '> end: {0}' (no open {0} block here)".format(
+                          stray_end.group(1)))
                 _close_lists()
                 index += 1
                 continue
@@ -1812,6 +1858,9 @@ def _media_shortcut(kind: str, rest: str, lineno: int | None = None) -> str:
     if not tokens:
         return ""
     path = tokens[0]
+    if (_PDIR and "://" not in path
+            and not os.path.exists(os.path.join(_PDIR, path))):
+        _warn(lineno, "media file not found: {0}".format(path))
     # `h=`/`w=` set a fixed height/width (e.g. a logo strip: `! logo.png h=80px`);
     # `+` / `+N` reveal the media as a (optionally indexed) fragment.
     size_css = ""
@@ -2061,6 +2110,8 @@ def _build(pfile: str, dev: bool) -> str:
     pres_text, pres_sha = _read_pres(pfile)
     global _MARKDOWN, _PDIR
     _MARKDOWN = True
+    global _PDIR
+    _PDIR = pdir
     _PDIR = pdir
     _run_build_hooks(pdir, pres_text)
 
@@ -2157,6 +2208,11 @@ def _build(pfile: str, dev: bool) -> str:
                 # content stream so contentify() renders it (never a param).
                 if len(slide) and not notes and re.match(
                         r"^\s*>\s*space\s*(?::.*)?$", line):
+                    if re.match(r"^\s*>\s*space\s*$", line):
+                        # Bare `> space` is a *filling* spacer: judged against
+                        # the slide's fill-ness once parsing is done.
+                        slide[-1]["param"].setdefault(
+                            "_bare_space_lines", []).append(lineno)
                     _slide_append(slide[-1], line, lineno)
                     continue
 
@@ -2173,6 +2229,14 @@ def _build(pfile: str, dev: bool) -> str:
                     continue
 
                 x = re.match(r"^(\s*)>\s*([^:]*):\s*(.*)", line)
+                if not x and len(slide) and not notes:
+                    # Nothing consumed this directive: not a construct opener,
+                    # not a `key: value` setting — it would vanish silently.
+                    token = re.match(r">\s*([\w-]+)", line)
+                    hint = _CHILD_HINTS.get(token.group(1) if token else "")
+                    _warn(lineno, "unrecognized directive dropped: {0}{1}".format(
+                        line.strip(),
+                        " ({0}?)".format(hint) if hint else ""))
                 if x:
                     indent, key, value = x.group(1), x.group(2), x.group(3)
 
@@ -2611,6 +2675,10 @@ def _build(pfile: str, dev: bool) -> str:
         # position in the slide HTML. Otherwise keep legacy behaviour and
         # prefix the SVG before the slide content.
         fill_mode = bool(S["param"].get("fill"))
+        if not fill_mode:
+            for _ln in S["param"].get("_bare_space_lines", []):
+                _warn(_ln, "bare '> space' fills only inside a '> fill' slide "
+                           "(use '> space: <size>' here)")
         placeholder = S["param"].get("_svg_placeholder") if "param" in S else None
         if placeholder and placeholder in S["html"]:
             body += contentify(

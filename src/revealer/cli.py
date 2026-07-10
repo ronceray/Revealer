@@ -180,7 +180,13 @@ def _action_new(name: str, here: bool) -> None:
 
 
 def _action_build(pres: Path) -> None:
-    out = build_presentation(str(pres))
+    try:
+        out = build_presentation(str(pres))
+    except RuntimeError as exc:
+        # Build errors are user errors (bad UTF-8, failing hook…): show the
+        # message, not a traceback.
+        console.print("[red]Build failed:[/red] {0}".format(exc))
+        raise typer.Exit(1)
     console.print(i18n.t("cli.built", path=out))
 
 

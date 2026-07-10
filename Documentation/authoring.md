@@ -687,3 +687,21 @@ Reuse your LaTeX macros in the settings block, either from a `.tex` file of
 Argument counts (`[2]`) can be declared but are dropped: KaTeX infers arity
 from `#n` in the body. Custom `> katex: { ... }` options merge with the
 bundled-KaTeX config and the macros instead of replacing them.
+
+## Build diagnostics
+
+The build never fails on a syntax mistake — but it no longer stays silent
+either. Anything the parser has to drop or reinterpret prints a
+`Warning: line N: …` in the terminal (both `revealer build` and the live
+`revealer serve` log):
+
+- an unrecognized `>` directive (e.g. a typo like `> grid(a,b)`), with a
+  hint when it looks like a construct child outside its parent
+  (`> card` without a `> grid`);
+- a stray `> end: name` that closes nothing;
+- a callout or equation block that is never closed **and** swallowed the
+  next construct into itself (auto-closing at a slide or column boundary
+  is fine and stays silent);
+- a bare `> space` outside a `> fill` slide (it only *fills* there —
+  use `> space: <size>` elsewhere);
+- a media path (`!` / `!!`) that does not exist on disk.

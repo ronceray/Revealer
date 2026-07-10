@@ -178,7 +178,8 @@ def _watch(sess: DevSession, stop: threading.Event, log=print) -> None:
                 if ext not in _MEDIA_EXT and ext not in _REBUILD_EXT:
                     continue
                 p = os.path.join(root, name)
-                if ext == ".pres" and os.path.realpath(p) == str(sess.pres):
+                if ext == ".pres" and (os.path.normcase(os.path.realpath(p))
+                                       == os.path.normcase(str(sess.pres))):
                     continue  # the sha loop below owns the main file
                 if name.startswith(".rv-preview"):
                     continue  # transient history-preview build inputs/outputs
@@ -1112,7 +1113,13 @@ class _Handler(http.server.SimpleHTTPRequestHandler):
         name = os.path.basename(self._query().get("name", "")).strip()
         ext = os.path.splitext(name)[1].lower()
         allowed = set().union(*self._UPLOAD_ROUTES.values()) | {".pdf"}
-        if not name or ext not in allowed:
+        stem = os.path.splitext(name)[0]
+        reserved = re.fullmatch(r"(?i)(CON|PRN|AUX|NUL|COM[1-9]|LPT[1-9])", stem)
+        if (not name or ext not in allowed or reserved
+                or name != name.rstrip(". ")):
+            # Reserved device names and trailing dots/spaces are legal on
+            # POSIX but undeletable/aliased on Windows — the deck should stay
+            # portable across the planned platforms.
             return self._send_json(400, {"error": "bad name", "name": name})
         try:
             body = self._read_body()

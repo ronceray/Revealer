@@ -152,19 +152,26 @@
   var srcEpoch = 0;
   var srcCtl = null;
 
-  function fetchSrc(start, end, cb, file) {
-    srcEpoch += 1;
-    var epoch = srcEpoch;
-    if (srcCtl) { try { srcCtl.abort(); } catch (e) {} }
+  // One epoch/abort slot per consumer key: a panel re-render must supersede
+  // the panel's own in-flight fetch, but not an outline action's (a shared
+  // epoch silently dropped whichever response lost the race).
+  var srcSlots = {};
+
+  function fetchSrc(start, end, cb, file, key) {
+    var slot = srcSlots[key || 'panel'] ||
+               (srcSlots[key || 'panel'] = { epoch: 0, ctl: null });
+    slot.epoch += 1;
+    var epoch = slot.epoch;
+    if (slot.ctl) { try { slot.ctl.abort(); } catch (e) {} }
     var ctl = window.AbortController ? new AbortController() : null;
-    srcCtl = ctl;
+    slot.ctl = ctl;
     fetch('/__rv__/src?start=' + start + '&end=' + end +
           '&token=' + encodeURIComponent(TOKEN) +
           (file ? '&file=' + encodeURIComponent(file) : ''),
           ctl ? { signal: ctl.signal } : undefined)
       .then(function (r) { return r.json(); })
       .then(function (j) {
-        if (epoch !== srcEpoch) return;
+        if (epoch !== slot.epoch) return;
         cb(j);
       })
       .catch(function () { /* aborted or unreachable — nothing to fill */ });

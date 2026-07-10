@@ -3,7 +3,7 @@
 /* --- z-scale (single source of truth for editor chrome stacking) ----------
     9000 #rv-editor-layer (grips/outlines live inside its own context)
     9400 #rv-ed-slotbar
-    9600 #rv-ed-drawer #rv-ed-outline    9610 #rv-ed-panel    9650 #rv-ed-divider
+    9600 #rv-ed-drawer    9610 #rv-ed-panel    9620 #rv-ed-outline    9650 #rv-ed-divider
     9700 #rv-ed-toolbar (edit band) / #rv-ed-pill (preview)
     9810 #rv-ed-help       9820 #rv-ed-history
     9840 #rv-ed-templates (new-slide gallery modal)
@@ -124,17 +124,6 @@
 }
 #rv-editor-layer .rv-ed-kind { font-weight: 700; }
 #rv-editor-layer .rv-ed-line { color: #9db7e8; font-family: monospace; }
-#rv-editor-layer .rv-ed-open {
-  font: inherit;
-  font-size: 13px;
-  padding: 0.2em 0.7em;
-  border-radius: 5px;
-  border: 1px solid #4a5580;
-  background: #2a3350;
-  color: #fff;
-  cursor: pointer;
-}
-#rv-editor-layer .rv-ed-open:hover { background: #37436b; }
 #rv-editor-layer .rv-ed-hint { color: #8a93b5; font-size: 12px; }
 html.rv-edit .reveal .slides section * { cursor: crosshair; }
 
@@ -237,7 +226,7 @@ html.rv-edit .reveal .slides section * { cursor: crosshair; }
 #rv-ed-drawer {
   position: fixed;
   right: 14px;
-  top: 14px;
+  top: 56px;
   width: 260px;
   max-height: 70vh;
   overflow: auto;
@@ -281,7 +270,9 @@ html.rv-edit .reveal .slides section * { cursor: crosshair; }
   border-bottom: 1px solid #2a3350;
   font: 13px system-ui, sans-serif;
   box-shadow: 0 12px 24px rgba(0, 0, 0, 0.4);
-  z-index: 9600;
+  /* Above the floating panel: in docked mode the strip is full-width and its
+     right end was hidden under it (split mode insets the strip instead). */
+  z-index: 9620;
 }
 #rv-ed-outline .rv-box-body { padding: 0; }
 #rv-ed-outline .rv-ol-list {
@@ -414,10 +405,10 @@ html:not(.rv-edit) #rv-ed-toolbar { display: none; }
 
 #rv-ed-panel {
   position: fixed;
-  top: 12px;
+  top: 56px;              /* clear of the 44px command band */
   right: 12px;
   width: 280px;
-  max-height: calc(100vh - 24px);
+  max-height: calc(100vh - 68px);
   overflow-y: auto;
   display: none;
   flex-direction: column;
@@ -577,17 +568,6 @@ body.rv-split #rv-ed-outline {
 }
 #rv-ed-templates .rv-tpl-card .nm { font-size: 12px; font-weight: 600; color: #e7ecf7; margin: 6px 2px 1px; }
 #rv-ed-templates .rv-tpl-card .ds { font-size: 10.5px; color: #8a93b5; margin: 0 2px; line-height: 1.3; }
-#rv-ed-panel .rv-cs-sec { margin: 6px 0; }
-#rv-ed-panel .rv-cs-sec b { color: #9db7e8; font-size: 12px; }
-#rv-ed-panel .rv-cs-sec pre {
-  margin: 2px 0 0;
-  padding: 5px 7px;
-  background: #12121f;
-  border-radius: 5px;
-  font: 10.5px/1.6 ui-monospace, monospace;
-  color: #d7e0f5;
-  white-space: pre-wrap;
-}
 
 /* --- split view v2: slide fitted with controls off the canvas ----------------
    The reveal box is shrunk by split.js to a centred, aspect-correct rectangle
@@ -628,7 +608,6 @@ body.rv-split #rv-editor-layer .rv-ed-bar {
   bottom: 8px;
   left: calc((100vw - var(--rv-pw)) / 2);
 }
-body.rv-split #rv-ed-panel { padding-top: 12px; }
 
 /* --- format bar --------------------------------------------------------------- */
 #rv-ed-panel .rv-fmt { display: flex; gap: 4px; align-items: center; margin-bottom: 4px; flex-wrap: wrap; }
@@ -644,8 +623,6 @@ body.rv-split #rv-ed-panel { padding-top: 12px; }
   font: 13px system-ui, sans-serif;
   box-shadow: 0 12px 40px rgba(0,0,0,.4); z-index: 9820;
 }
-#rv-ed-history .rv-hi-head { display: flex; gap: 8px; align-items: center; }
-#rv-ed-history .rv-hi-head b { flex: 1; }
 #rv-ed-history button {
   font: 12px system-ui; background: #2a3350; color: #fff;
   border: 1px solid #4a5580; border-radius: 5px; padding: 2px 8px; cursor: pointer;

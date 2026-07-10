@@ -55,6 +55,32 @@
   undefined; the chip now falls back to the deck name and fills in the
   number on reveal's `ready`.
 
+### Language & build (diagnostics)
+
+- **The build now warns instead of staying silent** when it drops content:
+  unrecognized directives (`> grid(a,b)` typos — with a hint when a
+  construct child like `> card` sits outside its parent), stray
+  `> end: name`, an unclosed callout/equation that swallowed the next
+  construct, a bare `> space` outside `> fill`, and `!`/`!!` media paths
+  that don't exist. Sanctioned styles (auto-close at slide/column
+  boundaries) stay silent. Warnings appear in `revealer build` output and
+  the `revealer serve` terminal; `revealer build` shows a clean message
+  instead of a traceback for build errors.
+
+### Editor & portability polish
+
+- The properties panel and fragment drawer sit below the command band (their
+  first rows were hidden behind it); in docked mode the slide selector now
+  overlays the floating panel instead of hiding under it.
+- Uploads reject Windows-reserved filenames (`CON.png`, trailing dots);
+  GUI edits preserve the `.pres` file's permission bits; the config lives
+  in `%APPDATA%` on Windows; `revealer update` downloads time out instead
+  of hanging; the watcher's main-file check is case-insensitive-safe.
+- Panel and outline source fetches no longer cancel each other (a duplicate
+  click could be silently dropped by a concurrent panel refresh); removed
+  dead CSS rules, 13 dead i18n keys, and the never-matching `:has()` rule
+  emitted with every grid.
+
 ### Dev server & CLI
 
 - **The "first build failed" page is now alive**: it shows the actual error

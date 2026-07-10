@@ -299,7 +299,8 @@ def inject_revealer_assets(reveal_dir: str) -> None:
 # --- reveal.js + plugin download --------------------------------------------
 
 def _download(url: str) -> bytes:
-    with urlopen(url) as resp:  # noqa: S310 - pinned GitHub URLs only
+    # A stalled connection must fail, not hang `revealer new/update` forever.
+    with urlopen(url, timeout=60) as resp:  # noqa: S310 - pinned GitHub URLs only
         return resp.read()
 
 

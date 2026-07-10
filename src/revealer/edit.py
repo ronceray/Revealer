@@ -595,6 +595,12 @@ def apply_edits(path: Path, sha256: str, edits: list[dict]) -> dict:
     try:
         with os.fdopen(fd, "wb") as f:
             f.write(new_data)
+        # mkstemp creates 0600; keep the .pres's own mode (group/other bits
+        # used to be silently dropped by the first GUI edit).
+        try:
+            os.chmod(tmp, os.stat(path).st_mode & 0o7777)
+        except OSError:
+            pass
         os.replace(tmp, path)
     except BaseException:
         try:
