@@ -13,6 +13,15 @@
 
   F.buildToolbar();
 
+  // Restore a saved editing session (slide, edit mode, selection) — armed
+  // HERE, after every module has populated RV.fn, never in core.js: on a
+  // cache-warm reload Reveal is ready before the editor modules run, and
+  // restoreState needs F.setEdit / F.toggleDrawer / F.toggleOutline.
+  if (window.Reveal && Reveal.on) {
+    if (Reveal.isReady && Reveal.isReady()) F.restoreState();
+    else Reveal.on('ready', F.restoreState);
+  }
+
   // The grammar schema drives the side-panel command palette. Load it once;
   // re-sync the panel if it is already open when the schema lands.
   RV.schema = null;

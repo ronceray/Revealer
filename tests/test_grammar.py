@@ -94,3 +94,17 @@ def test_cheat_is_three_field_and_lede_neutral():
     # A Fragments group exists for the * + bullet marker.
     assert any(cat == "Fragments" and "* +" in chip
                for cat, chip, _ in grammar.STATIC_CHEAT)
+
+
+def test_scoped_text_directives_have_their_own_cheat_group():
+    """`> size:` / `> align:` / `> paragraph-spacing:` restyle a slide or
+    block scope — they live in a dedicated group, not under Inline format."""
+    by_cat = {}
+    for cat, chip, _ in grammar.STATIC_CHEAT:
+        by_cat.setdefault(cat, []).append(chip)
+    scoped = " ".join(by_cat.get("Sizes & alignment", []))
+    assert "> size:" in scoped
+    assert "> align:" in scoped
+    assert "> paragraph-spacing:" in scoped
+    inline = " ".join(by_cat.get("Inline format", []))
+    assert "> size:" not in inline and "> align:" not in inline

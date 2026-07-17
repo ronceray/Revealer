@@ -134,11 +134,27 @@
     location.reload();
   }
 
+  // The restore key is written immediately before location.reload(), so it
+  // is only ever meant for a RELOAD navigation. A fresh load can still find
+  // one (an editing iframe torn down between the write and its reload — the
+  // test harness does exactly this); adopting another document's editing
+  // session there would be wrong, so the key is dropped instead.
+  function isReloadNav() {
+    try {
+      var nav = performance.getEntriesByType &&
+                performance.getEntriesByType('navigation');
+      if (nav && nav.length) return nav[0].type === 'reload';
+    } catch (e) {}
+    try { return performance.navigation.type === 1; } catch (e) {}
+    return true;   // cannot tell — honor the key
+  }
+
   function restoreState() {
     var raw = null;
     try { raw = sessionStorage.getItem(RESTORE_KEY); } catch (e) {}
     if (!raw) return;
     try { sessionStorage.removeItem(RESTORE_KEY); } catch (e) {}
+    if (!isReloadNav()) return;
     try {
       var s = JSON.parse(raw);
       // `hash: true` usually restores the slide already; this also restores
@@ -157,13 +173,20 @@
         if (s.drawer) F.toggleDrawer();
         if (s.outline) F.toggleOutline();
       }
-    } catch (e) {}
+    } catch (e) {
+      // A restore must never break boot, but it must not fail silently
+      // either — a swallowed TypeError here once cost every editing
+      // session its edit mode on save.
+      try { console.warn('revealer: session restore failed', e); } catch (e2) {}
+    }
   }
 
-  if (window.Reveal && Reveal.on) {
-    if (Reveal.isReady && Reveal.isReady()) restoreState();
-    else Reveal.on('ready', restoreState);
-  }
+  // NOT armed here: restoreState calls F.setEdit / F.toggleDrawer /
+  // F.toggleOutline, which later modules define. On a cache-warm reload
+  // Reveal is often ready before this module runs, so arming now would
+  // call restoreState with those still undefined (the TypeError vanished
+  // in the catch above and edit mode silently failed to survive a save).
+  // boot.js — the last editor module — arms it instead.
 
   function curSha() {
     var m = document.querySelector('meta[name="rv-src-sha"]');
@@ -284,6 +307,7 @@
   // exports (what other editor/ modules call):
   F.escapeHtml = escapeHtml;
   F.saveStateAndReload = saveStateAndReload;
+  F.restoreState = restoreState;
   F.curSha = curSha;
   F.fileOf = fileOf;
   F.fileSha = fileSha;

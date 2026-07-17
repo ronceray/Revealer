@@ -63,9 +63,16 @@ $$display$$
 [x]{.accent}
 [x]{color}
 {.title/.lede/.sm/.fine}
-> size:
-> align:
 escape \* \` \[
+```
+
+**Sizes & alignment**
+
+```text
+> size: 80%
+> size: lede
+> align:
+> paragraph-spacing:
 ```
 
 **Components**

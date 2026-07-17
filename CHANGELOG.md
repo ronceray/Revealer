@@ -4,6 +4,12 @@
 
 ### Language & build
 
+- **`> size:` now works inside `> … > end:` blocks** (callout boxes, cards,
+  fragments, table cells): like the existing in-block `> align:`, it applies
+  from that line to the end of the block (`> size: reset` returns to the
+  block's default) instead of leaking into the slide as literal text. When
+  both directives are active they share one wrapper, so interleaving them
+  can no longer produce mismatched markup.
 - **Stray markup characters no longer corrupt decks.** A `<` in prose or a
   title ("the x < y case") used to be parsed as a tag and swallowed
   everything after it; bare `&` produced invalid HTML. Both are now escaped
@@ -29,6 +35,16 @@
 
 ### Editor
 
+- **Edit mode survives saves.** Every save (and structural edit — new slide,
+  block move, delete) rebuilds the deck and reloads the page; the session
+  restore that should re-enter edit mode ran before the module defining it
+  had loaded, so the editor silently dropped to presentation mode on every
+  save. Restore now runs after all editor modules are up, and the restore
+  key is honored only by the reload it was written for.
+- **The command cheatsheet gained a "Sizes & alignment" group** — `> size:`
+  (factor and role forms), `> align:`, and the previously missing
+  `> paragraph-spacing:` — replacing the two entries misfiled under
+  "Inline format". The docs' quick syntax card follows automatically.
 - **Gesture edits on included slides now rewrite the right file.** Pin drags
   and nudges, media resizes, row/stack height drags, column splits, block
   moves, fragment reorders and media drops posted their edits with no file,

@@ -237,10 +237,12 @@
 
   // Preferred category order for the palette; unknown categories append after.
   var PALETTE_ORDER = ['Slides', 'Layout', 'Media', 'Components',
-                       'Text & math', 'Fragments', 'Inline format'];
+                       'Text & math', 'Sizes & alignment', 'Fragments',
+                       'Inline format'];
   var CAT_KEY = {
     'Slides': 'cheat.slides', 'Layout': 'cheat.layout', 'Media': 'cheat.media',
     'Components': 'cheat.components', 'Text & math': 'cheat.textMath',
+    'Sizes & alignment': 'cheat.sizesAlign',
     'Fragments': 'cheat.fragments', 'Inline format': 'cheat.inlineFormat',
   };
 

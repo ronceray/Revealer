@@ -292,9 +292,14 @@ STATIC_CHEAT: tuple[tuple[str, str, str], ...] = (
     # Sizes are a theme-defined scale, not literally "big"/"small"
     # (`.lede` is smaller than body text in some themes, e.g. SFI).
     ("Inline format", "{.title/.lede/.sm/.fine}", "[text]{.lede}"),
-    ("Inline format", "> size:", "> size: lede\n"),
-    ("Inline format", "> align:", "> align: center\n"),
     ("Inline format", "escape \\* \\` \\[", "\\"),
+    # Scoped text directives (authoring.md § Sizes and alignment): alone at
+    # the top of a slide or column block they restyle that whole scope;
+    # attached to a paragraph, just that paragraph.
+    ("Sizes & alignment", "> size: 80%", "> size: 80%\n"),
+    ("Sizes & alignment", "> size: lede", "> size: lede\n"),
+    ("Sizes & alignment", "> align:", "> align: center\n"),
+    ("Sizes & alignment", "> paragraph-spacing:", "> paragraph-spacing: 0.5\n"),
 )
 
 

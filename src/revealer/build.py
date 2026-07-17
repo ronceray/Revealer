@@ -1001,7 +1001,11 @@ def _contentify_legacy(html: str, src: list | None = None) -> str:
     html = ""
     codemode = False
     colmode = False
-    alignmode = False
+    # `> align:` / `> size:` from here on share ONE wrapper div — two nested
+    # divs would close in the wrong order when the directives interleave.
+    align_now = None    # left | center | right | justify | None
+    size_now = None     # font scale (float) | None
+    wrapper_open = False
 
     # Stack to manage nested unordered lists: one entry per open <ul>
     ul_stack: list[int] = []
@@ -1034,23 +1038,52 @@ def _contentify_legacy(html: str, src: list | None = None) -> str:
             ul_stack.pop()
             li_open.pop()
 
-    def _close_align():
-        nonlocal html, alignmode
-        if alignmode:
+    def _reopen_wrapper():
+        # Close the shared wrapper, and reopen it if any directive is active.
+        # Align keeps its historical markup exactly; size adds an inline
+        # font-size (em, so it cascades with the block's own size).
+        nonlocal html, wrapper_open
+        if wrapper_open:
             html += "</div>"
-            alignmode = False
+            wrapper_open = False
+        if align_now is None and size_now is None:
+            return
+        cls = ("rv-align rv-align-{0}".format(align_now) if align_now
+               else "rv-size")
+        style = (' style="font-size:{:.4f}em"'.format(size_now)
+                 if size_now is not None else "")
+        html += '<div class="{0}"{1}>'.format(cls, style)
+        wrapper_open = True
+
+    def _close_align():
+        nonlocal align_now, size_now
+        align_now = None
+        size_now = None
+        _reopen_wrapper()
 
     def _open_align(value: str) -> bool:
-        nonlocal html, alignmode
+        nonlocal align_now
         align = value.strip().lower()
         if align in {"none", "default", "reset"}:
-            _close_align()
-            return True
-        if align not in {"left", "center", "right", "justify"}:
+            align_now = None
+        elif align in {"left", "center", "right", "justify"}:
+            align_now = align
+        else:
             return False
-        _close_align()
-        html += '<div class="rv-align rv-align-{0}">'.format(align)
-        alignmode = True
+        _reopen_wrapper()
+        return True
+
+    def _open_size(value: str) -> bool:
+        nonlocal size_now
+        text = value.strip()
+        if text.lower() in {"none", "default", "reset"}:
+            size_now = None
+        else:
+            scale = _parse_scale(text, None)
+            if scale is None:
+                return False
+            size_now = scale
+        _reopen_wrapper()
         return True
 
     def _escape_style_value(value: str) -> str:
@@ -1620,6 +1653,19 @@ def _contentify_legacy(html: str, src: list | None = None) -> str:
             if align:
                 _close_lists()
                 if not _open_align(align.group(1)):
+                    html += line + "\n"
+                index += 1
+                continue
+
+            # --- Text size: `> size:` from here on (a slide's or column's
+            # own size directives are consumed by the paragraph model; the
+            # ones reaching this renderer sit inside macro blocks — callout
+            # boxes, cards, fragments, table cells).
+
+            sizem = re.match(r"^>\s*size\s*:\s*(.*?)\s*$", line)
+            if sizem:
+                _close_lists()
+                if not _open_size(sizem.group(1)):
                     html += line + "\n"
                 index += 1
                 continue

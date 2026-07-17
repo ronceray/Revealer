@@ -218,6 +218,9 @@ Your LaTeX macros can be reused with [`> macros:` / `> macro:`](#katex-macros).
   blank line in between): they affect only that paragraph.
 - **Alone** (followed by a blank line) at the top of a slide or a column:
   they become the default for that slide or that block.
+- **Inside a `> … > end:` block** (callout box, card, fragment, table
+  cell): they apply from that line to the end of the block —
+  `> size: reset` / `> align: none` returns to the block's default.
 - **In the settings block**: they become the presentation default.
 
 `size` factors cascade multiplicatively (presentation × slide × block ×
