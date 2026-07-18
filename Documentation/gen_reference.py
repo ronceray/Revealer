@@ -3,10 +3,14 @@
 ``src/revealer/grammar.py`` is the single source of truth for the ``.pres``
 construct grammar (it also drives the parser, the semantic edit operations
 and the browser editor's schema). This script projects that registry into
-two Markdown pages:
+three Markdown pages:
 
 - ``reference/constructs.md`` — one section per construct;
-- ``reference/directives.md`` — the contextual directives table.
+- ``reference/directives.md`` — the contextual directives table;
+- ``../.claude/skills/revealer-slides/references/syntax.md`` — the
+  agent-facing syntax reference bundled with the revealer-slides Claude
+  Code skill (constructs + directives + an inlined copy of
+  ``reference/settings.md``, MyST-free).
 
 It runs automatically at every Sphinx build (wired into ``conf.py``), and
 only rewrites a file when its content actually changed, so incremental
@@ -23,6 +27,7 @@ from pathlib import Path
 
 DOCS = Path(__file__).resolve().parent
 SRC = DOCS.parent / "src"
+SKILL_REFS = DOCS.parent / ".claude" / "skills" / "revealer-slides" / "references"
 
 HEADER = (
     "<!-- GENERATED FILE — DO NOT EDIT.\n"
@@ -145,8 +150,9 @@ def _cheat_card(g) -> list[str]:
     return out
 
 
-def _construct_section(spec, g) -> list[str]:
-    out = ["(construct-{0})=".format(spec.name), "", "## {0}".format(spec.label), ""]
+def _construct_section(spec, g, *, anchor: bool = True) -> list[str]:
+    out = ["(construct-{0})=".format(spec.name), ""] if anchor else []
+    out += ["## {0}".format(spec.label), ""]
 
     out.append("```text")
     out.append(_opener_syntax(spec))
@@ -251,6 +257,18 @@ def render_constructs() -> str:
     return "\n".join(out).rstrip() + "\n"
 
 
+def _directive_rows(g) -> list[str]:
+    rows = ["| directive | aliases | scopes | consumed on `> fill` slides |",
+            "| --- | --- | --- | --- |"]
+    for d in g.DIRECTIVES.values():
+        rows.append("| {0} | {1} | {2} | {3} |".format(
+            _code("> {0}:".format(d.name)),
+            ", ".join(_code(a) for a in d.aliases) if d.aliases else "—",
+            ", ".join(d.scopes),
+            "yes" if d.on_fill else "no"))
+    return rows
+
+
 def render_directives() -> str:
     g = _grammar()
     out = [HEADER + "# Contextual directives", ""]
@@ -261,15 +279,8 @@ def render_directives() -> str:
         "a slide or column they set that scope's default; in the settings block",
         "they set the presentation default.",
         "",
-        "| directive | aliases | scopes | consumed on `> fill` slides |",
-        "| --- | --- | --- | --- |",
     ]
-    for d in g.DIRECTIVES.values():
-        out.append("| {0} | {1} | {2} | {3} |".format(
-            _code("> {0}:".format(d.name)),
-            ", ".join(_code(a) for a in d.aliases) if d.aliases else "—",
-            ", ".join(d.scopes),
-            "yes" if d.on_fill else "no"))
+    out += _directive_rows(g)
     out += [
         "",
         "```{note}",
@@ -279,6 +290,49 @@ def render_directives() -> str:
         "```",
         "",
     ]
+    return "\n".join(out).rstrip() + "\n"
+
+
+def render_skill_syntax() -> str:
+    """The agent-facing syntax reference bundled with the revealer-slides skill."""
+    g = _grammar()
+    out = [HEADER + "# .pres syntax reference", ""]
+    out += [
+        "The complete `.pres` language, generated from the grammar registry",
+        "(`src/revealer/grammar.py`) — authoritative for every construct and",
+        "parameter. The settings tables at the end are inlined from",
+        "`Documentation/reference/settings.md`. Relative links refer to the",
+        "Revealer documentation, not to files of this skill.",
+        "",
+    ]
+    out += _cheat_card(g)
+    out += ["## Construct index", ""]
+    out.append("| construct | opens with | closed by | movable |")
+    out.append("| --- | --- | --- | --- |")
+    for spec in g.REGISTRY.values():
+        out.append("| {0} | {1} | {2} | {3} |".format(
+            spec.label,
+            _code(_base_form(spec).split("  ")[0].strip()),
+            _closed_by(spec, g).split(" (")[0],
+            "yes" if spec.movable else "no"))
+    out.append("")
+    for spec in g.REGISTRY.values():
+        out += _construct_section(spec, g, anchor=False)
+    out += ["## Contextual directives", ""]
+    out += [
+        "These directives take their scope from where they are written:",
+        "attached to a paragraph they style that paragraph; alone at the top",
+        "of a slide or column they set that scope's default; in the settings",
+        "block they set the presentation default.",
+        "",
+    ]
+    out += _directive_rows(g)
+    out.append("")
+    settings = (DOCS / "reference" / "settings.md").read_text(encoding="utf-8")
+    settings = settings.replace(
+        "# Settings & directives", "# Settings & per-slide directives", 1)
+    out.append(settings.rstrip())
+    out.append("")
     return "\n".join(out).rstrip() + "\n"
 
 
@@ -295,6 +349,7 @@ def generate() -> list[Path]:
     targets = {
         DOCS / "reference" / "constructs.md": render_constructs(),
         DOCS / "reference" / "directives.md": render_directives(),
+        SKILL_REFS / "syntax.md": render_skill_syntax(),
     }
     return [p for p, text in targets.items() if _write_if_changed(p, text)]
 
