@@ -131,6 +131,26 @@ save. The served copy is a separate `<name>.dev.html` artifact — the exported
 The served deck also carries the full WYSIWYG layer — see
 [The browser editor](editor.md).
 
+## Claude Code skill
+
+The repository ships a [Claude Code](https://claude.com/claude-code)
+skill that teaches Claude the `.pres` language and the build/verify
+loop, so it can write and fix talks with you. Enable it for every
+Claude session on your machine by symlinking it into your personal
+skills folder:
+
+```bash
+mkdir -p ~/.claude/skills
+ln -sfT "$(pwd)/.claude/skills/revealer-slides" ~/.claude/skills/revealer-slides
+```
+
+Run this from the repository root. In any Claude Code session — for
+instance in a talk folder — asking for slides then activates the skill:
+Claude writes the `.pres`, runs `revealer build`, and checks the result
+with headless-Chrome screenshots. The skill's syntax reference is
+generated from the grammar registry (like the
+[reference](reference/index.md)), so it always matches your checkout.
+
 ## VS Code integration
 
 `revealer serve` replaces the extension-based loop below; keep it if you

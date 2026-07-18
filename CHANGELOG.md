@@ -2,6 +2,14 @@
 
 ## Unreleased
 
+### Claude Code skill
+
+- **Added** — `revealer-slides` Claude Code skill
+  (`.claude/skills/revealer-slides/`): agent-facing authoring skill with a
+  grammar-generated syntax reference, a build-verified pattern library, and a
+  headless-Chrome screenshot verifier. Install: see *Installation › Claude
+  Code skill*.
+
 ### Language & build
 
 - **`> size:` now works inside `> … > end:` blocks** (callout boxes, cards,
