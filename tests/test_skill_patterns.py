@@ -58,6 +58,7 @@ def _warnings(capsys):
 
 def test_patterns_has_a_real_library():
     assert len(_snippets()) >= 10
+    assert len(_snippets()) <= 40, "pattern count exceeds the range(40) cap — raise it"
 
 
 @pytest.mark.parametrize("idx", range(40))

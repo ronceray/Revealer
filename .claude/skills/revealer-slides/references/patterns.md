@@ -38,7 +38,7 @@ One idea per slide, stated plainly.
 ## Title slide with photos and logos
 
 Add `> photo:` under an author to switch the title slide to a photo grid;
-logos repeat.
+`> logo:` is repeatable.
 
 ```pres
 > title: Collaboration talk
