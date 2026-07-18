@@ -17,9 +17,12 @@ output. Zero warnings is the bar. The messages and their fixes:
 | `bare '> space' fills only inside a '> fill' slide` | use `> space: 40px`, or make it a `> fill` slide |
 | `media file not found: …` | wrong path/case — media paths are relative to the deck folder |
 
-The only thing that aborts a build is a **failing `> build:` hook**
-(your figure script): its output is shown; fix the script or drop the
-hook.
+A build aborts (rather than warning) only on hard failures: a
+**failing `> build:` hook** (its output is shown — fix the script or
+drop the hook), a non-UTF-8 `.pres` file, a missing `reveal.js/`
+folder next to the `.pres` (run `revealer update <dir>`), or a PDF
+figure when `pdftocairo` is missing or fails. Everything else is a
+`Warning:` line.
 
 ## Screenshots
 
