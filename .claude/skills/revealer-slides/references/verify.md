@@ -44,6 +44,13 @@ What to look for in the shot:
 - A `> pin:` or `> stack` overlay landing in the wrong place → adjust
   the percentages / `h=`.
 - Fragments that never appear (check with and without `--fragments`).
+- Display math running off the right edge → `$$…$$` never shrinks;
+  split the equation across lines.
+- Literal `*` / `**` visible in rendered text → a bold span wrapping
+  `$math$`; keep bold and math disjoint.
+- Everything uniformly oversized on a sparse slide → the fit engine
+  only shrinks, it never enlarges; set a presentation-wide `> size:`
+  (e.g. `0.85`) or switch theme.
 
 Iterate on the slides you changed; before declaring the talk done,
 sweep every slide once.

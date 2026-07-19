@@ -65,12 +65,19 @@ of screenshotting.
   `autoplay` `controls`. The file must exist — a missing path is a
   build warning.
 - Math: `$inline$`, `$$display$$`; `> eq` for a framed equation
-  (auto-wrapped in `$$` when it contains no `$`). Code: `@@ lang` … `@@`.
+  (auto-wrapped in `$$` when it contains no `$`). Keep a `$$…$$` line
+  narrow — an over-wide equation clips at the right edge instead of
+  shrinking; split it across lines. Code: `@@ lang` … `@@`.
   Highlight: `[ text ]` alone on a line.
 - Inline: `**bold**` `*italic*` `` `code` `` `[text](url)`
   `[text]{.accent}` `[text]{color=#c0392b}`; escape markers with `\`.
+  A `**bold**` span cannot contain `$math$` (the asterisks render
+  literally) — keep bold and math disjoint.
 - One idea per slide. Let the fit engine shrink content — if a shot
-  shows tiny text, split the slide instead of fighting sizes.
+  shows tiny text, split the slide instead of fighting sizes. The fit
+  engine only shrinks, never enlarges: sparse slides render at the
+  theme's (large) base size, so if everything feels oversized set a
+  presentation-wide `> size:` (e.g. `0.85`) or pick another theme.
 - Prefer constructs over raw HTML; prefer editing the smallest region
   of the `.pres` you can.
 
