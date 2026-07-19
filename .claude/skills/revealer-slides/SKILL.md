@@ -88,6 +88,7 @@ of screenshotting.
 | Exact parameters/forms of any construct, all settings | references/syntax.md — generated from the grammar, authoritative |
 | How to compose a slide (columns, grids, stacks, pins, citations, SVG animation, macros…) | references/patterns.md — copy-paste snippets, all build-verified |
 | A `Warning:` line, visual checks, screenshots, PDF export | references/verify.md |
+| Choosing a theme | the gallery: https://ronceray.github.io/Revealer/themes.html (in the Revealer repo: `revealer Demo/Themes.pres`) |
 
 If `revealer` is not on PATH: install with
 `pipx install .` from a clone of https://github.com/ronceray/Revealer.

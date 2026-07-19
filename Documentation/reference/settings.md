@@ -25,7 +25,7 @@ options that belong to a block construct (`> gap:` in a grid, `> margin:` /
 
 | Setting | Description |
 | --- | --- |
-| `> theme:` *name* | **Theme.** `revealer` (default), `ljp`, or any [reveal.js theme](https://revealjs.com/themes/). See [Themes](../themes.md). |
+| `> theme:` *name* | **Theme.** `revealer` (default), `ljp`, `sfi`, or any [reveal.js theme](https://revealjs.com/themes/). See the [theme gallery](../themes.md). |
 | `> codeTheme:` *name* | **Code highlighting theme** ([highlight.js demo](https://highlightjs.org/static/demo/)). Default: `zenburn`. |
 | `> header-height:` / `> footer-height:` *fraction* | **Header / footer band heights**, as a fraction of the slide height. |
 | `> size:` / `> align:` / `> paragraph-spacing:` | Presentation-wide text defaults — see [Contextual directives](directives.md). |

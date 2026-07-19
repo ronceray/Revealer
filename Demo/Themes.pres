@@ -1,0 +1,309 @@
+# Theme gallery — the same slide rendered by every theme.
+# Browse live:            revealer Demo/Themes.pres
+# Docs screenshots:       python3 Documentation/gen_theme_gallery.py
+
+> title: Revealer theme gallery
+> slideNumber: c/t
+
+>>> first: Theme gallery
+> subtitle: One identical slide per theme — press → to browse
+
+=== revealer
+> theme: revealer
+> fill
+> row
+> col 3/5
+**Overdamped dynamics.** A bead relaxing in an optical trap:
+
+$$\dot x = -\mu k\, x + \sqrt{2D}\,\xi(t)$$
+
+* Relaxation time $\tau = 1/(\mu k)$
+  * an [accented span]{.accent} and `inline code`
+* The variance saturates at long times
+> col 2/5 center
+> eq
+\langle x^2 \rangle_{t \to \infty} = \frac{D}{\mu k}
+> end: eq
+
+[ Fifteen themes, one deck. ]
+> end: row
+
+=== ljp
+> theme: ljp
+> fill
+> row
+> col 3/5
+**Overdamped dynamics.** A bead relaxing in an optical trap:
+
+$$\dot x = -\mu k\, x + \sqrt{2D}\,\xi(t)$$
+
+* Relaxation time $\tau = 1/(\mu k)$
+  * an [accented span]{.accent} and `inline code`
+* The variance saturates at long times
+> col 2/5 center
+> eq
+\langle x^2 \rangle_{t \to \infty} = \frac{D}{\mu k}
+> end: eq
+
+[ Fifteen themes, one deck. ]
+> end: row
+
+=== sfi
+> theme: sfi
+> fill
+> row
+> col 3/5
+**Overdamped dynamics.** A bead relaxing in an optical trap:
+
+$$\dot x = -\mu k\, x + \sqrt{2D}\,\xi(t)$$
+
+* Relaxation time $\tau = 1/(\mu k)$
+  * an [accented span]{.accent} and `inline code`
+* The variance saturates at long times
+> col 2/5 center
+> eq
+\langle x^2 \rangle_{t \to \infty} = \frac{D}{\mu k}
+> end: eq
+
+[ Fifteen themes, one deck. ]
+> end: row
+
+=== black
+> theme: black
+> fill
+> row
+> col 3/5
+**Overdamped dynamics.** A bead relaxing in an optical trap:
+
+$$\dot x = -\mu k\, x + \sqrt{2D}\,\xi(t)$$
+
+* Relaxation time $\tau = 1/(\mu k)$
+  * an [accented span]{.accent} and `inline code`
+* The variance saturates at long times
+> col 2/5 center
+> eq
+\langle x^2 \rangle_{t \to \infty} = \frac{D}{\mu k}
+> end: eq
+
+[ Fifteen themes, one deck. ]
+> end: row
+
+=== white
+> theme: white
+> fill
+> row
+> col 3/5
+**Overdamped dynamics.** A bead relaxing in an optical trap:
+
+$$\dot x = -\mu k\, x + \sqrt{2D}\,\xi(t)$$
+
+* Relaxation time $\tau = 1/(\mu k)$
+  * an [accented span]{.accent} and `inline code`
+* The variance saturates at long times
+> col 2/5 center
+> eq
+\langle x^2 \rangle_{t \to \infty} = \frac{D}{\mu k}
+> end: eq
+
+[ Fifteen themes, one deck. ]
+> end: row
+
+=== league
+> theme: league
+> fill
+> row
+> col 3/5
+**Overdamped dynamics.** A bead relaxing in an optical trap:
+
+$$\dot x = -\mu k\, x + \sqrt{2D}\,\xi(t)$$
+
+* Relaxation time $\tau = 1/(\mu k)$
+  * an [accented span]{.accent} and `inline code`
+* The variance saturates at long times
+> col 2/5 center
+> eq
+\langle x^2 \rangle_{t \to \infty} = \frac{D}{\mu k}
+> end: eq
+
+[ Fifteen themes, one deck. ]
+> end: row
+
+=== beige
+> theme: beige
+> fill
+> row
+> col 3/5
+**Overdamped dynamics.** A bead relaxing in an optical trap:
+
+$$\dot x = -\mu k\, x + \sqrt{2D}\,\xi(t)$$
+
+* Relaxation time $\tau = 1/(\mu k)$
+  * an [accented span]{.accent} and `inline code`
+* The variance saturates at long times
+> col 2/5 center
+> eq
+\langle x^2 \rangle_{t \to \infty} = \frac{D}{\mu k}
+> end: eq
+
+[ Fifteen themes, one deck. ]
+> end: row
+
+=== night
+> theme: night
+> fill
+> row
+> col 3/5
+**Overdamped dynamics.** A bead relaxing in an optical trap:
+
+$$\dot x = -\mu k\, x + \sqrt{2D}\,\xi(t)$$
+
+* Relaxation time $\tau = 1/(\mu k)$
+  * an [accented span]{.accent} and `inline code`
+* The variance saturates at long times
+> col 2/5 center
+> eq
+\langle x^2 \rangle_{t \to \infty} = \frac{D}{\mu k}
+> end: eq
+
+[ Fifteen themes, one deck. ]
+> end: row
+
+=== serif
+> theme: serif
+> fill
+> row
+> col 3/5
+**Overdamped dynamics.** A bead relaxing in an optical trap:
+
+$$\dot x = -\mu k\, x + \sqrt{2D}\,\xi(t)$$
+
+* Relaxation time $\tau = 1/(\mu k)$
+  * an [accented span]{.accent} and `inline code`
+* The variance saturates at long times
+> col 2/5 center
+> eq
+\langle x^2 \rangle_{t \to \infty} = \frac{D}{\mu k}
+> end: eq
+
+[ Fifteen themes, one deck. ]
+> end: row
+
+=== simple
+> theme: simple
+> fill
+> row
+> col 3/5
+**Overdamped dynamics.** A bead relaxing in an optical trap:
+
+$$\dot x = -\mu k\, x + \sqrt{2D}\,\xi(t)$$
+
+* Relaxation time $\tau = 1/(\mu k)$
+  * an [accented span]{.accent} and `inline code`
+* The variance saturates at long times
+> col 2/5 center
+> eq
+\langle x^2 \rangle_{t \to \infty} = \frac{D}{\mu k}
+> end: eq
+
+[ Fifteen themes, one deck. ]
+> end: row
+
+=== solarized
+> theme: solarized
+> fill
+> row
+> col 3/5
+**Overdamped dynamics.** A bead relaxing in an optical trap:
+
+$$\dot x = -\mu k\, x + \sqrt{2D}\,\xi(t)$$
+
+* Relaxation time $\tau = 1/(\mu k)$
+  * an [accented span]{.accent} and `inline code`
+* The variance saturates at long times
+> col 2/5 center
+> eq
+\langle x^2 \rangle_{t \to \infty} = \frac{D}{\mu k}
+> end: eq
+
+[ Fifteen themes, one deck. ]
+> end: row
+
+=== blood
+> theme: blood
+> fill
+> row
+> col 3/5
+**Overdamped dynamics.** A bead relaxing in an optical trap:
+
+$$\dot x = -\mu k\, x + \sqrt{2D}\,\xi(t)$$
+
+* Relaxation time $\tau = 1/(\mu k)$
+  * an [accented span]{.accent} and `inline code`
+* The variance saturates at long times
+> col 2/5 center
+> eq
+\langle x^2 \rangle_{t \to \infty} = \frac{D}{\mu k}
+> end: eq
+
+[ Fifteen themes, one deck. ]
+> end: row
+
+=== moon
+> theme: moon
+> fill
+> row
+> col 3/5
+**Overdamped dynamics.** A bead relaxing in an optical trap:
+
+$$\dot x = -\mu k\, x + \sqrt{2D}\,\xi(t)$$
+
+* Relaxation time $\tau = 1/(\mu k)$
+  * an [accented span]{.accent} and `inline code`
+* The variance saturates at long times
+> col 2/5 center
+> eq
+\langle x^2 \rangle_{t \to \infty} = \frac{D}{\mu k}
+> end: eq
+
+[ Fifteen themes, one deck. ]
+> end: row
+
+=== sky
+> theme: sky
+> fill
+> row
+> col 3/5
+**Overdamped dynamics.** A bead relaxing in an optical trap:
+
+$$\dot x = -\mu k\, x + \sqrt{2D}\,\xi(t)$$
+
+* Relaxation time $\tau = 1/(\mu k)$
+  * an [accented span]{.accent} and `inline code`
+* The variance saturates at long times
+> col 2/5 center
+> eq
+\langle x^2 \rangle_{t \to \infty} = \frac{D}{\mu k}
+> end: eq
+
+[ Fifteen themes, one deck. ]
+> end: row
+
+=== dracula
+> theme: dracula
+> fill
+> row
+> col 3/5
+**Overdamped dynamics.** A bead relaxing in an optical trap:
+
+$$\dot x = -\mu k\, x + \sqrt{2D}\,\xi(t)$$
+
+* Relaxation time $\tau = 1/(\mu k)$
+  * an [accented span]{.accent} and `inline code`
+* The variance saturates at long times
+> col 2/5 center
+> eq
+\langle x^2 \rangle_{t \to \infty} = \frac{D}{\mu k}
+> end: eq
+
+[ Fifteen themes, one deck. ]
+> end: row

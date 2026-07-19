@@ -30,6 +30,72 @@ complete reveal.js themes (`black`, `white`, `league`, `ljp`, `revealer`, ...).
 The switch is local to the current slide: navigating away restores the global
 theme selected in the settings block.
 
+## Gallery
+
+The same slide rendered by every theme. Browse it live with
+`revealer Demo/Themes.pres`; the screenshots below are regenerated
+by `python3 Documentation/gen_theme_gallery.py` after a
+`revealer build Demo/Themes.pres`.
+
+**`revealer`**
+
+![The revealer theme](_static/themes/revealer.png)
+
+**`ljp`**
+
+![The ljp theme](_static/themes/ljp.png)
+
+**`sfi`**
+
+![The sfi theme](_static/themes/sfi.png)
+
+**`black`**
+
+![The black theme](_static/themes/black.png)
+
+**`white`**
+
+![The white theme](_static/themes/white.png)
+
+**`league`**
+
+![The league theme](_static/themes/league.png)
+
+**`beige`**
+
+![The beige theme](_static/themes/beige.png)
+
+**`night`**
+
+![The night theme](_static/themes/night.png)
+
+**`serif`**
+
+![The serif theme](_static/themes/serif.png)
+
+**`simple`**
+
+![The simple theme](_static/themes/simple.png)
+
+**`solarized`**
+
+![The solarized theme](_static/themes/solarized.png)
+
+**`blood`**
+
+![The blood theme](_static/themes/blood.png)
+
+**`moon`**
+
+![The moon theme](_static/themes/moon.png)
+
+**`sky`**
+
+![The sky theme](_static/themes/sky.png)
+
+**`dracula`**
+
+![The dracula theme](_static/themes/dracula.png)
 ## Customising
 
 The built-in themes are intentionally thin. They `@import` a shared, theme-agnostic
