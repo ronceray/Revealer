@@ -179,7 +179,12 @@ def generate_index_html(reveal_dir: str, extensions: list[str]) -> None:
     placeholders, substituted per presentation by :mod:`revealer.build`.
     """
 
-    css = ['dist/reset.css', 'dist/reveal.css', 'dist/theme/__THEME__.css']
+    # The base sheet loads on its own line so the layout DSL (header bar,
+    # rows/columns, boxes, fit engine) survives ANY theme in the rv-theme
+    # link — including stock reveal.js themes, which don't @import it the
+    # way the built-in revealer/ljp/sfi themes do.
+    css = ['dist/reset.css', 'dist/reveal.css',
+           'dist/theme/_revealer-base.css', 'dist/theme/__THEME__.css']
     scripts = ['dist/reveal.js']
     inits = []
     dependencies = []

@@ -494,16 +494,23 @@ function rv_armFragmentObserver() {
     { subtree: true, attributes: true, attributeFilter: ['class'] });
 }
 
-Reveal.on('ready', function (event) {
-  set_fixed(event.currentSlide);
+function rv_onReady(event) {
+  set_fixed((event && event.currentSlide) || Reveal.getCurrentSlide());
   rv_armFragmentObserver();
-  rv_syncFragmentEffects(event.currentSlide);
+  rv_syncFragmentEffects(Reveal.getCurrentSlide());
   rv_queueFit();
   // Web fonts change text metrics when they land; re-fit once they are in.
   if (document.fonts && document.fonts.ready && document.fonts.ready.then) {
     document.fonts.ready.then(function () { rv_queueFit(); });
   }
-});
+}
+Reveal.on('ready', rv_onReady);
+/* This script loads AFTER Reveal.initialize() (see the index template), so
+ * 'ready' can already have fired by the time these handlers register — e.g.
+ * on a deep link, where the landing slide then kept pristine SVG steps and
+ * gated videos until the next navigation. Reconcile immediately in that
+ * case; the two paths are mutually exclusive, so this never runs twice. */
+if (Reveal.isReady && Reveal.isReady()) rv_onReady(null);
 
 Reveal.on('resize', function () {
   rv_queueFit();
