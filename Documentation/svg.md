@@ -50,7 +50,8 @@ Each `> animate:` line defines one step. Its syntax is:
 ```
 
 * **selector** — one or more CSS selectors (typically `#id`) targeting elements
-  inside the SVG. Several selectors can be comma-separated.
+  inside the SVG. Several selectors can be comma-separated (spaces after the
+  commas are fine): `> animate: #dot, #arrow opacity:1`.
 * **attributes** — one or more `name:value` pairs, separated by `;`. They are
   applied as SVG attributes (`opacity`, `fill`, `transform`, …).
 * **duration** *(optional)* — the transition time for this step, written after
@@ -81,6 +82,12 @@ restores each element to its original state.
   keep the file untouched and use `> hide:`; the animation moves elements
   *from* that state.
 * `transform` animates too — e.g. `transform:translate(100,0)` or
-  `transform:scale(1.5)`.
+  `transform:scale(1.5)`. Note that SVG transforms are about the
+  **user-space origin**, not the element: to scale an element about its own
+  centre, wrap it in a `<g transform="translate(x,y)">` whose inner geometry
+  is drawn centred on `0,0`, and animate the inner element.
+* Arrowheads and other `<marker>`s scale with the stroke width by default
+  (`markerUnits="strokeWidth"`), so a thick arrow gets an oversized head —
+  set `markerUnits="userSpaceOnUse"` on the marker to keep it constant.
 * The default global duration can be changed once for the whole presentation
   with `> svgDuration: 0.8s` in the settings.

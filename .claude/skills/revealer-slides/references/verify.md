@@ -32,6 +32,11 @@ figure when `pdftocairo` is missing or fails. Everything else is a
   the 2nd vertical slide under horizontal slide 4. Slide 0 is the title.
 - `--fragments` forces every fragment visible (what `revealer pdf`
   does); without it, un-revealed fragment content is invisible.
+- `--fragments` is CSS-only: it does NOT run `> animate:` SVG steps
+  (those are applied by JS on fragment state). To verify an
+  animated-SVG slide, screenshot a real fragment state instead — pass
+  `N/M/F` as the slide (fragment `F` of slide `N/M`), no `--fragments`:
+  `snap.sh Name.html 4/0/6 out.png` shows slide 4 at its 6th step.
 - Exit 3 = no Chrome/Chromium on PATH. Report "not visually verified"
   — do not guess.
 

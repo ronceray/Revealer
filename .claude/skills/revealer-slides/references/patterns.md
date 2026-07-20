@@ -286,11 +286,23 @@ attributes step by step — each step is a fragment.
 > svg: Media/diagram.svg
 > hide: #dot, #arrow
 > animate: #box fill:#0F4C75
-> animate: #dot opacity:1 @ 1s
-> animate: #arrow opacity:1; transform:translate(2,0) @ 300ms
+> animate: #dot, #arrow opacity:1 @ 1s
+> animate: #dot transform:translate(2, 0) @ 300ms
 
 Each arrow press advances one step; stepping back reverts it.
 ```
+
+Hand-authoring the SVG itself:
+
+- A comma list (`#dot, #arrow`) animates several elements in one step;
+  a `<g id="…">` wrapper does the same job structurally.
+- Arrowhead `<marker>`s scale with the stroke width by default
+  (`markerUnits="strokeWidth"`) — a thick arrow gets a giant head. Set
+  `markerUnits="userSpaceOnUse"` on the marker for a constant-size head.
+- SVG `transform:scale(…)` is about the user-space origin, not the
+  element. To scale something about its own centre, wrap it in
+  `<g transform="translate(x,y)">` with its geometry drawn centred on
+  `0,0`, and animate the inner element.
 
 ## KaTeX macros
 

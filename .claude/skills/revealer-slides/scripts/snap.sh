@@ -3,7 +3,7 @@
 #
 #   snap.sh <deck.html> <slide> <out.png> [--fragments]
 #
-#   <slide>      reveal.js index: N, or N/M for a vertical slide
+#   <slide>      reveal.js index: N, N/M (vertical), or N/M/F (fragment F)
 #   --fragments  force every fragment visible (the same trick revealer pdf
 #                uses), so hidden fragment content shows in the shot
 #
