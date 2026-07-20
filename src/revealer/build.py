@@ -1869,11 +1869,20 @@ def _parse_animate(spec: str, default_duration: str):
         duration = dur.strip()
 
     spec = spec.strip()
-    # First token = selector(s), remainder = attribute declarations
-    parts = spec.split(None, 1)
-    targets = parts[0]
-    attrs = parts[1].strip() if len(parts) > 1 else ""
-    return targets, attrs, duration
+    # The selector list is the leading tokens chained by commas — a comma
+    # glued to either side keeps consuming (`#a, #b`, `#a ,#b`), so a
+    # comma inside an attribute VALUE (`transform:translate(2, 0)`) can
+    # never extend it: the chain is already broken at the first token
+    # without one.
+    tokens = spec.split()
+    if not tokens:
+        return "", "", duration
+    sel = [tokens[0]]
+    i = 1
+    while i < len(tokens) and (sel[-1].endswith(",") or tokens[i].startswith(",")):
+        sel.append(tokens[i])
+        i += 1
+    return " ".join(sel), " ".join(tokens[i:]), duration
 
 
 _VIDEO_MIME = {
