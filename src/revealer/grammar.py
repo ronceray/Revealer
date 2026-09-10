@@ -250,6 +250,30 @@ REGISTRY: dict[str, ConstructSpec] = {s.name: s for s in [
         body="verbatim",
         cheat=(("Text & math", "@@ code", "@@ python\n\n@@\n"),),
     )),
+    # --- slide-level layout switches (single lines, no body) ---
+    _c(ConstructSpec(
+        "fill", "fill",
+        opener=r">\s*fill\b",
+        opener_parse=r">\s*fill(?:\s+(?P<mode>between|center|around|end))?\s*$",
+        terminator=Terminator.SINGLE_LINE,
+        head=(TokenSpec("keywords", r".+", "keyword", label="vertical distribution",
+                        keywords=("between", "center", "around", "end")),),
+        css_classes=(),   # lands on the <section> (rv-fill, rv-fill-<mode>), not a block
+        body="none",
+        cheat=(("Layout", "> fill", "> fill\n"),
+               ("Layout", "> fill center", "> fill center\n"),
+               ("Layout", "> fill between", "> fill between\n")),
+    )),
+    _c(ConstructSpec(
+        "space", "space",
+        opener=r">\s*space\b",
+        opener_parse=r">\s*space(?:\s*:\s*(?P<size>.*?))?\s*$",
+        terminator=Terminator.SINGLE_LINE,
+        css_classes=("rv-space",),
+        body="none",
+        cheat=(("Layout", "> space", "> space: 30px\n"),
+               ("Layout", "> space (fill)", "> space\n")),
+    )),
 ]}
 
 # The frozen member order of the legacy `_MACRO_OPEN_RE` union. This is NOT
@@ -275,8 +299,6 @@ STATIC_CHEAT: tuple[tuple[str, str, str], ...] = (
     ("Slides", "%%% section", "%%% Section title\n"),
     ("Slides", ">>> first:", ">>> first: Deck title\n"),
     ("Slides", ">>> biblio", ">>> biblio\n"),
-    ("Layout", "> fill", "> fill\n"),
-    ("Layout", "> space", "> space: 30px\n"),
     ("Text & math", "* bullet", "* "),
     ("Text & math", "[ highlight ]", "[ text ]"),
     ("Text & math", "$inline$", "$x$"),

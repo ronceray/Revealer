@@ -233,3 +233,24 @@ def test_concurrent_katex_syncs_never_leave_a_partial_bundle(tmp_path):
         t.join()
     assert not errors, errors
     assert assets._tree_manifest(dest) == assets._tree_manifest(src)
+
+
+# --- #10: `> fill` and `> space` are grammar constructs -----------------------
+
+def test_fill_and_space_are_in_the_grammar():
+    from revealer import grammar
+
+    fill = grammar.REGISTRY["fill"]
+    assert fill.terminator is grammar.Terminator.SINGLE_LINE
+    assert set(fill.head[0].keywords) == {"between", "center", "around", "end"}
+    assert grammar.REGISTRY["space"].terminator is grammar.Terminator.SINGLE_LINE
+    sch = grammar.schema()
+    assert "fill" in sch["constructs"] and "space" in sch["constructs"]
+    assert "> fill center" in [c[1] for c in sch["constructs"]["fill"]["cheat"]]
+    assert not any(c[1] in ("> fill", "> space") for c in sch["staticCheat"])
+
+
+def test_fill_modes_render_the_section_classes(deck):
+    for mode in ("between", "center", "around", "end"):
+        html = build_deck(deck("=== T\n> fill {0}\n\ntext\n".format(mode), name="fill_" + mode), name="fill_" + mode)
+        assert 'class="rv-fill rv-fill-{0}"'.format(mode) in html

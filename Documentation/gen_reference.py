@@ -71,6 +71,8 @@ def _base_form(spec) -> str:
         return "||  (open / close a column block)   |  (next column)"
     if op == "@@":
         return "@@ [language / attributes]"
+    if spec.name == "space":
+        return "> space  (filling, on a > fill slide)   or   > space: height  (fixed: 40px, 2em, 10%)"
     parse = spec.opener_parse or ""
     if "(?P<rows>" in parse:
         base = "> {0}(rows, cols)".format(spec.name)

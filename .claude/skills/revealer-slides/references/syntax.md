@@ -26,16 +26,6 @@ same registry:
 >>> biblio
 ```
 
-**Layout**
-
-```text
-> fill
-> space
-> row
-> col
-|| columns
-```
-
 **Text & math**
 
 ```text
@@ -88,6 +78,19 @@ escape \* \` \[
 > stack
 ```
 
+**Layout**
+
+```text
+> row
+> col
+|| columns
+> fill
+> fill center
+> fill between
+> space
+> space (fill)
+```
+
 **Media**
 
 ```text
@@ -114,6 +117,8 @@ escape \* \` \[
 | table cell | `> cell` | the next sibling marker or the parent's `> end:` | no |
 | text column | `||` | nothing — a single-line construct | no |
 | code block | `@@ [language / attributes]` | a second `@@` line | no |
+| fill | `> fill` | nothing — a single-line construct | no |
+| space | `> space` | nothing — a single-line construct | no |
 
 ## table
 
@@ -582,6 +587,64 @@ Opener pattern (the exact regex the parser and editor share):
 
 ```text
 @@
+```
+
+## fill
+
+```text
+> fill  [between | center | around | end]
+```
+
+| | |
+| --- | --- |
+| Closed by | nothing — a single-line construct |
+| Movable | no |
+| Body | none |
+
+Parameters (whitespace-separated head tokens after the opener, unless noted):
+
+| token | accepted form | meaning | editor op |
+| --- | --- | --- | --- |
+| `vertical distribution` | `between | center | around | end` | flags: `between`, `center`, `around`, `end` | — |
+
+Examples:
+
+```text
+> fill
+> fill center
+> fill between
+```
+
+Opener pattern (the exact regex the parser and editor share):
+
+```text
+>\s*fill\b
+```
+
+## space
+
+```text
+> space  (filling, on a > fill slide)   or   > space: height  (fixed: 40px, 2em, 10%)
+```
+
+| | |
+| --- | --- |
+| Closed by | nothing — a single-line construct |
+| Movable | no |
+| Body | none |
+| CSS classes | `.rv-space` |
+
+Examples:
+
+```text
+> space: 30px
+> space
+```
+
+Opener pattern (the exact regex the parser and editor share):
+
+```text
+>\s*space\b
 ```
 
 ## Contextual directives
