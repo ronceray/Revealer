@@ -517,7 +517,7 @@ html.rv-measuring body > footer {
   box-sizing: border-box;
 }
 
-.rv-content-inner .rv-paragraph + .rv-paragraph {
+.rv-content-inner .rv-paragraph ~ .rv-paragraph {
   /* Spacing expressed in line-heights (interligne): factor * 1lh. */
   margin-top: calc(var(--rv-para-spacing, 0.5) * 1lh);
 }

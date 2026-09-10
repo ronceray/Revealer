@@ -379,6 +379,13 @@ def _warn(lineno, msg: str) -> None:
 _OPENER_RE = re.compile(
     r"^>\s*(info|warn|good|eq|grid|stack|row|pin|table)\b")
 
+# Markup that renders nothing: a paragraph made only of this must not occupy a
+# paragraph-spacing slot (a deck-wide <style> after `>>> first:` used to push
+# the title strip down by one gap).
+_VOID_HTML_RE = re.compile(
+    r"<style\b[^>]*>.*?</style>|<script\b[^>]*>.*?</script>|<!--.*?-->",
+    re.DOTALL | re.IGNORECASE)
+
 
 def _warn_swallowed(kind, opener_line, content, content_src):
     """An unclosed callout/eq that ran to the end of its slice is fine when it
@@ -889,6 +896,12 @@ def _render_block(block, base_size, base_align, base_spacing):
                 para_align = _norm_align(value) or para_align
 
         body_html = _contentify_legacy("\n".join(para["body"]), src=para["body_src"])
+        if not _VOID_HTML_RE.sub("", body_html).strip():
+            # Nothing to see (a bare <style>/<script>/comment block): emit it
+            # outside the paragraph flow, or it would take a spacing slot and
+            # push the visible content down by one paragraph gap.
+            rendered.append(body_html)
+            continue
         styles = []
         if abs(para_size - 1.0) > 1e-6:
             styles.append("font-size:{:.4f}em".format(para_size))

@@ -97,3 +97,26 @@ def test_gap_keyword_is_silent(deck, capsys):
     html = build_deck(deck("=== T\n> fill\n> row gap=60px h=200\n> col\na\n> end: row\n"))
     assert "gap:60px;" in html and "height:200px" in html
     assert _warnings(capsys) == []
+
+
+# --- #18: markup that renders nothing takes no paragraph slot -----------------
+
+def test_style_only_block_takes_no_paragraph_slot(deck):
+    html = build_deck(deck("=== T\n\n<style>.x{color:red}</style>\n\nreal text\n"))
+    assert html.count('<div class="rv-paragraph"') == 1
+    assert "<style>.x{color:red}</style>" in html
+    assert html.index("<style>.x") < html.index('<div class="rv-paragraph"')
+
+
+def test_style_only_block_on_the_title_slide(deck):
+    html = build_deck(deck(
+        "> title: T\n\n>>> first: Deck\n\n<style>.x{color:red}</style>\n\n"
+        '<div class="strip">strip</div>\n'))
+    section = html[html.index("<section"):html.index("</section>")]
+    assert section.count('<div class="rv-paragraph"') == 1
+    assert "<style>.x{color:red}</style>" in section
+
+
+def test_style_with_visible_content_keeps_its_paragraph(deck):
+    html = build_deck(deck("=== T\n\n<style>.x{color:red}</style>\nvisible\n\nmore\n"))
+    assert html.count('<div class="rv-paragraph"') == 2
