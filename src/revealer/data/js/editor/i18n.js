@@ -152,6 +152,9 @@
       'outline.downTitle': 'Move down',
       'outline.delTitle': 'Delete (Ctrl+Z undoes)',
       'outline.none': 'no slides',
+      'outline.noMatch': 'no slide matches',
+      'outline.filter': 'Filter slides…  (Enter jumps)',
+      'outline.layoutTitle': 'Switch between a strip and a list',
     },
     /* i18n:fr */
     fr: {
@@ -286,6 +289,9 @@
       'outline.downTitle': 'Descendre',
       'outline.delTitle': 'Supprimer (Ctrl+Z annule)',
       'outline.none': 'aucune diapo',
+      'outline.noMatch': 'aucune diapo ne correspond',
+      'outline.filter': 'Filtrer les diapos…  (Entrée pour aller)',
+      'outline.layoutTitle': 'Basculer entre bande et liste',
     },
   };
 

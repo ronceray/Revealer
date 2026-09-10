@@ -67,10 +67,66 @@
     return { s: s, e: e };
   }
 
+  /* Layout: a horizontal filmstrip is fine for a short deck and slow going
+     for a real one, so the selector can stand up as a vertical list. The
+     choice sticks. */
+  function vertical() {
+    try { return localStorage.getItem('rv-ed-outline-v') === '1'; }
+    catch (e) { return false; }
+  }
+
+  function setVertical(on) {
+    try { localStorage.setItem('rv-ed-outline-v', on ? '1' : '0'); } catch (e) {}
+    var box = document.getElementById('rv-ed-outline');
+    if (box) box.classList.toggle('rv-ol-vert', on);
+    var cur = box && box.querySelector('.rv-ol-current');
+    if (cur && cur.scrollIntoView) {
+      cur.scrollIntoView({ block: 'nearest', inline: 'center' });
+    }
+  }
+
+  var filterText = '';
+
   function toggleOutline() {
-    var w = RV.ui.box({ id: 'rv-ed-outline', title: RV.t('outline.title') });
+    var w = RV.ui.box({
+      id: 'rv-ed-outline', title: RV.t('outline.title'),
+      buttons: [{
+        label: vertical() ? '⇄' : '⇅',
+        cls: 'rv-ol-layout',
+        title: RV.t('outline.layoutTitle'),
+        onClick: function (ev) {
+          var on = !vertical();
+          setVertical(on);
+          ev.currentTarget.textContent = on ? '⇄' : '⇅';
+        }
+      }]
+    });
     if (!w) return;
-    w.body.innerHTML = '<div class="rv-ol-list"></div>';
+    filterText = '';
+    w.box.classList.toggle('rv-ol-vert', vertical());
+    w.body.innerHTML =
+      '<input class="rv-ol-filter" type="search" spellcheck="false" placeholder="' +
+      RV.esc(RV.t('outline.filter')) + '">' +
+      '<div class="rv-ol-list"></div>';
+    // Jump box: type to narrow the list, Enter to go to the first match.
+    var input = w.body.querySelector('.rv-ol-filter');
+    input.addEventListener('input', function () {
+      filterText = input.value.trim().toLowerCase();
+      renderOutline();
+    });
+    input.addEventListener('keydown', function (ev) {
+      if (ev.key === 'Enter') {
+        var first = w.body.querySelector('.rv-ol-item[data-h]');
+        if (first) { Reveal.slide(+first.getAttribute('data-h')); renderOutline(); }
+        ev.preventDefault();
+      } else if (ev.key === 'Escape') {
+        if (filterText) { input.value = ''; filterText = ''; renderOutline(); }
+        else { document.getElementById('rv-ed-outline').remove(); }
+        ev.preventDefault();
+      }
+      ev.stopPropagation();       // the editor's own shortcuts stay out of it
+    });
+    setTimeout(function () { try { input.focus(); } catch (e) {} }, 0);
     // A horizontal strip under a vertical wheel: turn the wheel into
     // horizontal travel (trackpads already send deltaX and keep it).
     w.body.querySelector('.rv-ol-list').addEventListener('wheel', function (ev) {
@@ -88,11 +144,17 @@
     list.innerHTML = '';
     var cur = (window.Reveal && Reveal.getIndices) ? Reveal.getIndices().h : -1;
     var secs = topSections();
+    var shown = 0;
     secs.forEach(function (sec, i) {
+      if (filterText &&
+          (String(i + 1) + ' ' + titleOf(sec, i)).toLowerCase()
+            .indexOf(filterText) === -1) return;
+      shown += 1;
       var span = spanOf(sec);
       var kids = innerSections(sec).length;
       var row = document.createElement('div');
       row.className = 'rv-ol-item' + (i === cur ? ' rv-ol-current' : '');
+      row.setAttribute('data-h', i);
       var html = '<div class="rv-ol-head"><span class="rv-ol-num">' + (i + 1) + '</span>' +
         '<span class="rv-ol-title">' + RV.esc(titleOf(sec, i)) +
         (kids ? ' <span class="rv-ol-kids">▤ ' + kids + '</span>' : '') +
@@ -127,7 +189,12 @@
       });
       list.appendChild(row);
     });
-    if (!secs.length) list.innerHTML = '<div class="rv-ol-item">' + RV.esc(RV.t('outline.none')) + '</div>';
+    if (!secs.length) {
+      list.innerHTML = '<div class="rv-ol-item">' + RV.esc(RV.t('outline.none')) + '</div>';
+    } else if (!shown) {
+      list.innerHTML = '<div class="rv-ol-item rv-ol-nomatch">' +
+        RV.esc(RV.t('outline.noMatch')) + '</div>';
+    }
     // Keep the current slide in view: opening the strip, or navigating
     // with the arrow keys, lands on it instead of on slide 1.
     var curRow = list.querySelector('.rv-ol-current');

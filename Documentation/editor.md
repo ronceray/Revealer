@@ -122,9 +122,18 @@ block — in reveal order. Drag entries to reorder the sequence; the
 ## Slide selector
 
 `O` (or the slide chip in the command bar, or **Slide ▸ Slide selector**) drops
-a horizontal **filmstrip** of every slide below the command bar. From there you
-can navigate and, per slide, **add**, **duplicate**, **reorder** and **delete**
-— whole-slide operations that would be tedious as text edits.
+the slide selector below the command bar. From there you can navigate and, per
+slide, **add**, **duplicate**, **reorder** and **delete** — whole-slide
+operations that would be tedious as text edits.
+
+- The **filter box** takes focus as it opens: type part of a title (or a slide
+  number) to narrow the list, `Enter` to jump to the first match, `Escape` to
+  clear it and then to close.
+- The **⇅ / ⇄ button** switches between a horizontal filmstrip and a vertical
+  list down the side — a strip is fine for a short deck, a list is faster for a
+  long one. The choice is remembered.
+- The mouse wheel scrolls the strip horizontally, and the current slide is
+  always scrolled into view.
 
 ## New-slide templates
 

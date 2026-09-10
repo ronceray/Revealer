@@ -184,6 +184,47 @@
     });
   });
 
+  RVT.test('slide selector: filter jumps, and the layout toggle sticks', function () {
+    // #15: navigating a 20-slide deck through a horizontal strip is the main
+    // way one moves around the editor, so it is on the critical path.
+    var f;
+    return openDeck().then(function (frame) {
+      f = frame;
+      var doc = f.contentDocument;
+      f.contentWindow.RV.fn.toggleOutline();
+      return RVT.until(function () {
+        return doc.querySelector('#rv-ed-outline .rv-ol-filter');
+      }, 15000, 'the slide selector with its filter box');
+    }).then(function (input) {
+      var doc = f.contentDocument;
+      var all = doc.querySelectorAll('#rv-ed-outline .rv-ol-item[data-h]').length;
+      RVT.assert(all >= 3, 'the strip lists the deck, got ' + all);
+
+      input.value = 'bullets';
+      input.dispatchEvent(new f.contentWindow.Event('input', { bubbles: true }));
+      var shown = doc.querySelectorAll('#rv-ed-outline .rv-ol-item[data-h]');
+      RVT.assert(shown.length === 1, 'filter narrows to one, got ' + shown.length);
+      var want = +shown[0].getAttribute('data-h');
+
+      input.dispatchEvent(new f.contentWindow.KeyboardEvent(
+        'keydown', { key: 'Enter', bubbles: true }));
+      return RVT.until(function () {
+        return f.contentWindow.Reveal.getIndices().h === want ? true : null;
+      }, 15000, 'Enter jumps to the match');
+    }).then(function () {
+      var doc = f.contentDocument;
+      var box = doc.getElementById('rv-ed-outline');
+      RVT.assert(!box.classList.contains('rv-ol-vert'), 'starts as a strip');
+      doc.querySelector('#rv-ed-outline .rv-ol-layout').click();
+      RVT.assert(box.classList.contains('rv-ol-vert'), 'toggles to a list');
+      RVT.assert(f.contentWindow.localStorage.getItem('rv-ed-outline-v') === '1',
+                 'the choice is remembered');
+      f.contentWindow.localStorage.removeItem('rv-ed-outline-v');
+      f.remove();
+      return true;
+    });
+  });
+
   RVT.test('selecting another element saves the edited source box', function () {
     var f;
     return openDeck().then(function (frame) {

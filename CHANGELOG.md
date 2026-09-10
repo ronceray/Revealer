@@ -112,9 +112,13 @@
 - The source panel soft-wraps long lines (inline HTML, display math,
   table rows) instead of forcing a horizontal hunt, uses a 12px font, and
   starts taller (260px; 360px for the whole-slide source).
-- The slide filmstrip scrolls horizontally under a vertical mouse wheel
-  and keeps the current slide in view (opening it, or navigating with the
-  arrow keys, no longer lands on slide 1).
+- **The slide selector is navigable.** It scrolls horizontally under a
+  vertical mouse wheel and keeps the current slide in view; a **filter box**
+  (focused as it opens) narrows the deck by title or number with `Enter` to
+  jump and `Escape` to clear; and a header button switches between the
+  horizontal filmstrip and a **vertical list**, remembered between sessions.
+  Navigating a 20-slide deck through a strip was on the critical path for
+  everything else in the editor.
 
 ### Claude Code skill (issue #16)
 

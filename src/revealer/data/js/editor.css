@@ -279,6 +279,29 @@ html.rv-edit .reveal .slides section * { cursor: crosshair; }
   display: flex; flex-direction: row; gap: 8px;
   overflow-x: auto; padding: 8px 10px 10px;
 }
+/* Jump box: typing filters the deck, Enter goes to the first match — the
+   fastest way through a 20+ slide deck. */
+#rv-ed-outline .rv-ol-filter {
+  display: block; width: calc(100% - 20px); margin: 8px 10px 0;
+  font: 13px system-ui, sans-serif;
+  background: #12121f; color: #d7e0f5;
+  border: 1px solid #4a5580; border-radius: 6px; padding: 5px 8px;
+  box-sizing: border-box;
+}
+#rv-ed-outline .rv-ol-nomatch { color: #8a93b5; border-style: dashed; }
+
+/* Vertical list: a horizontal strip is fine for a short deck and slow going
+   for a real one. The selector drops from the command band either way; as a
+   list it hugs the left edge and scrolls vertically. */
+#rv-ed-outline.rv-ol-vert { right: auto; width: 320px; max-width: 46vw;
+  bottom: 0; display: flex; flex-direction: column; }
+#rv-ed-outline.rv-ol-vert .rv-box-body {
+  flex: 1 1 auto; min-height: 0; display: flex; flex-direction: column; }
+#rv-ed-outline.rv-ol-vert .rv-ol-list {
+  flex-direction: column; overflow-x: hidden; overflow-y: auto;
+  flex: 1 1 auto; min-height: 0;
+}
+#rv-ed-outline.rv-ol-vert .rv-ol-item { width: auto; }
 .rv-ol-item {
   flex: 0 0 auto; width: 152px;
   display: flex; flex-direction: column; gap: 5px;
