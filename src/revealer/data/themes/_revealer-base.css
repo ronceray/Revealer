@@ -871,7 +871,7 @@ h1.relief {
   color: var(--rv-box-text);
 }
 
-.box-title { font-size: 0.7em; font-weight: 700; line-height: 1.2; margin-bottom: 0.2em;
+.box-title { font-size: 1em; font-weight: 700; line-height: 1.2; margin-bottom: 0.2em;
   color: var(--rv-accent); }
 .box-warn .box-title { color: var(--rv-warn); }
 .box-good .box-title { color: var(--rv-good); }
@@ -904,7 +904,7 @@ h1.relief {
 
 .card-title {
   font-weight: 700;
-  font-size: 0.75em;
+  font-size: 1em;  /* a heading is never smaller than the text it introduces */
   color: var(--rv-accent);
   text-align: center;
   line-height: 1.2;

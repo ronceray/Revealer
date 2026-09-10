@@ -220,7 +220,7 @@ header {
 
 .box-info { background: var(--blue-xlt); border-left: 5px solid var(--blue); border-radius: 0 8px 8px 0; padding: 14px 22px; }
 .box-warn { background: #FFF5F1; border-left: 5px solid #C75038; border-radius: 0 8px 8px 0; padding: 14px 22px; }
-.box-title { font-size: 24px; font-weight: 700; color: var(--blue-dk); line-height: 1.2; margin-bottom: 6px; }
+.box-title { font-size: 34px; font-weight: 700; color: var(--blue-dk); line-height: 1.2; margin-bottom: 6px; }
 .box-warn .box-title { color: #8F2D1F; }
 
 .s-title { font-size: 52px; font-weight: 700; line-height: 1.1; color: var(--blue-dk); }
@@ -292,9 +292,9 @@ header {
 
 /* compact pale-blue math zone for the SFI-generation method bands */
 .method-card { background: var(--blue-xlt); border-left: 6px solid var(--blue); border-radius: 0 8px 8px 0; padding: 16px 24px; display: flex; flex-direction: column; gap: 10px; min-width: 0; }
-.method-title { font-size: 28px; font-weight: 700; line-height: 1.15; color: var(--blue-dk); }
+.method-title { font-size: 34px; font-weight: 700; line-height: 1.15; color: var(--blue-dk); }
 .method-card .math-body { font-size: 26px; }
-.method-card .eq-label { font-size: 22px; line-height: 1.25; }
+.method-card .eq-label { font-size: 24px; line-height: 1.25; }
 .method-emph { padding: 8px 14px; border: 2px solid var(--blue-md); background: #fff; color: var(--blue-dk); font-size: 22px; font-weight: 700; line-height: 1.18; border-radius: 6px; }
 
 /* definition grid: key | value (PASTIS term table, etc.) */
@@ -324,7 +324,7 @@ header {
 /* feature / extension cards: title · subtitle · framed equation · description ·
    attribution. Pieces sit inside a `> card` (.sfi-card) or grid cell; the
    attribution pins to the card bottom. Replaces repeated inline card markup. */
-.feat-title { font-size: 30px; font-weight: 700; color: var(--blue-dk); line-height: 1.15; text-align: center; }
+.feat-title { font-size: 34px; font-weight: 700; color: var(--blue-dk); line-height: 1.15; text-align: center; }
 .feat-sub   { font-size: 24px; font-weight: 600; color: var(--muted); line-height: 1.25; text-align: center; }
 .feat-eq    { border: 1.5px solid var(--blue-lt); border-radius: 8px; background: #fff; padding: 10px 18px; font-size: 30px; text-align: center; }
 .feat-desc  { font-size: 24px; color: var(--text); line-height: 1.32; text-align: center; }

@@ -254,3 +254,19 @@ def test_fill_modes_render_the_section_classes(deck):
     for mode in ("between", "center", "around", "end"):
         html = build_deck(deck("=== T\n> fill {0}\n\ntext\n".format(mode), name="fill_" + mode), name="fill_" + mode)
         assert 'class="rv-fill rv-fill-{0}"'.format(mode) in html
+
+
+# --- #11: a heading is never smaller than the text it introduces --------------
+
+def test_callout_and_card_titles_are_at_least_body_size():
+    from revealer import assets
+
+    base = (assets.DATA / "themes" / "_revealer-base.css").read_text(encoding="utf-8")
+    for cls in (".box-title", ".card-title"):
+        m = re.search(re.escape(cls) + r" \{[^}]*?font-size: ([\d.]+)em", base, re.S)
+        assert m and float(m.group(1)) >= 1, cls
+    sfi = (assets.DATA / "themes" / "sfi.css").read_text(encoding="utf-8")
+    body = float(re.search(r"--r-main-font-size: (\d+)px", sfi).group(1))
+    for cls in (".box-title", ".method-title", ".feat-title"):
+        m = re.search(re.escape(cls) + r" \{ font-size: (\d+)px", sfi)
+        assert m and float(m.group(1)) >= body, cls
