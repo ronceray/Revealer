@@ -132,7 +132,15 @@ collapsed (floor-scale) or overflowing text:
   time, so repeated passes converge to the same value regardless of what
   was applied before — arrival timing must never change the final layout.
 
-The regression suite for all three lives in
+The search has a **floor** (`data-rv-fit-floor` on the section, from the
+`> fit-floor:` setting, `0.85` by default): the engine only absorbs a
+small overflow, because body text must look the same size from one slide
+to the next. A block that would need a deeper shrink keeps scale 1 —
+full-size overflow is legible and diagnosable, floor-size text is neither
+— and is flagged `data-rv-overflow="<px>"` so the editor and the planned
+`revealer check` can report it. `> fit-floor: 1` disables auto-fit.
+
+The regression suite for all of this lives in
 `src/revealer/data/js/test/suite-fit.js`.
 
 ## Editor architecture

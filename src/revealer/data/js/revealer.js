@@ -84,32 +84,47 @@ function rv_blockContentHeight(col) {
   return h;
 }
 
+// Default auto-fit floor (`> fit-floor:` overrides it per deck or slide). Body
+// text has to look the same size from one slide to the next, so the runtime
+// only absorbs small overflows; past the floor the content overflows at full
+// size — visible, and reported by the build's layout check — instead of
+// silently shrinking to a fifth of the theme's size as it used to.
+var RV_FIT_FLOOR = 0.85;
+
 // Reduce the block font size until its content fits the available height.
 // Returns the applied font scale (<= 1), or NaN when the layout does not
 // respond to probes (measurement unreliable — the caller schedules a retry).
-function rv_fitBlock(col, avail) {
+function rv_fitBlock(col, avail, floor) {
+  floor = isFinite(floor) ? Math.min(1, Math.max(0.05, floor)) : RV_FIT_FLOOR;
   var prev = parseFloat(col.style.getPropertyValue('--rv-fontscale'));
   col.style.setProperty('--rv-fontscale', 1);
   var full = rv_blockContentHeight(col);
-  if (full <= avail + 0.5) return 1;
+  if (full <= avail + 0.5) { col.removeAttribute('data-rv-overflow'); return 1; }
+  if (floor >= 1) {
+    // Auto-fit disabled: report the overflow, keep the size.
+    col.setAttribute('data-rv-overflow', Math.round(full - avail));
+    return 1;
+  }
   // Sanity: a probe must move the measurement before the search can be
   // trusted. A frozen read (in-flight transition, collapsed box...) would
   // otherwise send every probe the same way and the search would return the
   // floor; keep the last applied scale instead of persisting garbage.
-  col.style.setProperty('--rv-fontscale', 0.2);
+  col.style.setProperty('--rv-fontscale', floor);
   var floorH = rv_blockContentHeight(col);
   if (!(floorH < full)) {
     col.style.setProperty('--rv-fontscale', isFinite(prev) ? prev : 1);
     return NaN;
   }
   if (floorH > avail + 0.5) {
-    // Nothing fits even at the floor (fixed-height content dominates the
-    // block): full-size overflow is legible and diagnosable; floor-size
-    // text is neither. Keep scale 1.
+    // Nothing fits even at the floor: full-size overflow is legible and
+    // diagnosable; floor-size text is neither. Keep scale 1 and flag the
+    // block (the dev editor and `revealer check` read this attribute).
     col.style.setProperty('--rv-fontscale', 1);
+    col.setAttribute('data-rv-overflow', Math.round(full - avail));
     return 1;
   }
-  var lo = 0.2, hi = 1;
+  col.removeAttribute('data-rv-overflow');
+  var lo = floor, hi = 1;
   for (var i = 0; i < 20; i++) {
     var mid = (lo + hi) / 2;
     col.style.setProperty('--rv-fontscale', mid);
@@ -196,6 +211,7 @@ function rv_fitSlideMeasured(slide, content, inner, slidesEl) {
   // Vertical breathing margin between header/footer and the central area.
   var headerMargin = rv_num(slide, 'data-rv-header-margin', RV_HEADER_MARGIN);
   var columnSpacing = rv_num(slide, 'data-rv-column-spacing', RV_COLUMN_SPACING);
+  var fitFloor = rv_num(slide, 'data-rv-fit-floor', RV_FIT_FLOOR);
   var mv = headerMargin * H;
 
   // The central area spans the full slide width; horizontal spacing between
@@ -235,7 +251,7 @@ function rv_fitSlideMeasured(slide, content, inner, slidesEl) {
       for (var it = 0; it < 4; it++) {
         cols.forEach(function (c, i) { c.style.flex = weights[i].toFixed(4) + ' 1 0'; });
         void multi.offsetHeight;
-        var scales = cols.map(function (c) { return rv_fitBlock(c, c.clientHeight); });
+        var scales = cols.map(function (c) { return rv_fitBlock(c, c.clientHeight, fitFloor); });
         var next = weights.map(function (w, i) {
           if (!isFinite(scales[i])) { unreliable = true; return w; }
           return w / Math.sqrt(Math.max(scales[i], 0.05));
@@ -248,12 +264,12 @@ function rv_fitSlideMeasured(slide, content, inner, slidesEl) {
 
     void multi.offsetHeight;
     cols.forEach(function (col) {
-      if (!isFinite(rv_fitBlock(col, col.clientHeight))) unreliable = true;
+      if (!isFinite(rv_fitBlock(col, col.clientHeight, fitFloor))) unreliable = true;
     });
   } else if (slide.classList.contains('rv-fill')) {
     // `> fill` slides put rows/paragraphs directly in the inner box; fit it
     // as one block (the base CSS scales .rv-fill's inner font accordingly).
-    var unreliableFill = !isFinite(rv_fitBlock(inner, boxH));
+    var unreliableFill = !isFinite(rv_fitBlock(inner, boxH, fitFloor));
     unreliable = unreliableFill;
   }
 

@@ -627,6 +627,7 @@ options that belong to a block construct (`> gap:` in a grid, `> margin:` /
 | `> theme:` *name* | **Theme.** `revealer` (default), `ljp`, `sfi`, or any [reveal.js theme](https://revealjs.com/themes/). See the [theme gallery](../themes.md). |
 | `> codeTheme:` *name* | **Code highlighting theme** ([highlight.js demo](https://highlightjs.org/static/demo/)). Default: `zenburn`. |
 | `> header-height:` / `> footer-height:` *fraction* | **Header / footer band heights**, as a fraction of the slide height. |
+| `> fit-floor:` *0…1* | **Auto-fit floor**: how far the runtime may shrink a block's text to make it fit (`0.85` by default — body text must look the same size from one slide to the next). Past the floor the content overflows at full size instead, and the block is flagged `data-rv-overflow`. `1` disables auto-fit; also accepted per slide. |
 | `> size:` / `> align:` / `> paragraph-spacing:` | Presentation-wide text defaults — see [Contextual directives](directives.md). |
 
 ### Behaviour and reveal.js passthrough

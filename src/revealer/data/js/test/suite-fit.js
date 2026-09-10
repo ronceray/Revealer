@@ -127,6 +127,32 @@
     });
   });
 
+  RVT.test('overflow past the fit floor keeps scale 1 and is flagged', function () {
+    // The floor defends typographic unity: body text must look the same
+    // size on every slide, so a block that would need a deeper shrink is
+    // left at scale 1 (visible overflow) and marked data-rv-overflow.
+    return RVT.iframe('/', '.reveal .slides section').then(function (f) {
+      var win = f.contentWindow;
+      return whenFitReady(f).then(function () {
+        var idx = slideByText(win, 'far too long for the floor to absorb');
+        RVT.assert(idx > 0, 'deck needs the fill-floor slide');
+        win.Reveal.slide(idx);
+        return wait(600);
+      }).then(function () {
+        var section = win.Reveal.getCurrentSlide();
+        var inner = section.querySelector('.rv-content-inner');
+        var fs = parseFloat(inner.style.getPropertyValue('--rv-fontscale')) || 1;
+        RVT.assert(section.getAttribute('data-rv-fit-floor') === '0.85',
+          'default fit floor is 0.85 (got ' + section.getAttribute('data-rv-fit-floor') + ')');
+        RVT.assert(fs === 1, 'past the floor the scale stays 1, got ' + fs);
+        RVT.assert(parseInt(inner.getAttribute('data-rv-overflow'), 10) > 0,
+          'the overflowing block is flagged with data-rv-overflow');
+        f.remove();
+        return true;
+      });
+    });
+  });
+
   RVT.test('content that cannot fit at any scale keeps scale 1', function () {
     return RVT.iframe('/', '.reveal .slides section').then(function (f) {
       var win = f.contentWindow;

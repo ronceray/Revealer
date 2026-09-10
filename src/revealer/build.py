@@ -2557,6 +2557,7 @@ def _build(pfile: str, dev: bool) -> str:
         "header-margin",
         "column-spacing",
         "column-width",
+        "fit-floor",
         "katex",
         "macros",
         "macro",
@@ -2701,6 +2702,12 @@ def _build(pfile: str, dev: bool) -> str:
             opt += ' data-rv-header-margin="{}"'.format(_geom("header-margin", "0.05"))
             opt += ' data-rv-column-spacing="{}"'.format(_geom("column-spacing", "0.05"))
             opt += ' data-rv-column-width="{}"'.format(_geom("column-width", "equal"))
+            # Auto-fit floor: how far the runtime may shrink a block's text
+            # before it stops and lets the content overflow (see the fit
+            # engine in revealer.js). Body text must look the same size from
+            # one slide to the next, so the default is close to 1.
+            opt += ' data-rv-fit-floor="{}"'.format(
+                _parse_float(_geom("fit-floor", 0.85), 0.85))
             for hk in ("header-height", "footer-height"):
                 hv = _geom(hk, None)
                 if hv is not None:

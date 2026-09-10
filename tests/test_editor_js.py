@@ -48,6 +48,7 @@ Math check $x^2$ trails words.
 * beta bullet
 
 === Fit cards
+> fit-floor: 0.2
 
 > grid(2,2)
 
@@ -98,6 +99,7 @@ Stepping recolours the dot, then dims it.
 
 === Fill overflow
 > fill
+> fit-floor: 0.2
 
 first long paragraph with enough words that the fill body cannot hold
 everything at full size and the fitter has to shrink the whole block
@@ -119,6 +121,33 @@ everything at full size and the fitter has to shrink the whole block
 
 seventh long paragraph with enough words that the fill body cannot hold
 everything at full size and the fitter has to shrink the whole block
+=== Fill floor
+> fill
+
+paragraph number 1 of a body far too long for the floor to absorb
+
+paragraph number 2 of a body far too long for the floor to absorb
+
+paragraph number 3 of a body far too long for the floor to absorb
+
+paragraph number 4 of a body far too long for the floor to absorb
+
+paragraph number 5 of a body far too long for the floor to absorb
+
+paragraph number 6 of a body far too long for the floor to absorb
+
+paragraph number 7 of a body far too long for the floor to absorb
+
+paragraph number 8 of a body far too long for the floor to absorb
+
+paragraph number 9 of a body far too long for the floor to absorb
+
+paragraph number 10 of a body far too long for the floor to absorb
+
+paragraph number 11 of a body far too long for the floor to absorb
+
+paragraph number 12 of a body far too long for the floor to absorb
+
 
 === Unfittable
 

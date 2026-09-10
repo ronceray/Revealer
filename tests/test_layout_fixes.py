@@ -145,3 +145,18 @@ def test_disagreeing_layer_heights_warn(deck, capsys):
         "> layer +\n! Media/a.png fill h=400\n> end: stack\n",
         media={"Media/a.png": PNG}))
     assert any("different heights (600px and 400px)" in line for line in _warnings(capsys))
+
+
+# --- #7: the auto-fit floor is a setting, defaulting near 1 -------------------
+
+def test_fit_floor_default(deck):
+    html = build_deck(deck("=== A\n\ntext\n"))
+    assert 'data-rv-fit-floor="0.85"' in html
+
+
+def test_fit_floor_deck_and_slide_overrides(deck):
+    html = build_deck(deck(
+        "> fit-floor: 0.9\n\n=== A\n\ntext\n\n=== B\n> fit-floor: 0.5\n\ntext\n"))
+    assert html.count('data-rv-fit-floor="0.9"') == 1
+    assert html.count('data-rv-fit-floor="0.5"') == 1
+    assert "fit-floor" not in html.split("Reveal.initialize", 1)[1]  # not a reveal option
