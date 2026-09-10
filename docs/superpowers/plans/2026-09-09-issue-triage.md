@@ -1,5 +1,16 @@
 # Issue triage 2026-09-09 — plans for the hard ones
 
+> **Status (2026-09-10): all five shipped.** #13 autosave, #14 the deck
+> settings on the first slide, #6 `revealer check`, #8 `crop=` / `zoom=`,
+> #15 the jump box and vertical list. The sections below are the design as
+> written before implementation; where the build disagreed with the plan the
+> commit message records what actually happened — notably #8, where a
+> box-relative crop turned out to be wrong under `contain` (the trim ate the
+> letterbox band, not the axis label), so `crop=` now implies `cover`; and
+> #6, where the deck walk had to settle on timers rather than
+> `requestAnimationFrame`, which never fires once a headless page goes idle.
+
+
 Eighteen issues were open on ronceray/Revealer. Thirteen were fixed in the
 working tree (see CHANGELOG › Unreleased: #1 #2 #3 #4 #5 #7 #9 #10 #11
 #12 #16 #17 #18, plus the minimum fix for #15). This file plans the five
