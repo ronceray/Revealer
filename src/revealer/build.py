@@ -2169,6 +2169,46 @@ def _expand_includes(text: str, pdir: str, _stack: tuple = (),
     return entries, includes
 
 
+def slide_index(pfile: str) -> list[dict]:
+    """The deck's slides with the indices reveal.js gives them (``7``, ``8/1``).
+
+    A light pass over the (include-expanded) source: only the slide markers
+    and ``> visibility: hidden`` matter, so it stays in step with the build
+    without running it. Each entry: ``{"index", "marker", "title", "line",
+    "file", "hidden"}`` — ``index`` is ``None`` for a hidden slide (reveal
+    drops it from the DOM, so the following slides shift up).
+    """
+    pdir = os.path.dirname(os.path.abspath(pfile)) or "."
+    with open(pfile, "r", encoding="utf-8") as fid:
+        text = fid.read()
+    expanded, _includes = _expand_includes(
+        text, pdir, _stack=(os.path.realpath(pfile),))
+    entries: list[dict] = []
+    for lineno, inc_file, line in expanded:
+        if line.startswith("#"):
+            continue
+        m = _SLIDE_MARKER_RE.match(line)
+        if m:
+            marker = m.group(1).rstrip()
+            title = line[len(m.group(1)):].strip()
+            entries.append({"marker": marker, "title": title, "line": lineno % _FILE_STRIDE,
+                            "file": inc_file or "", "hidden": False, "index": None})
+            continue
+        if entries and re.match(r"^>\s*visibility\s*:\s*hidden\s*$", line):
+            entries[-1]["hidden"] = True
+    h, v = -1, 0
+    for e in entries:
+        if e["hidden"]:
+            continue
+        if e["marker"] == "---" and h >= 0:
+            v += 1
+            e["index"] = "{0}/{1}".format(h, v)
+        else:
+            h, v = h + 1, 0
+            e["index"] = str(h)
+    return entries
+
+
 def collect_includes(pfile: str) -> list[str]:
     """Absolute paths of every file `> include:`d by *pfile* (recursive)."""
     try:

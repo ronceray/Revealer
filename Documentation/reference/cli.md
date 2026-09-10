@@ -141,6 +141,26 @@ the current reveal.js version and plugin set.
 Generate the HTML presentation from a `.pres` file. This is the command used by
 the VS Code *Run on save* integration.
 
+### `revealer index [TARGET]`
+
+List the deck's slides with the indices reveal.js gives them — the numbers
+you need to deep-link (`talk.html#/8/1`), to screenshot one slide, or to
+say "slide 15" unambiguously:
+
+```
+$ revealer index talk.pres
+0          17  >>> first: Stochastic Force Inference
+1          20  === The dynamics of living systems…
+1/1        35  --- How does it work?
+-         107  --- Export to pdf  (hidden)
+2         123  %%% Extensions
+```
+
+The second column is the source line (`file:line` for included files).
+Slides hidden with `> visibility: hidden` are listed without an index —
+reveal.js drops them, so the slides after them shift up. `--json` prints
+the same list as JSON.
+
 ### `revealer serve [TARGET]`
 
 Serve a presentation with rebuild-on-save and live browser reload. `TARGET`

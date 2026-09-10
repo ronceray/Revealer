@@ -160,3 +160,24 @@ def test_fit_floor_deck_and_slide_overrides(deck):
     assert html.count('data-rv-fit-floor="0.9"') == 1
     assert html.count('data-rv-fit-floor="0.5"') == 1
     assert "fit-floor" not in html.split("Reveal.initialize", 1)[1]  # not a reveal option
+
+
+# --- #9: `revealer index` -----------------------------------------------------
+
+def test_slide_index_matches_reveal_numbering(tmp_path):
+    d = tmp_path / "ix"
+    (d / "reveal.js").mkdir(parents=True)
+    (d / "part.pres").write_text("--- Included vertical\n\ntext\n")
+    (d / "ix.pres").write_text(
+        ">>> first: Title\n=== One\n--- One b\n> visibility: hidden\n--- One c\n"
+        "%%% Part\n=== Two\n> include: part.pres\n>>> biblio\n")
+    from revealer.build import slide_index
+
+    ix = slide_index(str(d / "ix.pres"))
+    assert [(e["index"], e["marker"], e["title"]) for e in ix] == [
+        ("0", ">>> first:", "Title"), ("1", "===", "One"), (None, "---", "One b"),
+        ("1/1", "---", "One c"), ("2", "%%%", "Part"), ("3", "===", "Two"),
+        ("3/1", "---", "Included vertical"), ("4", ">>> biblio", "")]
+    assert ix[2]["hidden"] is True
+    assert (ix[6]["file"], ix[6]["line"]) == ("part.pres", 1)
+    assert (ix[1]["file"], ix[1]["line"]) == ("", 2)

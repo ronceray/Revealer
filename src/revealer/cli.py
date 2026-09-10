@@ -13,6 +13,7 @@ from pathlib import Path
 import questionary
 import typer
 from rich.console import Console
+from rich.markup import escape as rich_escape
 from rich.table import Table
 
 from . import assets, config, i18n
@@ -425,6 +426,32 @@ def build(target: str = typer.Argument(None, help="Presentation folder or .pres 
 
     pres = _resolve_target(target)
     _action_build(pres)
+
+
+@app.command()
+def index(
+    target: str = typer.Argument(None, help="Presentation folder or .pres file."),
+    as_json: bool = typer.Option(False, "--json", help="Machine-readable output."),
+):
+    """List the slides with the indices reveal.js uses (7, 8/1): for deep
+    links (#/8/1), screenshots, and talking about "slide 15" unambiguously."""
+
+    from .build import slide_index
+
+    pres = _resolve_target(target)
+    entries = slide_index(str(pres))
+    if as_json:
+        import json
+
+        console.print_json(json.dumps(entries))
+        return
+    for e in entries:
+        idx = e["index"] if e["index"] is not None else "-"
+        where = "{0}:{1}".format(e["file"], e["line"]) if e["file"] else str(e["line"])
+        note = "  [dim](hidden)[/dim]" if e["hidden"] else ""
+        console.print("[bold]{0:<6}[/bold] [dim]{1:>6}[/dim]  {2} {3}{4}".format(
+            idx, where, e["marker"], rich_escape(e["title"]), note),
+            highlight=False, markup=True)
 
 
 @app.command()

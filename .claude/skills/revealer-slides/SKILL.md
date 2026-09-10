@@ -29,6 +29,8 @@ in the Revealer repo against its own docs.
    **Zero warnings is the bar**; references/verify.md decodes them.
 4. **Verify visually.** Screenshot every slide you changed:
    `scripts/snap.sh <Name>.html <slide> shot.png --fragments`
+   (`revealer index <Name>.pres` lists every slide with its reveal
+   index — `7`, `8/1` — so you never have to count `===` lines)
    then READ the image: clipped text, broken-image icons, unbalanced
    columns, overlays landing wrong. Sweep the whole deck once before
    declaring the talk done. Exit 3 means no Chrome — say you could not
