@@ -39,6 +39,24 @@
   theme `.box-title`, `.method-title` and `.feat-title` are 34px (body)
   and `.method-card .eq-label` 24px.
 
+### Layout diagnostics (issue #6)
+
+- **`revealer check`** renders the deck in headless Chrome and reports what
+  the build cannot see: content overflowing its box, painted off the slide,
+  cropped through a figure by `cover`, an empty column, or (with
+  `--dead-space`) a near-empty `> fill` slide. Findings use the parser's own
+  `Warning: slide 8/1 (Title) line 214: …` format with the measured overflow
+  in pixels, so "zero warnings" comes to mean the deck is presentable.
+  `--strict` exits 2 for CI, `--skip` silences a kind, and
+  `data-rv-check="ignore"` excludes an element. `revealer build --check`
+  does both steps at once.
+- The browser editor badges the current slide with the same measurements
+  (**⚠ N** in the command bar, an outline on each offender), so a problem
+  shows up while you are writing the slide rather than in a screenshot sweep.
+- The whole deck is measured in one Chrome launch with every fragment shown —
+  the most crowded state a slide reaches — and the deck's own `talk.html` is
+  never touched.
+
 ### CLI, build and grammar (issues #1 #9 #10)
 
 - **`revealer index <deck>`** lists the slides with the indices reveal.js

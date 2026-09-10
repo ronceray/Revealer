@@ -421,11 +421,51 @@ def update(
 
 
 @app.command()
-def build(target: str = typer.Argument(None, help="Presentation folder or .pres file.")):
+def build(
+    target: str = typer.Argument(None, help="Presentation folder or .pres file."),
+    check_layout: bool = typer.Option(False, "--check",
+                                      help="After building, render the deck and report layout problems."),
+):
     """Build the HTML presentation from a .pres file."""
 
     pres = _resolve_target(target)
     _action_build(pres)
+    if check_layout:
+        from .check import CheckError, run_check
+
+        try:
+            run_check(str(pres),
+                      log=lambda m: console.print(m, highlight=False, markup=False))
+        except CheckError as exc:
+            console.print("[red]Check failed:[/red] {0}".format(exc))
+            raise typer.Exit(1)
+
+
+@app.command()
+def check(
+    target: str = typer.Argument(None, help="Presentation folder or .pres file."),
+    strict: bool = typer.Option(False, "--strict",
+                                help="Exit with status 2 when anything is reported."),
+    dead_space: bool = typer.Option(False, "--dead-space",
+                                    help="Also report slides whose body leaves most of the canvas empty."),
+    skip: str = typer.Option(None, "--skip",
+                             help="Comma-separated finding kinds to ignore (overflow, offslide, crop, empty, sparse)."),
+):
+    """Render the deck and report what the build cannot see: content that
+    overflows its box, lands off the slide, or is cropped through a figure."""
+
+    from .check import CheckError, run_check
+
+    pres = _resolve_target(target)
+    try:
+        n = run_check(str(pres), dead_space=dead_space,
+                      skip=tuple(k.strip() for k in (skip or "").split(",") if k.strip()),
+                      log=lambda m: console.print(m, highlight=False, markup=False))
+    except CheckError as exc:
+        console.print("[red]Check failed:[/red] {0}".format(exc))
+        raise typer.Exit(1)
+    if n and strict:
+        raise typer.Exit(2)
 
 
 @app.command()

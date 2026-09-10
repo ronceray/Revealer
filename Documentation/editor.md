@@ -103,6 +103,15 @@ where the slide ends.
 
 Shortcuts never fire while you are typing in a field or text box.
 
+## Live layout check
+
+While editing, a **⚠ N** badge appears in the command bar when the current
+slide has a layout problem — content overflowing its box, painted off the
+slide, or a figure cropped through by `cover` — and each offending element is
+outlined. Click the badge for the details. These are the same measurements
+[`revealer check`](reference/cli.md) runs over the whole deck, so a slide that
+is clean here is clean there.
+
 ## Fragment drawer
 
 `F` (or **Insert ▸ Fragments**) opens a drawer listing the current slide's

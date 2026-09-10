@@ -67,7 +67,10 @@ EDITOR_JS: tuple[str, ...] = (
     "editor/split.js",
     "editor/boot.js",
 )
-_DEV_ASSETS = frozenset(EDITOR_JS) | {"editor.css"}
+# The layout probe (`revealer check`) doubles as the editor's live
+# overflow badge: one implementation, served from the same place.
+CHECK_JS = "check.js"
+_DEV_ASSETS = frozenset(EDITOR_JS) | {"editor.css", CHECK_JS}
 SSE_KEEPALIVE_S = 15
 WATCH_INTERVAL_S = 0.25
 ASSET_SCAN_INTERVAL_S = 1.0
@@ -244,6 +247,8 @@ def _inject_dev(html: str, sess: DevSession) -> str:
         '<script>window.__RV_DEV__ = {0};</script>\n'
         '<link rel="stylesheet" href="{1}/editor.css">\n'.format(
             json.dumps(boot).replace("</", "<\\/"), DEV_PREFIX)
+        + '<script>window.__RV_CHECK_OPTS__ = {"walk": false};</script>\n'
+        + '<script src="{0}/{1}" defer></script>\n'.format(DEV_PREFIX, CHECK_JS)
         + "".join('<script src="{0}/{1}" defer></script>\n'.format(
             DEV_PREFIX, name) for name in EDITOR_JS)
     )
@@ -1214,7 +1219,10 @@ class _Handler(http.server.SimpleHTTPRequestHandler):
         self.wfile.write(body)
 
     def _dev_asset(self, name: str) -> None:
-        src = Path(__file__).parent / "data" / "js" / name
+        data = Path(__file__).parent / "data"
+        # The probe lives outside data/js/ on purpose: that folder is copied
+        # verbatim into every deck's reveal.js/js/, and the probe is tooling.
+        src = data / name if name == CHECK_JS else data / "js" / name
         if name not in _DEV_ASSETS or not src.is_file():
             self.send_error(404)
             return

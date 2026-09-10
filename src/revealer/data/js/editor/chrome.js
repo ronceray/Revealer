@@ -310,6 +310,68 @@
     });
   }
 
+  /* --- live layout check ------------------------------------------------------
+     The same measurements `revealer check` runs over the whole deck, applied
+     to the slide in front of you: an author should see a box overflowing its
+     row while writing it, not in a screenshot sweep afterwards. */
+
+  function runSlideCheck() {
+    var tag = document.getElementById('rv-ed-check');
+    var findings = (window.__RV_CHECK__ && window.__RV_CHECK__.slide()) || [];
+    // Outline every offender, so the badge is a pointer and not a riddle.
+    Array.prototype.forEach.call(
+      document.querySelectorAll('.rv-ed-checkhit'), function (el) {
+        el.classList.remove('rv-ed-checkhit');
+        el.removeAttribute('data-rv-checkmsg');
+      });
+    if (!findings.length) {
+      if (tag) tag.remove();
+      return;
+    }
+    var sec = Reveal.getCurrentSlide();
+    findings.forEach(function (f) {
+      if (!f.line || !sec) return;
+      var el = sec.querySelector('[data-rv-src="' + f.line + '"]');
+      if (!el) return;
+      el.classList.add('rv-ed-checkhit');
+      el.setAttribute('data-rv-checkmsg', f.message);
+    });
+    if (!tag) {
+      tag = document.createElement('button');
+      tag.id = 'rv-ed-check';
+      tag.addEventListener('click', function () {
+        F.toast(findings.map(function (f) { return f.message; }).join(' · '), 8000);
+      });
+      var bar = document.getElementById('rv-ed-toolbar');
+      var status = bar && bar.querySelector('.rv-tb-status');
+      if (status) bar.insertBefore(tag, status); else if (bar) bar.appendChild(tag);
+    }
+    tag.textContent = '⚠ ' + findings.length;
+    tag.title = findings.map(function (f) { return f.message; }).join('\n');
+  }
+
+  // Debounced: navigation, fragments and reloads all land here, and the
+  // measurement must run after the fit engine has settled.
+  var checkTimer = null;
+  function queueSlideCheck() {
+    if (!window.__RV_CHECK__) return;
+    clearTimeout(checkTimer);
+    checkTimer = setTimeout(function () {
+      if (S.on) runSlideCheck();
+      else {
+        var t = document.getElementById('rv-ed-check');
+        if (t) t.remove();
+      }
+    }, 450);
+  }
+
+  if (window.Reveal && Reveal.on) {
+    ['ready', 'slidechanged', 'fragmentshown', 'fragmenthidden']
+      .forEach(function (ev) { Reveal.on(ev, queueSlideCheck); });
+  }
+  RV.onChange('on', queueSlideCheck);
+  F.queueSlideCheck = queueSlideCheck;
+
   /* --- hover kind tag --------------------------------------------------------------------- */
 
   function hoverTag(ev) {

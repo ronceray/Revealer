@@ -27,6 +27,27 @@ folder next to the `.pres` (run `revealer update <dir>`), or a PDF
 figure when `pdftocairo` is missing or fails. Everything else is a
 `Warning:` line.
 
+## Layout check
+
+`revealer check <Name.pres>` lays every slide out in headless Chrome and
+reports what the parser cannot see. Run it after every build; zero
+findings is the bar, exactly like build warnings.
+
+| Finding | Fix |
+| --- | --- |
+| `… overflows its box by Npx` | the content does not fit its row/card/callout — shorten it, raise the row's `h=`, or split the slide |
+| `content is Npx taller than its box even at full size` | past the auto-fit floor: split the slide (or, deliberately, raise `> fit-floor:`) |
+| `… is painted Npx outside the slide` | a pin/overlay/element lands off the canvas — move it back inside |
+| `… is cut off by the window edge` | a header/footer/logo band does not fit — reduce `> header-height:` / `> footer-height:`, or use fewer logos |
+| `cover crops this media to N% of one axis` | `cover` is eating the figure — use `contain`, or crop the source file |
+| `… renders nothing` | an empty column or card — remove the marker, or give it content |
+
+Options: `--strict` (exit 2 if anything is reported), `--dead-space`
+(also flag near-empty `> fill` slides), `--skip crop,empty` (silence a
+kind you have decided about). `data-rv-check="ignore"` on a raw-HTML
+element excludes it. Needs Chrome, like the PDF export; without it the
+command says so rather than passing silently.
+
 ## Screenshots
 
     scripts/snap.sh Name.html <slide> out.png [--fragments]

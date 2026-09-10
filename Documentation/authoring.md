@@ -725,7 +725,9 @@ either. Anything the parser has to drop or reinterpret prints a
 - column fractions adding up to more than one row (`1/2` + `2/3`);
 - layers of one `> stack` asking for different `h=` heights.
 
-Layout problems the browser only discovers at render time — a block
-that overflows its box past the auto-fit floor — are flagged on the
-element (`data-rv-overflow`) rather than printed; see
-[Settings › `fit-floor`](reference/settings.md#look).
+Layout problems only appear once the deck is *rendered*, so they are a
+separate pass: [`revealer check`](reference/cli.md) lays every slide out in
+headless Chrome and reports, in the same `Warning:` format, content that
+overflows its box, lands off the slide, or is cropped through a figure.
+`revealer build --check` does both in one step, and the browser editor
+badges the current slide live.

@@ -479,6 +479,20 @@ html:not(.rv-edit) #rv-ed-toolbar { display: none; }
 }
 #rv-ed-panel .rv-pn-foot { color: #8a93b5; font-size: 11px; line-height: 1.4; }
 
+/* Live layout check: a count in the command bar and an outline on each
+   offending element (the same findings `revealer check` reports). */
+#rv-ed-check {
+  font: 12px system-ui, sans-serif;
+  background: #6b3a12; color: #ffd9a8;
+  border: 1px solid #a55e1c; border-radius: 5px;
+  padding: 2px 8px; margin-right: 8px; cursor: pointer;
+}
+#rv-ed-check:hover { background: #8a4a17; }
+html.rv-edit .rv-ed-checkhit {
+  outline: 2px dashed rgba(214, 138, 46, 0.9);
+  outline-offset: 2px;
+}
+
 #rv-ed-hovertag {
   position: fixed;
   display: none;

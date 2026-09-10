@@ -141,6 +141,39 @@ the current reveal.js version and plugin set.
 Generate the HTML presentation from a `.pres` file. This is the command used by
 the VS Code *Run on save* integration.
 
+### `revealer check [TARGET]`
+
+Render the deck in headless Chrome and report what the build cannot see:
+content that overflows its box, lands off the slide, or is cropped through a
+figure. The build's own warnings are parse-time only — a callout spilling onto
+the figure below it, a citation pushed past the bottom edge or a logo strip cut
+off by the window are all invisible to them.
+
+```
+$ revealer check talk.pres
+Warning: slide 8/1 (Results) line 214: info box overflows its box by 38px
+Warning: slide 12 (Setup) line 297: cover crops this media to 41% of one axis — use `contain`, or crop the source
+2 finding(s) over 24 slides (1 crop, 1 overflow).
+```
+
+Findings use the parser's `Warning:` format, so "zero warnings" comes to mean
+the deck is presentable. Each names the slide the way `revealer index` does,
+the source line, and the measured overflow in pixels.
+
+| Option | Effect |
+| --- | --- |
+| `--strict` | Exit with status 2 when anything is reported (for CI). |
+| `--dead-space` | Also report `> fill` slides whose body leaves most of the canvas empty. |
+| `--skip` *kinds* | Ignore finding kinds, comma-separated: `overflow`, `offslide`, `crop`, `empty`, `sparse`. |
+
+`revealer build --check` builds and then checks in one step. Add
+`data-rv-check="ignore"` to a raw-HTML element to exclude it and its contents
+(a deliberate bleed off the canvas, say).
+
+The check needs a Chrome/Chromium binary, like PDF export. It renders every
+slide with all fragments shown — the most crowded state a slide ever reaches —
+and leaves the deck's own `talk.html` untouched.
+
 ### `revealer index [TARGET]`
 
 List the deck's slides with the indices reveal.js gives them — the numbers

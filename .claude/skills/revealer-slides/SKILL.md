@@ -27,7 +27,12 @@ in the Revealer repo against its own docs.
    to it. The build never fails on syntax — it prints
    `Warning: line N: …` for anything it had to drop or reinterpret.
    **Zero warnings is the bar**; references/verify.md decodes them.
-4. **Verify visually.** Screenshot every slide you changed:
+4. **Check the layout.** `revealer check <path/to/Name.pres>` renders
+   every slide and reports what the build cannot see: content
+   overflowing its box, painted off the slide, or cropped through a
+   figure. Same `Warning:` format, same bar — **zero findings**.
+   `revealer build --check` does both steps at once.
+5. **Verify visually.** Screenshot every slide you changed:
    `scripts/snap.sh <Name>.html <slide> shot.png --fragments`
    (`revealer index <Name>.pres` lists every slide with its reveal
    index — `7`, `8/1` — so you never have to count `===` lines)
@@ -35,7 +40,7 @@ in the Revealer repo against its own docs.
    columns, overlays landing wrong. Sweep the whole deck once before
    declaring the talk done. Exit 3 means no Chrome — say you could not
    verify visually; never claim slides look right unseen.
-5. **Export** on request: `revealer pdf <target>` (one page per slide,
+6. **Export** on request: `revealer pdf <target>` (one page per slide,
    fragments shown; `> pdfSeparateFragments: true` for one page per
    step).
 
