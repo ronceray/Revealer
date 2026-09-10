@@ -71,6 +71,13 @@
     var w = RV.ui.box({ id: 'rv-ed-outline', title: RV.t('outline.title') });
     if (!w) return;
     w.body.innerHTML = '<div class="rv-ol-list"></div>';
+    // A horizontal strip under a vertical wheel: turn the wheel into
+    // horizontal travel (trackpads already send deltaX and keep it).
+    w.body.querySelector('.rv-ol-list').addEventListener('wheel', function (ev) {
+      if (Math.abs(ev.deltaY) <= Math.abs(ev.deltaX)) return;
+      ev.currentTarget.scrollLeft += ev.deltaY;
+      ev.preventDefault();
+    }, { passive: false });
     renderOutline();
   }
 
@@ -121,6 +128,12 @@
       list.appendChild(row);
     });
     if (!secs.length) list.innerHTML = '<div class="rv-ol-item">' + RV.esc(RV.t('outline.none')) + '</div>';
+    // Keep the current slide in view: opening the strip, or navigating
+    // with the arrow keys, lands on it instead of on slide 1.
+    var curRow = list.querySelector('.rv-ol-current');
+    if (curRow && curRow.scrollIntoView) {
+      curRow.scrollIntoView({ block: 'nearest', inline: 'center' });
+    }
   }
 
   /* All actions go through F.rvPostEdit (sha/queue/toasts); the rebuild's

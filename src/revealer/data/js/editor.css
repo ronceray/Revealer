@@ -457,16 +457,19 @@ html:not(.rv-edit) #rv-ed-toolbar { display: none; }
 #rv-ed-panel .rv-pn-srctitle { color: #c4cbe4; margin-top: 2px; }
 #rv-ed-panel .rv-pn-src {
   width: 100%;
-  min-height: 150px;
+  min-height: 260px;
   resize: vertical;
-  font: 11px/1.5 ui-monospace, monospace;
+  font: 12px/1.5 ui-monospace, monospace;
   background: #12121f;
   color: #d7e0f5;
   border: 1px solid #4a5580;
   border-radius: 6px;
   padding: 6px;
   box-sizing: border-box;
-  white-space: pre;
+  /* Long lines (inline HTML, display math, table rows) are the norm in a
+     .pres: soft-wrap them instead of forcing a horizontal hunt. */
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
 }
 #rv-ed-panel .rv-pn-foot { color: #8a93b5; font-size: 11px; line-height: 1.4; }
 
@@ -522,7 +525,7 @@ body.rv-split #rv-ed-outline {
 #rv-ed-divider:hover { background: rgba(42, 118, 221, 0.35); }
 
 
-#rv-ed-panel .rv-pn-src-slide { min-height: 260px; }
+#rv-ed-panel .rv-pn-src-slide { min-height: 360px; }
 
 #rv-ed-panel .rv-pn-cheat { margin-top: 4px; border-top: 1px solid #2a3350; padding-top: 6px; }
 #rv-ed-panel .rv-pn-cheat summary { cursor: pointer; color: #c4cbe4; }
