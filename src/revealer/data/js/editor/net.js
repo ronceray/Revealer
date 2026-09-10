@@ -113,6 +113,7 @@
     if (!pendingReload) return;
     if (editsBusy() || S.drag || S.dropState) return;
     if (F.inlineEditing && F.inlineEditing()) return;  // never yank mid-typing
+    if (F.panelDirty && F.panelDirty()) return;        // nor mid-edit in the panel
     pendingReload = false;
     if (reloadForceTimer) { clearTimeout(reloadForceTimer); reloadForceTimer = null; }
     F.hideError();
@@ -129,6 +130,7 @@
         // The force-fire exists so a wedged flag can't suppress reloads
         // forever — but typed text is not a wedged flag: commit it first.
         if (F.inlineEditing && F.inlineEditing()) F.commitInlineEdit();
+        if (F.flushDirtySources) F.flushDirtySources();
         pendingReload = false;
         F.hideError();
         F.saveStateAndReload();

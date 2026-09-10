@@ -20,14 +20,70 @@
     return p;
   }
 
+  /* --- dirty source boxes: autosave on navigation ---------------------------
+     The panel's source textareas used to commit only through their Apply
+     button, so selecting another element, changing slide or leaving edit
+     mode re-rendered the panel and the typed text was gone — no prompt, no
+     recovery, on the most routine interaction there is. Every box now
+     registers the commit its Apply would run, and anything that replaces the
+     panel flushes it first. (This also makes the panel's own "changes save
+     automatically" footer true of the source box, not just of the fields.)
+
+     Blur is deliberately NOT the trigger: Apply, the palette chips and the
+     format bar all blur the box, and committing there would post an edit per
+     click. The navigation funnels below are the real boundaries. */
+
+  function armSourceBox(ta, commit) {
+    if (!ta) return;
+    ta._rvOrig = ta.value;
+    ta._rvCommit = commit;
+    if (ta._rvArmed) return;      // a later fetchSrc re-arms: keep one listener
+    ta._rvArmed = true;
+    ta.addEventListener('input', function () {
+      var dirty = boxDirty(ta);
+      ta.classList.toggle('rv-dirty', dirty);
+      var foot = ta.parentNode && ta.parentNode.querySelector('.rv-pn-foot');
+      if (foot) foot.textContent = RV.t(dirty ? 'panel.unsaved' : 'panel.autosave');
+    });
+  }
+
+  function boxDirty(ta) {
+    return !!(ta && ta._rvCommit && ta.value !== ta._rvOrig);
+  }
+
+  function panelDirty() {
+    var boxes = panelEl().querySelectorAll('.rv-pn-src');
+    for (var i = 0; i < boxes.length; i++) {
+      if (boxDirty(boxes[i])) return true;
+    }
+    return false;
+  }
+
+  // Commit every dirty box; returns how many it committed. Idempotent: a
+  // flushed box is clean again, so repeated calls post nothing.
+  function flushDirtySources() {
+    var boxes = panelEl().querySelectorAll('.rv-pn-src');
+    var n = 0;
+    Array.prototype.forEach.call(boxes, function (ta) {
+      if (!boxDirty(ta)) return;
+      var commit = ta._rvCommit;
+      ta._rvOrig = ta.value;              // clean BEFORE posting: a rejected
+      ta.classList.remove('rv-dirty');    // edit must not re-fire on every sync
+      try { commit(); n += 1; } catch (e) { /* never wedge the navigation */ }
+    });
+    if (n) F.toast(RV.t('panel.autosaved'));
+    return n;
+  }
+
   function rvPanelSync() {
     var p = panelEl();
     p.style.display = S.on ? 'flex' : 'none';
-    if (!S.on) { S.panelFor = null; return; }
+    if (!S.on) { flushDirtySources(); S.panelFor = null; return; }
     if (S.sel) S.docSel = false;             // selecting anything exits doc-settings
     var sec = window.Reveal && Reveal.getCurrentSlide && Reveal.getCurrentSlide();
     var key = S.docSel ? 'docsettings' : (S.sel || sec);
     if (key === S.panelFor) return;
+    flushDirtySources();                     // the panel is about to be replaced
     S.panelFor = key;
     renderPanel();
   }
@@ -114,6 +170,14 @@
     var applyBtn = p.querySelector('.rv-pn-apply');
     applyBtn.disabled = true;
     var bounds = null;
+    // The commit this box will run — from Apply, or from the autosave flush
+    // when the panel navigates away. It closes over its own bounds and file,
+    // so it stays correct after the selection has already moved on.
+    function commit() {
+      if (!bounds) return;
+      var ta = p.querySelector('.rv-pn-src');
+      F.rvPostEdit([{ op: 'replace_lines', start: bounds.start, end: bounds.end, text: ta.value.split('\n') }], file);
+    }
     F.fetchSrc(s, e, function (j) {
       if (!j.lines) return;
       var ta = p.querySelector('.rv-pn-src');
@@ -121,13 +185,10 @@
       buildFields(p.querySelector('.rv-pn-fields'), kind, el, j.lines, s, e, file);
       bounds = { start: j.start, end: j.end };
       applyBtn.disabled = false;
+      armSourceBox(ta, commit);
     }, file);
 
-    applyBtn.addEventListener('click', function () {
-      if (!bounds) return;
-      var ta = p.querySelector('.rv-pn-src');
-      F.rvPostEdit([{ op: 'replace_lines', start: bounds.start, end: bounds.end, text: ta.value.split('\n') }], file);
-    });
+    applyBtn.addEventListener('click', commit);
   }
 
   function renderSlideSource(p, sec) {
@@ -151,19 +212,21 @@
     var applyBtn0 = p.querySelector('.rv-pn-apply');
     applyBtn0.disabled = true;
     var bounds0 = null;
+    function commit0() {
+      if (!bounds0) return;
+      var ta = p.querySelector('.rv-pn-src');
+      F.rvPostEdit([{ op: 'replace_lines', start: bounds0.start, end: bounds0.end, text: ta.value.split('\n') }], file);
+    }
     F.fetchSrc(s0, e0, function (j) {
       var ta = p.querySelector('.rv-pn-src');
       if (j.lines && ta) ta.value = j.lines.join('\n');
       if (j.lines) {
         bounds0 = { start: j.start, end: j.end };
         applyBtn0.disabled = false;
+        armSourceBox(ta, commit0);
       }
     }, file);
-    applyBtn0.addEventListener('click', function () {
-      if (!bounds0) return;
-      var ta = p.querySelector('.rv-pn-src');
-      F.rvPostEdit([{ op: 'replace_lines', start: bounds0.start, end: bounds0.end, text: ta.value.split('\n') }], file);
-    });
+    applyBtn0.addEventListener('click', commit0);
     appendPalette(p);
   }
 
@@ -204,9 +267,10 @@
           ta.placeholder = '> title: My talk\n> author: First author\n> theme: revealer';
         }
         applyBtn.disabled = false;
+        armSourceBox(ta, commit);
       });
     });
-    applyBtn.addEventListener('click', function () {
+    function commit() {
       var out = ta.value.split('\n');
       if (bounds) {
         F.rvPostEdit([{ op: 'replace_lines', start: bounds.start, end: bounds.end, text: out }]);
@@ -215,7 +279,8 @@
         F.rvPostEdit([{ op: 'insert_lines',
           at: { insert_before: 1, container_kind: 'deck' }, text: out.concat(['']) }]);
       }
-    });
+    }
+    applyBtn.addEventListener('click', commit);
     appendPalette(p);
   }
 
@@ -562,10 +627,23 @@
     }], file);
   }
 
+  // Closing the tab (or a manual F5) is the one navigation no in-page hook
+  // can save through: fall back to the browser's own prompt. Editor-driven
+  // reloads never reach it — they flush first (saveStateAndReload).
+  window.addEventListener('beforeunload', function (ev) {
+    if (!panelDirty()) return;
+    ev.preventDefault();
+    ev.returnValue = '';       // Chrome shows its prompt only when this is set
+    return '';
+  });
+
   // exports (what other editor/ modules call):
   F.rvPanelSync = rvPanelSync;
   F.appendPalette = appendPalette;
   F.openDocSettings = openDocSettings;
+  F.armSourceBox = armSourceBox;
+  F.flushDirtySources = flushDirtySources;
+  F.panelDirty = panelDirty;
   RV.onChange('on', rvPanelSync);
   RV.onChange('sel', rvPanelSync);
   F.deleteSelected = deleteSelected;

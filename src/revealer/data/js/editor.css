@@ -471,6 +471,12 @@ html:not(.rv-edit) #rv-ed-toolbar { display: none; }
   white-space: pre-wrap;
   overflow-wrap: anywhere;
 }
+/* An uncommitted source box: it autosaves when the panel navigates away,
+   but the state has to be visible while it lasts. */
+#rv-ed-panel .rv-pn-src.rv-dirty {
+  border-color: #d1a33a;
+  box-shadow: 0 0 0 1px rgba(209, 163, 58, 0.35);
+}
 #rv-ed-panel .rv-pn-foot { color: #8a93b5; font-size: 11px; line-height: 1.4; }
 
 #rv-ed-hovertag {

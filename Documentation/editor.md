@@ -59,6 +59,12 @@ the selection:
 - the **source box**: the actual `.pres` lines of the selection, editable
   in place (*Apply source*) — anything the quick fields don't cover.
 
+An edited source box is marked (amber border, "unsaved" in the footer) and
+**saves itself** as soon as you select something else, change slide or leave
+edit mode — *Apply source* is a shortcut, not the only way out. A pending
+edit also holds back the live reload until it is written, and closing the
+tab with one outstanding asks for confirmation.
+
 The panel docks to the side of the deck; **View ▸ Split view** switches to a
 split layout with the deck on the left and the panel on the right, divider
 draggable. In split view the slide is scaled to fit its space with its

@@ -121,6 +121,9 @@
   var RESTORE_KEY = 'rv-dev-restore';
 
   function saveStateAndReload() {
+    // The reload replaces the document: an uncommitted panel source box
+    // would go with it (and would trip the beforeunload prompt on the way).
+    if (F.flushDirtySources) F.flushDirtySources();
     try {
       var idx = (window.Reveal && Reveal.getIndices) ? Reveal.getIndices() : {};
       sessionStorage.setItem(RESTORE_KEY, JSON.stringify({

@@ -55,7 +55,15 @@
   editor palette document `> fill between|center|around|end` and the two
   `> space` forms instead of leaving them to the CSS.
 
-### Editor (issues #12 #15)
+### Editor (issues #12 #13 #15)
+
+- **The panel's source box no longer loses edits.** It committed only
+  through *Apply source*, so selecting another element, changing slide or
+  leaving edit mode discarded the typed text silently. Every source box
+  (element, whole slide, deck settings) now saves itself when the panel
+  navigates away, shows an unsaved marker while it is pending, holds back
+  the live reload until it is written, and asks for confirmation if the tab
+  is closed with an edit outstanding.
 
 - The source panel soft-wraps long lines (inline HTML, display math,
   table rows) instead of forcing a horizontal hunt, uses a 12px font, and
