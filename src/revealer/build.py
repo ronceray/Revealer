@@ -18,10 +18,12 @@ from __future__ import annotations
 
 import hashlib
 import json as _json
+import math
 import os
 import re
 import shutil
 import subprocess
+from fractions import Fraction
 from pathlib import Path
 
 from . import assets
@@ -1361,21 +1363,56 @@ def _contentify_legacy(html: str, src: list | None = None) -> str:
                 rest.append(t)
         return cls, attr, rest
 
-    def _col_flex(size: str) -> str:
-        """Map a `> col` size spec (``2/5``, ``40%``, ``2``, ``300px``, ``""``) to a flex value."""
-        if not size:
-            return "1 1 0"
-        m = re.match(r"^(\d+)\s*/\s*\d+$", size)
-        if m:
-            return "{0} 1 0".format(m.group(1))
-        if re.match(r"^\d+(?:px|%|em|rem|vh|vw)$", size):
-            return "0 0 {0}".format(size)
-        if re.match(r"^\d+$", size):
-            return "{0} 1 0".format(size)
-        return "1 1 0"
+    def _resolve_col_flex(cells: list[dict], gap: str, row_line) -> None:
+        """Turn every cell's raw ``size`` spec into its ``flex`` value.
+
+        Sizes are resolved for the whole row at once because they interact:
+
+        - fractions (``2/5``) are shares of the row, so mixed denominators are
+          scaled to a common one (``1/6 1/6 1/6 1/2`` -> weights 1 1 1 3 — not
+          the numerators alone, which made ``1/6`` and ``1/2`` identical);
+        - percentages are shares of the *usable* width: the row's gaps are
+          subtracted from them, so ``17% 17% 17% 45%`` plus three gaps no
+          longer overflows the slide;
+        - lengths (``300px``) pin the column; bare integers are flex weights;
+          no size means an equal share of the leftover.
+        """
+        fracs: dict[int, tuple[int, int]] = {}
+        for i, c in enumerate(cells):
+            m = re.match(r"^(\d+)\s*/\s*(\d+)$", c.get("size", ""))
+            if m and int(m.group(2)) > 0:
+                fracs[i] = (int(m.group(1)), int(m.group(2)))
+        common = 1
+        for _n, d in fracs.values():
+            common = common * d // math.gcd(common, d)
+        if fracs:
+            total = Fraction(sum(Fraction(n, d) for n, d in fracs.values()))
+            if total > 1:
+                _warn(row_line, "column fractions add up to {0} — more than one row; "
+                      "the columns are rescaled to fit".format(total))
+        n_gaps = len(cells) - 1
+        for i, c in enumerate(cells):
+            size = c.get("size", "")
+            if i in fracs:
+                n, d = fracs[i]
+                c["flex"] = "{0} 1 0".format(n * common // d)
+                continue
+            pm = re.match(r"^(\d+(?:\.\d+)?)%$", size)
+            if pm:
+                if n_gaps:
+                    share = round(float(pm.group(1)) / 100 * n_gaps, 4)
+                    c["flex"] = "0 0 calc({0}% - {1:g} * {2})".format(pm.group(1), share, gap)
+                else:
+                    c["flex"] = "0 0 {0}%".format(pm.group(1))
+            elif re.match(r"^\d+(?:\.\d+)?(?:px|em|rem|vh|vw)$", size):
+                c["flex"] = "0 0 {0}".format(size)
+            elif re.match(r"^\d+$", size):
+                c["flex"] = "{0} 1 0".format(size)
+            else:
+                c["flex"] = "1 1 0"
 
     def _parse_row(start_index: int):
-        """Parse ``> row [+[N]] [gap]`` … ``> col [size] [+[N]]`` … ``> end: row``.
+        """Parse ``> row [+[N]] [gap=G] [h=N]`` … ``> col [size] [+[N]]`` … ``> end: row``.
 
         Emits a flex ``.row`` of ``.region`` columns. Nests (a col may contain a
         row). Sizes are fractions (``2/5``), percents, px, or bare flex integers.
@@ -1385,14 +1422,29 @@ def _contentify_legacy(html: str, src: list | None = None) -> str:
         # optional fixed height (`h=460` / `h=460px`): pins the row's height so its
         # content keeps the same size/position from one slide to the next
         height = None
+        gap = None
         rest = []
         for t in head:
             m = re.match(r"^h=(\d+)(?:px)?$", t)
             if m:
                 height = m.group(1) + "px"
+            elif t.lower().startswith("gap=") and len(t) > 4:
+                gap = t[4:]
             else:
                 rest.append(t)
-        gap = rest[0] if rest else "var(--gap-col)"
+        if rest and gap is None:
+            gap = rest[0]
+            # A bare length after `> row` reads as a height to almost everyone
+            # who writes it, but it has always been the column gap: say so.
+            if re.match(r"^\d+(?:\.\d+)?(?:px|em|rem|vh|vw|%)?$", gap):
+                _warn(src[start_index],
+                      "'> row {0}' sets the column gap, not the row height — "
+                      "write 'h={1}' for a fixed height, or 'gap={0}' to keep "
+                      "the gap and silence this".format(
+                          gap, re.sub(r"[^\d.]", "", gap) or gap))
+        if gap is None:
+            gap = "var(--gap-col)"
+        gap = _escape_style_value(gap)
 
         cells: list[dict] = []
         current = None
@@ -1402,7 +1454,7 @@ def _contentify_legacy(html: str, src: list | None = None) -> str:
         def _ensure_cell():
             nonlocal current
             if current is None:
-                current = {"flex": "1 1 0", "fcls": "", "fattr": "", "lines": [],
+                current = {"size": "", "fcls": "", "fattr": "", "lines": [],
                            "src": [], "head": None}
                 cells.append(current)
 
@@ -1438,11 +1490,17 @@ def _contentify_legacy(html: str, src: list | None = None) -> str:
                 toks = [t for t in toks if t.lower() not in ("center", "relative", "clip")]
                 size = toks[0] if toks else ""
                 current = {
-                    "flex": _col_flex(size), "fcls": cf, "fattr": ca,
+                    "size": size, "fcls": cf, "fattr": ca,
                     "justify": "center" if center else "flex-start", "extra": extra,
                     "lines": [], "src": [], "head": src[index],
                 }
                 cells.append(current)
+                index += 1
+                continue
+            if current is None and not line.strip():
+                # Whitespace before the first `> col` opens no implicit column
+                # (it used to: a blank line after `> row` silently turned two
+                # halves into three thirds, the left one empty).
                 index += 1
                 continue
             _ensure_cell()
@@ -1450,6 +1508,7 @@ def _contentify_legacy(html: str, src: list | None = None) -> str:
             current["src"].append(src[index])
             index += 1
 
+        _resolve_col_flex(cells, gap, src[start_index])
         inner = ""
         for c in cells:
             cell_lns = [ln for ln in c["src"] if ln is not None]
@@ -1468,7 +1527,7 @@ def _contentify_legacy(html: str, src: list | None = None) -> str:
         out = (
             '<div class="row{fcls}" style="{row_flex}min-height:0;align-items:stretch;'
             'gap:{gap};"{fattr}{sa}>{inner}</div>'
-        ).format(fcls=fcls, row_flex=row_flex, gap=_escape_style_value(gap), fattr=fattr,
+        ).format(fcls=fcls, row_flex=row_flex, gap=gap, fattr=fattr,
                  sa=_src_attr(src[start_index], src[index - 1]), inner=inner)
         return out, index
 

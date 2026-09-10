@@ -91,7 +91,7 @@ def _diff_lines(before: str, after: str):
      "! Media/img.png fill h=200px | A caption"),
     ({"op": "set_media_size", "line": 9, "dim": "w", "value": "50%"}, 9,
      "!! Media/mov.mp4 loop w=50%"),
-    ({"op": "set_row_gap", "line": 5, "value": "32px"}, 5, "> row h=400 32px"),
+    ({"op": "set_row_gap", "line": 5, "value": "32px"}, 5, "> row h=400 gap=32px"),
     ({"op": "set_block_width", "line": 42, "new": "30%"}, 42, "|| 30%"),
     ({"op": "set_fragment_index", "line": 23, "construct": "card", "index": 3}, 23,
      "> card +3"),

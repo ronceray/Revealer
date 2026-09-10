@@ -400,14 +400,23 @@ grid whose heights resolve against the canvas:
 ```
 
 - `> fill [between|center|around|end]` — the optional keyword sets the
-  vertical distribution of the slide body.
-- `> row [+[N]] [gap] [h=NNN]` opens a row of columns; `h=` pins the row
-  height (useful to keep content aligned across consecutive slides).
+  vertical distribution of the slide body (a sparse slide clumps at the
+  top otherwise: `center` centres the blocks, `between` spreads them).
+- `> row [+[N]] [gap=G] [h=NNN]` opens a row of columns; `h=` pins the row
+  height (useful to keep content aligned across consecutive slides),
+  `gap=` sets the space between the columns (default: the theme's). A
+  bare length (`> row 60px`) is still read as the gap, but the build warns
+  about it — almost everyone who writes it means `h=60`.
 - `> col [size] [center] [relative] [clip] [+[N]]` starts the next column.
-  Sizes accept fractions (`2/5`), percentages, lengths (`300px`) or bare
-  flex weights; without sizes, columns share the width equally. `center`
-  centers the column content vertically; `relative` + `clip` let the
-  column host an absolutely-positioned overlay.
+  Sizes are **fractions of the row** (`1/6 1/6 1/6 1/2` gives 1:1:1:3;
+  mixed denominators are fine, and a row whose fractions add up to more
+  than one warns), **percentages of the usable width** (the gaps are taken
+  out first, so `17% 17% 17% 45%` never overflows the slide), fixed
+  lengths (`300px`) or bare flex weights; without sizes, columns share the
+  width equally. `center` centers the column content vertically;
+  `relative` + `clip` let the column host an absolutely-positioned overlay.
+- Blank lines between `> row` and the first `> col` are ignored; content
+  written there (without a `> col`) becomes an implicit first column.
 - Rows nest: a `> row` inside a column splits it further.
 - `> end: row` closes the row.
 - `> space` adds vertical whitespace in the flow. Bare `> space` is a

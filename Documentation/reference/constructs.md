@@ -221,7 +221,7 @@ Opener pattern (the exact regex the parser and editor share):
 ## row
 
 ```text
-> row  [+ or +N]  [h=N]  [gap]
+> row  [+ or +N]  [h=N]  [gap=…]
 ```
 
 | | |
@@ -239,7 +239,7 @@ Parameters (whitespace-separated head tokens after the opener, unless noted):
 | --- | --- | --- | --- |
 | `fragment #` | `+ or +N` | reveal as a fragment (`+N` sets `data-fragment-index`) | `set_fragment_index` |
 | `height px` | `h=N` | pinned height in px | `set_row_height` |
-| `gap` | `gap` | gap between items (any CSS length) | `set_row_gap` |
+| `gap=…` | `gap=…` | gap between items (any CSS length) | `set_row_gap` |
 
 Examples:
 

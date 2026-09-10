@@ -139,7 +139,7 @@ REGISTRY: dict[str, ConstructSpec] = {s.name: s for s in [
         head=(_FRAG,
               TokenSpec("height", H_TOKEN, "height", label="height px",
                         op="set_row_height", coerce="int"),
-              TokenSpec("gap", r".+", "gap", label="gap", op="set_row_gap")),
+              TokenSpec("gap", r"(?:gap=)?.+", "gap", label="gap=…", op="set_row_gap")),
         css_classes=("row",),
         cheat=(("Layout", "> row", "> row h=400\n> col\n\n> end: row\n"),),
     )),

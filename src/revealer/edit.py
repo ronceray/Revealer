@@ -261,13 +261,17 @@ def _op_set_row_gap(lines, op):
     if not m:
         raise _err(422, "anchor_mismatch", line=op["line"], want="row", got=line.strip())
     value = op.get("value")
+    # Written in the explicit `gap=` form: a bare length after `> row` reads
+    # as a height and the build warns about it.
+    if value:
+        value = "gap=" + re.sub(r"^gap=", "", str(value).strip(), flags=re.IGNORECASE)
 
     def is_gap(t):
         return not RE_H_TOKEN.match(t) and not RE_FRAG_TOKEN.match(t)
 
     region = _rewrite_tokens(m.group("flags"), is_gap,
-                             str(value) if value else None,
-                             insert_if_missing=str(value) if value else None)
+                             value if value else None,
+                             insert_if_missing=value if value else None)
     if region is None:
         region = m.group("flags")
     return [Replace(op["line"], m.group("head") + region)]
