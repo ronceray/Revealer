@@ -16,6 +16,9 @@ output. Zero warnings is the bar. The messages and their fixes:
 | `'> info' is never closed and swallowed '> …'` | add the missing `> end: info` before the next construct |
 | `bare '> space' fills only inside a '> fill' slide` | use `> space: 40px`, or make it a `> fill` slide |
 | `media file not found: …` | wrong path/case — media paths are relative to the deck folder |
+| `'> row 60px' sets the column gap, not the row height` | you meant a height: write `h=60`; if you really want that gap, write `gap=60px` |
+| `column fractions add up to 7/6` | the `> col` fractions of one row exceed the row — fix the sizes (fractions are shares of the row) |
+| `layers of this stack ask for different heights` | one `h=` per stack: put it on `> stack h=…` or on the first layer's media only |
 
 A build aborts (rather than warning) only on hard failures: a
 **failing `> build:` hook** (its output is shown — fix the script or

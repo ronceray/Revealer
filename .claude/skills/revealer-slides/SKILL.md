@@ -75,13 +75,50 @@ of screenshotting.
   `[text]{.accent}` `[text]{color=#c0392b}`; escape markers with `\`.
   A `**bold**` span cannot contain `$math$` (the asterisks render
   literally) — keep bold and math disjoint.
-- One idea per slide. Let the fit engine shrink content — if a shot
-  shows tiny text, split the slide instead of fighting sizes. The fit
-  engine only shrinks, never enlarges: sparse slides render at the
-  theme's (large) base size, so if everything feels oversized set a
-  presentation-wide `> size:` (e.g. `0.85`) or pick another theme.
-- Prefer constructs over raw HTML; prefer editing the smallest region
-  of the `.pres` you can.
+- One idea per slide. The fit engine absorbs only a *small* overflow
+  (down to `fit-floor`, 0.85 by default) so body text stays the same
+  size on every slide; past that the content overflows at full size
+  (visible in the screenshot; the block is flagged `data-rv-overflow`)
+  — split the slide, never fight sizes. The
+  engine never enlarges: sparse slides render at the theme's (large)
+  base size, so if everything feels oversized set a presentation-wide
+  `> size:` (e.g. `0.85`) or pick another theme.
+- Prefer editing the smallest region of the `.pres` you can.
+
+## Raw HTML is the last resort
+
+Raw HTML passes through, and that is exactly the problem: it is
+invisible to the editor's structural tools (cannot be selected,
+reordered, fragmented or restyled), it bypasses the theme, and it
+turns a readable `.pres` into a page of `<div style=…>`. So:
+
+1. **Before writing any raw-HTML block, name the construct you
+   considered and why it cannot do the job.** If you cannot name a
+   concrete reason, use the construct.
+2. **Raw HTML is only for a documented gap.** Known gaps: none of the
+   constructs crops or zooms media (planned as `zoom=` / `crop=` flags
+   on `!`). Anything else is a construct.
+3. **Confirm with the user first** when you are about to introduce raw
+   HTML that is not one of those gaps — say what you wanted, which
+   construct you tried, and what it lacked. The user may prefer the
+   construct's rendering, or a change to Revealer itself.
+
+The construct for the situation you are tempted to hand-code:
+
+| Tempted to write | Use instead |
+| --- | --- |
+| a flex row of `<div>`s | `> row` / `> col 2/5` … `> end: row` (fractions are shares of the row) |
+| a strip of portraits / logos / credits | `> grid(1,N)` of `> card plain` with `! photo.png h=120px \| Name` |
+| a labelled card / callout / highlighted box | `> card \| Title`, `> info` / `> warn` / `> good Title` |
+| a framed equation with a label | `> eq` … `> end: eq` (label as a caption paragraph) |
+| chip / tag rows inside a callout | a one-line list of `[chip]{.accent}` spans (theme-styled), or `> grid(1,N)` |
+| overlaid images that swap on click | `> stack` / `> layer +` … `> end: stack` |
+| an absolutely positioned overlay | `> pin: x% y% w%` … `> end: pin` |
+| a `<table>` | `> table(r,c)` … `> end: table` |
+| vertical whitespace | `> space: 40px` (fixed) or `> space` (filling, on a `> fill` slide) |
+| `<span style="font-size:…">` | `[text]{.sm}` / `{.lede}` / `{.title}` / `> size:` |
+| `<span style="color:…">` | `[text]{.accent}` / `{.warn}` / `{.good}` / `[text]{color=#c0392b}` |
+| an inline `<style>` to nudge one element | a per-slide `> size:` / `> align:`, or ask the user for a theme change |
 
 ## When unsure
 
