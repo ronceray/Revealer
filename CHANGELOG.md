@@ -26,6 +26,23 @@
   A deck-wide `<style>` after `>>> first:` used to push the visible
   content down by one paragraph gap.
 
+### Media (issue #8)
+
+- **`crop=` and `zoom=` on `!` / `!!`.** Real source figures carry material
+  you want gone at presentation time — a baked-in white margin on a screen
+  recording, a rotated axis label at one edge, leftover axis furniture, a
+  suptitle holding an internal dataset key — and that was the single most
+  common reason to abandon the DSL for hand-written
+  `position/overflow/transform` HTML. `crop=9%` trims every side,
+  `crop=10%,20%` vertical/horizontal, `crop=12%,0,0,9%` top/right/bottom/left
+  (the `margin` shorthand); `zoom=1.4` scales about the centre and
+  `zoom=1.4@47%,60%` about a point. The two compose. The media is laid out
+  larger than a clipping frame and offset, so the kept region fills the frame
+  exactly — which is why `crop=` implies `cover`, and why both flags need
+  `fill` or an explicit `h=` (the build warns and renders the media untouched
+  otherwise). Both are grammar tokens, so the editor's media panel, the
+  palette and the generated references carry them like every other parameter.
+
 ### Typography (issues #7 #11)
 
 - **The auto-fit floor is `0.85`, and a setting.** `> fill` and multi-column

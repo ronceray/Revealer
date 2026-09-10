@@ -1986,15 +1986,81 @@ _VIDEO_MIME = {
 }
 
 
+_ZOOM_RE = re.compile(
+    r"^zoom=(\d+(?:\.\d+)?)(?:@(\d+(?:\.\d+)?)%?(?:,(\d+(?:\.\d+)?)%?)?)?$", re.I)
+_CROP_RE = re.compile(r"^crop=((?:\d+(?:\.\d+)?%?)(?:,\s*\d+(?:\.\d+)?%?){0,3})$", re.I)
+
+
+def _parse_crop(spec: str, lineno) -> tuple[float, float, float, float] | None:
+    """``crop=t[,r,b,l]`` (CSS order, percentages) as fractions of the frame.
+
+    One value trims all four sides, two are vertical/horizontal, four are
+    top/right/bottom/left — the shorthand every author already knows from
+    ``margin``.
+    """
+    parts = [float(v.strip().rstrip("%")) / 100.0 for v in spec.split(",")]
+    if len(parts) == 1:
+        t = r = b = ln = parts[0]
+    elif len(parts) == 2:
+        t = b = parts[0]
+        r = ln = parts[1]
+    elif len(parts) == 3:
+        t, (r, ln), b = parts[0], (parts[1], parts[1]), parts[2]
+    else:
+        t, r, b, ln = parts[:4]
+    if t + b >= 1 or r + ln >= 1:
+        _warn(lineno, "crop= removes the whole media ({0}) — ignored".format(spec))
+        return None
+    return (t, r, b, ln)
+
+
+def _crop_inner_style(crop, zoom) -> str:
+    """Inline style placing the media inside its ``.rv-media-crop`` frame.
+
+    The media is laid out larger than the frame and offset, so the kept part
+    fills it exactly; the frame clips the rest. Zoom is a plain scale about
+    the requested point, which composes with a crop.
+    """
+    style = "position:absolute;"
+    if crop:
+        t, r, b, ln = crop
+        w = 100.0 / (1.0 - ln - r)
+        h = 100.0 / (1.0 - t - b)
+        style += "width:{0:.4g}%;height:{1:.4g}%;left:{2:.4g}%;top:{3:.4g}%;".format(
+            w, h, -w * ln, -h * t)
+    else:
+        style += "width:100%;height:100%;left:0;top:0;"
+    if zoom:
+        factor, ox, oy = zoom
+        style += "transform:scale({0:.4g});transform-origin:{1:.4g}% {2:.4g}%;".format(
+            factor, ox, oy)
+    return style
+
+
+def _frame(media_html: str, fill: bool, height, frag_cls: str,
+           frag_attr: str, sa: str) -> str:
+    """The clipping frame a ``zoom=`` / ``crop=`` media is displayed in."""
+    cls = "rv-media-crop" + (" rv-media-fill" if fill else "") + frag_cls
+    style = "" if fill else "height:{0};width:100%;".format(height)
+    return '<div class="{0}"{1}{2} style="{3}">{4}</div>'.format(
+        cls, frag_attr, sa, style, media_html)
+
+
 def _media_shortcut(kind: str, rest: str, lineno: int | None = None) -> str:
     """Render an ``!`` image or ``!!`` video shortcut.
 
     Syntax: ``! path [flags] [| caption]`` and ``!! path [flags] [| caption]``.
 
     Flags: ``fill`` (fill a sized parent — e.g. a grid card), ``cover`` / ``contain``
-    (object-fit), ``top`` (object-position), and for video ``loop`` / ``autoplay`` /
-    ``controls``. A trailing ``| caption`` adds a caption (styled as a figure caption,
-    or as a card label when inside a card).
+    (object-fit), ``top`` (object-position), ``zoom=`` / ``crop=`` (show only part
+    of the media — see below), and for video ``loop`` / ``autoplay`` / ``controls``.
+    A trailing ``| caption`` adds a caption (styled as a figure caption, or as a
+    card label when inside a card).
+
+    ``zoom=1.4`` scales the media about its centre, ``zoom=1.4@47%,50%`` about a
+    point; ``crop=9%`` trims every side, ``crop=10%,0,0,0`` trims top/right/
+    bottom/left. Both need a frame with a definite height — ``fill`` or ``h=`` —
+    since the media is taken out of the flow to be clipped.
     """
     sa = _src_attr(lineno)
     caption = None
@@ -2014,13 +2080,28 @@ def _media_shortcut(kind: str, rest: str, lineno: int | None = None) -> str:
     frag_cls = ""
     frag_attr = ""
     flag_tokens = []
+    crop = None
+    zoom = None
+    height = None
     for t in tokens[1:]:
         mm = re.match(r"^([hw])=([0-9.]+(?:px|em|rem|vh|vw|%)?)$", t, re.IGNORECASE)
         if mm:
             if mm.group(1).lower() == "h":
+                height = mm.group(2)
                 size_css += "height:{0};width:auto;".format(mm.group(2))
             else:
                 size_css += "width:{0};height:auto;".format(mm.group(2))
+            continue
+        zm = _ZOOM_RE.match(t)
+        if zm:
+            zoom = (float(zm.group(1)),
+                    float(zm.group(2)) if zm.group(2) else 50.0,
+                    float(zm.group(3)) if zm.group(3)
+                    else (float(zm.group(2)) if zm.group(2) else 50.0))
+            continue
+        cm = _CROP_RE.match(t)
+        if cm:
+            crop = _parse_crop(cm.group(1), lineno)
             continue
         fm = re.match(r"^\+(\d+)?$", t)
         if fm:
@@ -2046,7 +2127,31 @@ def _media_shortcut(kind: str, rest: str, lineno: int | None = None) -> str:
     cap_html = '<div class="rv-cap">{0}</div>'.format(_inline_md(caption)) if caption else ""
     fig_cls = "rv-fig" + frag_cls
 
+    # `zoom=` / `crop=` take the media out of the flow to clip it, so the frame
+    # must have a height of its own: `fill` gets one from its flex parent, `h=`
+    # states one. Anything else would collapse to nothing — say so and render
+    # the media uncropped rather than emit an invisible box.
+    if (crop or zoom) and not (fill or height):
+        _warn(lineno, "zoom=/crop= needs `fill` or `h=` to size the frame — ignored")
+        crop = zoom = None
+    frame = bool(crop or zoom)
+    if crop:
+        # A crop says "show me this part of the figure, filling the frame", so
+        # the kept region is fitted with `cover`. Under `contain` the media is
+        # letterboxed inside its box and the trim would eat the empty band
+        # instead of the axis label the author is pointing at — measured, not
+        # assumed. `contain` and `crop` are contradictory; say so once.
+        if "contain" in flags:
+            _warn(lineno, "crop= fills the frame with the kept region, so it "
+                          "overrides `contain` here")
+        objfit = "cover"
+
     if kind == "img":
+        inner_style = "object-fit:{0};object-position:{1};".format(objfit, pos)
+        if frame:
+            img = '<img style="{0}{1}" src="{2}" alt="">'.format(
+                inner_style, _crop_inner_style(crop, zoom), p)
+            return _frame(img, fill, height, frag_cls, frag_attr, sa) + cap_html
         if fill:
             style = "object-fit:{0};object-position:{1};{2}".format(objfit, pos, size_css)
             return '<img class="rv-media-fill{0}"{1}{5} style="{2}" src="{3}" alt="">{4}'.format(
@@ -2066,6 +2171,10 @@ def _media_shortcut(kind: str, rest: str, lineno: int | None = None) -> str:
     if "controls" in flags:
         attrs.append("controls")
     attrs_s = " ".join(attrs)
+    if frame:
+        vid = '<video style="object-fit:{0};object-position:{1};{2}" {3}><source src="{4}" type="{5}"></video>'.format(
+            objfit, pos, _crop_inner_style(crop, zoom), attrs_s, p, mime)
+        return _frame(vid, fill, height, frag_cls, frag_attr, sa) + cap_html
     if fill:
         style = "object-fit:{0};object-position:{1};{2}".format(objfit, pos, size_css)
         vid = '<video class="rv-media-fill{0}"{1}{6} style="{2}" {3}><source src="{4}" type="{5}"></video>'.format(

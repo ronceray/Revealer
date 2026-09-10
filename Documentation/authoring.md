@@ -511,11 +511,37 @@ to the presentation folder.
 | `contain` / `cover` | `object-fit` behaviour: fit without cropping / crop to fill. The default is `contain`, or `cover` when `fill` is set. |
 | `top` | Anchor the media to the top of its box (`object-position`). |
 | `h=...` / `w=...` | Fixed height / width (`px`, `em`, `%`, `vh`, `vw`), e.g. a logo strip. |
+| `zoom=...` | Scale the media inside its frame: `zoom=1.4` about the centre, `zoom=1.4@47%,60%` about a point. |
+| `crop=...` | Show only part of the media: `crop=9%` trims every side, `crop=10%,20%` vertical/horizontal, `crop=12%,0,0,9%` top/right/bottom/left — the `margin` shorthand. |
 | `+` / `+N` | Reveal the media as a fragment (optionally with an explicit index). |
 | `loop`, `autoplay`, `controls` | Video playback options. Videos are always muted, play inline, autoplay when their slide or fragment is shown and reset when it is hidden. |
 
 A trailing `| caption` adds a caption, styled as a figure caption (or as a
 card label when the media sits inside a card).
+
+### Cropping and zooming
+
+Source figures routinely carry material you want gone at presentation time:
+a baked-in white margin around a screen recording, a rotated axis label
+intruding at one edge, leftover axis furniture beside a strip, a suptitle
+holding an internal dataset key. `crop=` and `zoom=` handle those without
+dropping out of the DSL:
+
+```html
+! Media/hist.png fill crop=12%,0,0,9%      # trim the suptitle and the y axis
+!! Media/swarm.mp4 fill loop crop=9%       # trim a baked-in white margin
+! Media/traj.png fill zoom=1.4@47%,50%     # magnify about a point
+```
+
+The media is laid out larger than its frame and offset, so the part you keep
+fills the frame exactly and the rest is clipped. Because the kept region
+fills the frame, `crop=` implies `cover` (writing `contain` as well warns).
+Both flags need a frame with a height of its own — `fill`, or an explicit
+`h=` — since the media is taken out of the flow to be clipped; without one
+the build warns and renders the media untouched.
+
+`zoom=` composes with `crop=`: the crop chooses the region, the zoom then
+scales it about the requested point.
 
 `! fig.pdf` works too: PDF figures are converted to SVG on the fly and
 cached, so TikZ output and matplotlib PDFs drop straight in. Together with

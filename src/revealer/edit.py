@@ -55,6 +55,8 @@ RE_SIZE_TOKEN = re.compile("^" + _grammar.SIZE_TOKEN + "$")
 # deliberate divergence fix — the old edit-side pattern was IGNORECASE).
 RE_H_TOKEN = _grammar.token_pattern("row", "height")
 RE_MEDIA_SIZE_TOKEN = _grammar.token_pattern("media", "size")
+RE_ZOOM_TOKEN = _grammar.token_pattern("media", "zoom")
+RE_CROP_TOKEN = _grammar.token_pattern("media", "crop")
 RE_FRAG_TOKEN = re.compile("^" + _grammar.FRAG_TOKEN + "$")
 
 # Opener regex per movable/deletable construct.
@@ -253,6 +255,38 @@ def _op_set_media_size(lines, op):
         ((" " + caption) if caption else "")
     # `head` keeps its trailing space convention via the region's leading space.
     return [Replace(op["line"], new_line)]
+
+
+def _op_set_media_flag(lines, op, name, pattern):
+    """Set / clear a ``name=value`` flag on a media line (``zoom=``, ``crop=``)."""
+    line = _line(lines, op["line"])
+    m = RE_MEDIA_LINE.match(line)
+    if not m:
+        raise _err(422, "anchor_mismatch", line=op["line"], want="media", got=line.strip())
+    value = op.get("value")
+    token = None
+    if value not in (None, ""):
+        token = str(value).strip()
+        if not token.lower().startswith(name + "="):
+            token = "{0}={1}".format(name, token)
+        if not pattern.match(token):
+            raise _err(422, "bad_value", value=value)
+    flags, caption = _split_caption(m.group("rest"))
+    region = _rewrite_tokens(flags.rstrip(), lambda t: pattern.match(t),
+                             token, insert_if_missing=token)
+    if region is None:
+        region = " " + flags.strip() if flags.strip() else ""
+    new_line = m.group("head").rstrip() + region.rstrip() + \
+        ((" " + caption) if caption else "")
+    return [Replace(op["line"], new_line)]
+
+
+def _op_set_media_zoom(lines, op):
+    return _op_set_media_flag(lines, op, "zoom", RE_ZOOM_TOKEN)
+
+
+def _op_set_media_crop(lines, op):
+    return _op_set_media_flag(lines, op, "crop", RE_CROP_TOKEN)
 
 
 def _op_set_row_gap(lines, op):
@@ -464,6 +498,8 @@ _OPS = {
     "set_stack_height": _op_set_stack_height,
     "set_pin": _op_set_pin,
     "set_media_size": _op_set_media_size,
+    "set_media_zoom": _op_set_media_zoom,
+    "set_media_crop": _op_set_media_crop,
     "set_row_gap": _op_set_row_gap,
     "set_grid_gap": _op_set_grid_gap,
     "set_fragment_index": _op_set_fragment_index,

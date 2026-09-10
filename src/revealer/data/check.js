@@ -219,6 +219,8 @@
       if (ignored(el) || !visible(el)) return;
       var fit = window.getComputedStyle(el).objectFit;
       if (fit !== 'cover') return;
+      // `crop=` / `zoom=` mean the author framed this media on purpose.
+      if (el.closest && el.closest('.rv-media-crop')) return;
       var nw = el.naturalWidth || el.videoWidth || 0;
       var nh = el.naturalHeight || el.videoHeight || 0;
       var r = el.getBoundingClientRect();

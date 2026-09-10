@@ -96,6 +96,7 @@ escape \* \` \[
 ```text
 ! image
 !! movie
+crop / zoom
 ```
 
 ## Construct index
@@ -389,7 +390,7 @@ Opener pattern (the exact regex the parser and editor share):
 ## media
 
 ```text
-! path  (image)   or   !! path  (video)  [+ or +N]  [h=… or w=…]  [fill | contain | cover | top | loop | autoplay | controls]  [| caption]
+! path  (image)   or   !! path  (video)  [+ or +N]  [h=… or w=…]  [zoom=F or zoom=F@X%,Y%]  [crop=T[,R,B,L]]  [fill | contain | cover | top | loop | autoplay | controls]  [| caption]
 ```
 
 | | |
@@ -406,6 +407,8 @@ Parameters (whitespace-separated head tokens after the opener, unless noted):
 | --- | --- | --- | --- |
 | `fragment #` | `+ or +N` | reveal as a fragment (`+N` sets `data-fragment-index`) | `set_fragment_index` |
 | `size` | `h=… or w=…` | fixed height / width (px, em, rem, vh, vw, %) | `set_media_size` |
+| `zoom` | `zoom=F or zoom=F@X%,Y%` | scale the media about its centre, or about a point (needs `fill` or `h=`) | `set_media_zoom` |
+| `crop` | `crop=T[,R,B,L]` | trim a share off the sides, `margin`-style (needs `fill` or `h=`) | `set_media_crop` |
 | `keywords` | `fill | contain | cover | top | loop | autoplay | controls` | flags: `fill`, `contain`, `cover`, `top`, `loop`, `autoplay`, `controls` | — |
 
 Examples:
@@ -413,6 +416,7 @@ Examples:
 ```text
 ! image.png fill | Caption
 !! movie.mp4 loop
+! image.png fill crop=8% zoom=1.2
 ```
 
 Opener pattern (the exact regex the parser and editor share):

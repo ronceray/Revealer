@@ -28,6 +28,10 @@ FRAG_TOKEN = r"\+(\d+)?"
 SIZE_TOKEN = r"(?:\d+\s*/\s*\d+|\d+(?:\.\d+)?(?:px|%|em|rem|vh|vw)|\d+)"
 H_TOKEN = r"h=\d+(?:px)?"
 MEDIA_SIZE_TOKEN = r"([hw])=([0-9.]+(?:px|em|rem|vh|vw|%)?)"
+# `zoom=1.4` / `zoom=1.4@47%,50%` and `crop=9%` / `crop=10%,0,0,0`: show
+# only part of a figure, the commonest reason to drop out of the DSL.
+ZOOM_TOKEN = r"zoom=\d+(?:\.\d+)?(?:@\d+(?:\.\d+)?%?(?:,\d+(?:\.\d+)?%?)?)?"
+CROP_TOKEN = r"crop=\d+(?:\.\d+)?%?(?:,\s*\d+(?:\.\d+)?%?){0,3}"
 
 
 class Terminator(enum.Enum):
@@ -188,13 +192,18 @@ REGISTRY: dict[str, ConstructSpec] = {s.name: s for s in [
         head=(_FRAG,
               TokenSpec("size", MEDIA_SIZE_TOKEN, "media-size", flags="i",
                         label="size", op="set_media_size"),
+              TokenSpec("zoom", ZOOM_TOKEN, "zoom", flags="i", label="zoom",
+                        op="set_media_zoom"),
+              TokenSpec("crop", CROP_TOKEN, "crop", flags="i", label="crop",
+                        op="set_media_crop"),
               TokenSpec("keywords", r".+", "keyword",
                         keywords=("fill", "contain", "cover", "top",
                                   "loop", "autoplay", "controls"))),
         caption_sep="|",
         css_classes=("rv-fig", "rv-media", "rv-media-fill"),
         cheat=(("Media", "! image", "! image.png fill | Caption\n"),
-               ("Media", "!! movie", "!! movie.mp4 loop\n")),
+               ("Media", "!! movie", "!! movie.mp4 loop\n"),
+               ("Media", "crop / zoom", "! image.png fill crop=8% zoom=1.2\n")),
     )),
     _c(ConstructSpec(
         "col", "column",

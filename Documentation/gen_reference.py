@@ -55,6 +55,10 @@ def _token_hint(tok) -> str:
         return "h=N"
     if tok.role == "media-size":
         return "h=… or w=…"
+    if tok.role == "zoom":
+        return "zoom=F or zoom=F@X%,Y%"
+    if tok.role == "crop":
+        return "crop=T[,R,B,L]"
     if tok.role == "keyword" and tok.keywords:
         return " | ".join(tok.keywords)
     return tok.label or tok.name
@@ -201,6 +205,8 @@ def _construct_section(spec, g, *, anchor: bool = True) -> list[str]:
             "height": "pinned height in px",
             "size": "size (fraction, %, length or bare flex weight)",
             "media-size": "fixed height / width (px, em, rem, vh, vw, %)",
+            "zoom": "scale the media about its centre, or about a point (needs `fill` or `h=`)",
+            "crop": "trim a share off the sides, `margin`-style (needs `fill` or `h=`)",
             "gap": "gap between items (any CSS length)",
             "keyword": "flag keywords",
         }

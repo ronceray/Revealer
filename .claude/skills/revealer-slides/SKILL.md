@@ -69,8 +69,10 @@ of screenshotting.
   `> pin:`, boxes, `> eq`.
 - Media: `! Media/f.png [flags] [| caption]` (image) · `!! Media/m.mp4`
   (video). Flags: `fill` `contain` `cover` `top`, `h=…`/`w=…`, `loop`
-  `autoplay` `controls`. The file must exist — a missing path is a
-  build warning.
+  `autoplay` `controls`, and `crop=`/`zoom=` to show only part of a
+  figure (`crop=9%`, `crop=12%,0,0,9%`, `zoom=1.4@47%,50%`; both need
+  `fill` or `h=`). The file must exist — a missing path is a build
+  warning.
 - Math: `$inline$`, `$$display$$`; `> eq` for a framed equation
   (auto-wrapped in `$$` when it contains no `$`). Keep a `$$…$$` line
   narrow — an over-wide equation clips at the right edge instead of
@@ -100,9 +102,10 @@ turns a readable `.pres` into a page of `<div style=…>`. So:
 1. **Before writing any raw-HTML block, name the construct you
    considered and why it cannot do the job.** If you cannot name a
    concrete reason, use the construct.
-2. **Raw HTML is only for a documented gap.** Known gaps: none of the
-   constructs crops or zooms media (planned as `zoom=` / `crop=` flags
-   on `!`). Anything else is a construct.
+2. **Raw HTML is only for a documented gap.** There is no open gap
+   today — cropping and zooming media, the last one, is now `crop=` /
+   `zoom=` on `!` / `!!`. If you believe you have found a new gap, say
+   so explicitly rather than working around it silently.
 3. **Confirm with the user first** when you are about to introduce raw
    HTML that is not one of those gaps — say what you wanted, which
    construct you tried, and what it lacked. The user may prefer the
@@ -120,6 +123,7 @@ The construct for the situation you are tempted to hand-code:
 | overlaid images that swap on click | `> stack` / `> layer +` … `> end: stack` |
 | an absolutely positioned overlay | `> pin: x% y% w%` … `> end: pin` |
 | a `<table>` | `> table(r,c)` … `> end: table` |
+| `transform:scale(...)` / `overflow:hidden` on a figure | `! fig.png fill zoom=1.4@47%,50%` or `crop=12%,0,0,9%` |
 | vertical whitespace | `> space: 40px` (fixed) or `> space` (filling, on a `> fill` slide) |
 | `<span style="font-size:…">` | `[text]{.sm}` / `{.lede}` / `{.title}` / `> size:` |
 | `<span style="color:…">` | `[text]{.accent}` / `{.warn}` / `{.good}` / `[text]{color=#c0392b}` |

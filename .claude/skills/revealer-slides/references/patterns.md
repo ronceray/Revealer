@@ -88,6 +88,29 @@ Optical tweezers hold the bead at the focus.
 > end: row
 ```
 
+## Trimming a figure: crop and zoom
+
+Matplotlib exports and screen recordings carry material you do not want on
+a slide: a baked-in white margin, an axis label intruding at one edge, a
+suptitle holding an internal dataset key. Trim it in the DSL rather than
+hand-writing a `transform`/`overflow` div.
+
+```pres
+=== The measured trajectories
+> fill
+> row
+> col
+! Media/figure.png fill crop=12%,0,0,9% | Suptitle and y-axis trimmed away
+> col
+!! Media/movie.mp4 fill loop crop=9% | A baked-in white margin removed
+> end: row
+```
+
+`crop=` takes the `margin` shorthand (one value = all sides, two =
+vertical/horizontal, four = top/right/bottom/left) and the kept region
+fills the frame. `zoom=1.4` magnifies about the centre and `zoom=1.4@47%,60%`
+about a point. Both need `fill` or an explicit `h=`.
+
 ## Grid of cards
 
 Cards with titles, fragment reveals and background colours; `compact`

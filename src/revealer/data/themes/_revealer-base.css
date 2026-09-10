@@ -825,6 +825,17 @@ h1.relief {
 .reveal .rv-media-fill { width: 100%; flex: 1 1 0; min-height: 0; height: 0;
   object-position: center; border-radius: var(--rv-media-radius);
   display: block; margin: 0; max-width: 100%; max-height: 100%; }
+/* `zoom=` / `crop=`: a clipping frame holding the media laid out larger than
+   itself and offset, so the kept part fills the frame exactly. Source figures
+   routinely carry material you want gone at presentation time (a baked-in
+   white margin, an axis label, a suptitle with an internal dataset key) and
+   this is what keeps that in the DSL instead of hand-written HTML. */
+.rv-media-crop { position: relative; overflow: hidden; display: block;
+  border-radius: var(--rv-media-radius); }
+.reveal .rv-media-crop > img,
+.reveal .rv-media-crop > video {
+  display: block; margin: 0; max-width: none; max-height: none; }
+
 .rv-cap { font-size: 0.65em; color: var(--rv-muted-color); font-style: italic;
   text-align: center; margin-top: 0.15em; }
 
@@ -851,6 +862,7 @@ h1.relief {
 .reveal .rv-stack > .rv-layer > svg { width: 100%; height: 100%; object-fit: contain;
   display: block; margin: 0; }
 .rv-stack > .rv-layer > .rv-fig,
+.rv-stack > .rv-layer > .rv-media-crop,
 .rv-stack > .rv-layer > .rv-media-fill { flex: 1 1 auto; width: 100%; min-height: 0; }
 
 /* `> pin`: absolute overlay positioned in % of the slide body */

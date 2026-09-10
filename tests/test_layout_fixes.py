@@ -270,3 +270,113 @@ def test_callout_and_card_titles_are_at_least_body_size():
     for cls in (".box-title", ".method-title", ".feat-title"):
         m = re.search(re.escape(cls) + r" \{ font-size: (\d+)px", sfi)
         assert m and float(m.group(1)) >= body, cls
+
+
+# --- #8: media crop / zoom ----------------------------------------------------
+
+def _media(html):
+    return re.search(r'<div class="rv-media-crop[^"]*"[^>]*>.*?</div>', html, re.S)
+
+
+def test_crop_enlarges_and_offsets_the_media(deck):
+    html = build_deck(deck(
+        "=== T\n> fill\n> row\n> col\n! Media/a.png fill crop=12%,0,0,9%\n> end: row\n",
+        media={"Media/a.png": PNG}))
+    frame = _media(html)
+    assert frame, html
+    # t=12% l=9%: the media is laid out 100/(1-.09) wide, shifted left by 9%
+    # of that, and 100/(1-.12) tall, shifted up by 12% of that.
+    assert "width:109.9%" in frame.group(0)
+    assert "left:-9.89%" in frame.group(0)
+    assert "height:113.6%" in frame.group(0) and "top:-13.64%" in frame.group(0)
+    assert "position:absolute" in frame.group(0)
+
+
+def test_crop_shorthands(deck):
+    one = build_deck(deck("=== T\n> fill\n! Media/a.png fill crop=10%\n",
+                          media={"Media/a.png": PNG}), name="test")
+    assert "width:125%" in one and "height:125%" in one      # all four sides
+    two = build_deck(deck("=== T\n> fill\n! Media/a.png fill crop=10%,20%\n",
+                          name="two", media={"Media/a.png": PNG}), name="two")
+    assert "width:166.7%" in two and "height:125%" in two    # vertical, horizontal
+
+
+def test_zoom_about_a_point(deck):
+    html = build_deck(deck(
+        "=== T\n> fill\n! Media/a.png fill zoom=1.42@47%,60%\n",
+        media={"Media/a.png": PNG}))
+    assert "transform:scale(1.42);transform-origin:47% 60%" in html
+    assert "width:100%;height:100%;left:0;top:0" in html     # no crop: plain frame
+
+
+def test_zoom_defaults_to_the_centre(deck):
+    html = build_deck(deck("=== T\n> fill\n! Media/a.png fill zoom=2\n",
+                           media={"Media/a.png": PNG}))
+    assert "transform-origin:50% 50%" in html
+
+
+def test_crop_fills_the_frame_and_says_so(deck, capsys):
+    html = build_deck(deck(
+        "=== T\n> fill\n! Media/a.png fill contain crop=10%\n",
+        media={"Media/a.png": PNG}))
+    assert "object-fit:cover" in html          # the kept region fills the frame
+    assert any("overrides `contain`" in line for line in _warnings(capsys))
+
+
+def test_crop_without_a_frame_warns_and_is_ignored(deck, capsys):
+    html = build_deck(deck("=== T\n\n! Media/a.png crop=20%\n",
+                           media={"Media/a.png": PNG}))
+    assert "rv-media-crop" not in html
+    assert any("needs `fill` or `h=`" in line for line in _warnings(capsys))
+
+
+def test_crop_with_a_fixed_height_gets_a_frame(deck):
+    html = build_deck(deck("=== T\n\n! Media/a.png h=300px crop=10%\n",
+                           media={"Media/a.png": PNG}))
+    assert '<div class="rv-media-crop" ' in html or 'class="rv-media-crop"' in html
+    assert "height:300px;width:100%" in html
+
+
+def test_impossible_crop_warns(deck, capsys):
+    html = build_deck(deck("=== T\n> fill\n! Media/a.png fill crop=60%,0,50%,0\n",
+                           media={"Media/a.png": PNG}))
+    assert "rv-media-crop" not in html
+    assert any("removes the whole media" in line for line in _warnings(capsys))
+
+
+def test_cropped_media_keeps_its_fragment_and_caption(deck):
+    html = build_deck(deck(
+        "=== T\n> fill\n! Media/a.png fill crop=10% +2 | A caption\n",
+        media={"Media/a.png": PNG}))
+    assert 'class="rv-media-crop rv-media-fill fragment"' in html
+    assert 'data-fragment-index="2"' in html
+    assert '<div class="rv-cap">A caption</div>' in html
+
+
+def test_video_takes_the_same_frame(deck):
+    html = build_deck(deck("=== T\n> fill\n!! Media/m.mp4 fill loop crop=9%\n",
+                           media={"Media/m.mp4": b"\x00"}))
+    assert 'class="rv-media-crop rv-media-fill"' in html
+    assert "<video" in html and "loop" in html and "width:122%" in html
+
+
+def test_zoom_and_crop_edit_ops_round_trip(tmp_path):
+    import hashlib
+
+    from revealer.edit import apply_edits
+
+    pres = tmp_path / "t.pres"
+    pres.write_text("=== T\n! Media/a.png fill | Cap\n")
+    def sha():
+        return hashlib.sha256(pres.read_bytes()).hexdigest()
+
+    apply_edits(pres, sha(), [{"op": "set_media_zoom", "line": 2, "value": "1.4@47%"}])
+    assert pres.read_text().splitlines()[1] == "! Media/a.png fill zoom=1.4@47% | Cap"
+    apply_edits(pres, sha(), [{"op": "set_media_crop", "line": 2, "value": "crop=8%"}])
+    assert "crop=8%" in pres.read_text()
+    apply_edits(pres, sha(), [{"op": "set_media_zoom", "line": 2, "value": None}])
+    assert "zoom=" not in pres.read_text() and "crop=8%" in pres.read_text()
+    # a size edit leaves the new flags alone
+    apply_edits(pres, sha(), [{"op": "set_media_size", "line": 2, "dim": "h",
+                               "value": "300px"}])
+    assert "crop=8%" in pres.read_text() and "h=300px" in pres.read_text()
