@@ -2,6 +2,76 @@
 
 ## Unreleased
 
+### Layout DSL (issues #2 #3 #4 #5 #17 #18)
+
+- **Column fractions keep their ratio.** `> col 1/6` and `> col 1/2` used
+  to compile to the same width (the denominator was dropped). Fractions
+  are now shares of the row: mixed denominators are scaled to a common
+  one (`1/6 1/6 1/6 1/2` → 1:1:1:3), same-denominator rows are unchanged,
+  and a row whose fractions add up to more than one warns.
+- **Percentage columns no longer overflow the slide.** `> col 17%` is a
+  share of the *usable* width: the row's gaps are subtracted
+  (`calc(17% - 0.51 * gap)` for four columns), so `17 17 17 45` fits.
+- **A blank line after `> row` no longer opens an invisible empty
+  column** (it silently turned two halves into three thirds). Real content
+  before the first `> col` is still the implicit first column.
+- **`> row 60px` warns.** A bare length after `> row` has always been the
+  column gap, but reads as a height: the build now says so and suggests
+  `h=60` — or the new explicit `gap=60px`, which is silent. The editor's
+  gap field writes the `gap=` form.
+- **`h=` on a layer's media sizes the `> stack`.** It was inert (the layer
+  clamps its media to the stack, which just fills the free space); now the
+  first layer `h=` becomes the stack height, and disagreeing layers warn.
+- **A `<style>`/`<script>`/comment-only block takes no paragraph slot.**
+  A deck-wide `<style>` after `>>> first:` used to push the visible
+  content down by one paragraph gap.
+
+### Typography (issues #7 #11)
+
+- **The auto-fit floor is `0.85`, and a setting.** `> fill` and multi-column
+  slides could shrink their text to 20% of the theme size with no
+  indication. The runtime now absorbs only a small overflow (`> fit-floor:`
+  sets it; `1` disables auto-fit; per-slide too), so body text looks the
+  same size on every slide; past the floor the block keeps scale 1 —
+  visibly overflowing — and is flagged `data-rv-overflow` for tooling.
+- **Callout and card titles are at least body size.** The base
+  `.box-title` (0.7em) and `.card-title` (0.75em) are 1em; in the SFI
+  theme `.box-title`, `.method-title` and `.feat-title` are 34px (body)
+  and `.method-card .eq-label` 24px.
+
+### CLI, build and grammar (issues #1 #9 #10)
+
+- **`revealer index <deck>`** lists the slides with the indices reveal.js
+  uses (`7`, `8/1`, hidden slides skipped), their source line (with the
+  file for includes), and `--json`. For deep links, screenshots, and
+  "slide 15" conversations.
+- **Concurrent builds no longer race on the KaTeX bundle.** `serve` rebuilding
+  on save while `revealer build` ran could crash with `Directory not empty`
+  and leave a partially deleted `reveal.js/katex/` (math without fonts,
+  offline). The bundle is now synced: left alone when it already matches
+  the package, refreshed under a lock otherwise.
+- **`> fill` and `> space` are grammar constructs**, so the generated
+  references (`reference/constructs.md`, the skill's `syntax.md`) and the
+  editor palette document `> fill between|center|around|end` and the two
+  `> space` forms instead of leaving them to the CSS.
+
+### Editor (issues #12 #15)
+
+- The source panel soft-wraps long lines (inline HTML, display math,
+  table rows) instead of forcing a horizontal hunt, uses a 12px font, and
+  starts taller (260px; 360px for the whole-slide source).
+- The slide filmstrip scrolls horizontally under a vertical mouse wheel
+  and keeps the current slide in view (opening it, or navigating with the
+  arrow keys, no longer lands on slide 1).
+
+### Claude Code skill (issue #16)
+
+- **Raw HTML is the last resort.** SKILL.md now carries a hard rule (name
+  the construct you considered and why it fails; confirm with the user
+  before any raw HTML that is not a documented gap) plus a
+  "tempted to write / use instead" table, and points at `revealer index`
+  for screenshot indices. verify.md decodes the new warnings.
+
 ### Claude Code skill
 
 - **Added** — `revealer-slides` Claude Code skill

@@ -719,4 +719,13 @@ either. Anything the parser has to drop or reinterpret prints a
   is fine and stays silent);
 - a bare `> space` outside a `> fill` slide (it only *fills* there —
   use `> space: <size>` elsewhere);
-- a media path (`!` / `!!`) that does not exist on disk.
+- a media path (`!` / `!!`) that does not exist on disk;
+- a bare length after `> row` (`> row 60px` sets the *gap* — write
+  `h=60` for a height, or `gap=60px` to keep the gap and silence it);
+- column fractions adding up to more than one row (`1/2` + `2/3`);
+- layers of one `> stack` asking for different `h=` heights.
+
+Layout problems the browser only discovers at render time — a block
+that overflows its box past the auto-fit floor — are flagged on the
+element (`data-rv-overflow`) rather than printed; see
+[Settings › `fit-floor`](reference/settings.md#look).
