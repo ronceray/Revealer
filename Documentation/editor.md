@@ -28,9 +28,9 @@ that drops the [slide filmstrip](#slide-selector), then a menubar:
 | Menu | Items |
 | --- | --- |
 | **Insert** | **Media** — import an image or movie into `Media/` and insert it · **Fragments / animation** drawer (`F`). |
-| **Slide** | **New slide…** — the [template gallery](#new-slide-templates) · **Slide selector** (`O`). |
+| **Slide** | **New slide…** — the [template gallery](#new-slide-templates) · **Slide selector** (`O`) · **Deck settings** — the `.pres` header block (title, author, logos, theme, …), edited in the panel. |
 | **History** | **Undo** / **Redo** (`Ctrl+Z` / `Ctrl+Shift+Z`) · **Version history** — the [time machine](#save-history). |
-| **View** | **Split view** (deck left, panel right, draggable divider) · **Document source** — edit the `.pres` header block (title, author, logos, theme, …) that sits above the first slide, right in the panel. |
+| **View** | **Split view** (deck left, panel right, draggable divider). |
 | **Export** | **Export HTML** / **PDF** — the final `talk.html` / `talk.pdf` next to the `.pres`. |
 | **Help** | The help card. |
 
@@ -58,6 +58,14 @@ the selection:
   drop its ready-to-fill skeleton at the cursor;
 - the **source box**: the actual `.pres` lines of the selection, editable
   in place (*Apply source*) — anything the quick fields don't cover.
+
+On the deck's **first slide** the panel opens with a **⚙ Deck settings**
+section above the slide's own source: the header block (title, author,
+affiliation, event, theme, …) is edited far more often than any one slide, so
+it lives where an author looks for it. A short header (up to twelve lines)
+unfolds on its own; a long one starts collapsed, and whichever you choose
+sticks. The same block is reachable from any slide through **Slide ▸ Deck
+settings**.
 
 An edited source box is marked (amber border, "unsaved" in the footer) and
 **saves itself** as soon as you select something else, change slide or leave

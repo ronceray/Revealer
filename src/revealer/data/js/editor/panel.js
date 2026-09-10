@@ -39,12 +39,40 @@
     ta._rvCommit = commit;
     if (ta._rvArmed) return;      // a later fetchSrc re-arms: keep one listener
     ta._rvArmed = true;
+    // Slide 1's panel carries two source boxes (the deck settings and the
+    // slide): the palette and the format bar must land in the one being
+    // typed in, not simply the first in the DOM.
+    ta.addEventListener('focus', function () { lastSrcBox = ta; });
     ta.addEventListener('input', function () {
       var dirty = boxDirty(ta);
       ta.classList.toggle('rv-dirty', dirty);
-      var foot = ta.parentNode && ta.parentNode.querySelector('.rv-pn-foot');
+      var foot = footOf(ta);
       if (foot) foot.textContent = RV.t(dirty ? 'panel.unsaved' : 'panel.autosave');
     });
+  }
+
+  // A box's own status line: its next .rv-pn-foot sibling. (Slide 1's panel
+  // holds two boxes, each with its own footer — a panel-wide query would
+  // always find the first.)
+  function footOf(ta) {
+    var n = ta && ta.nextElementSibling;
+    while (n) {
+      if (n.classList && n.classList.contains('rv-pn-foot')) return n;
+      n = n.nextElementSibling;
+    }
+    return null;
+  }
+
+  var lastSrcBox = null;
+
+  // The source box a palette chip / format button acts on.
+  function panelSourceBox() {
+    var p = panelEl();
+    var active = document.activeElement;
+    if (active && active.classList && active.classList.contains('rv-pn-src') &&
+        p.contains(active)) return active;
+    if (lastSrcBox && p.contains(lastSrcBox)) return lastSrcBox;
+    return p.querySelector('.rv-pn-src');
   }
 
   function boxDirty(ta) {
@@ -207,18 +235,19 @@
       '<textarea class="rv-pn-src rv-pn-src-slide" spellcheck="false"></textarea>' +
       '<button class="rv-pn-apply">' + RV.esc(RV.t('panel.apply')) + '</button>' +
       '<div class="rv-pn-foot">' + RV.esc(RV.t('panel.autosave')) + '</div>';
-    var slot0 = p.querySelector('.rv-fmt-slot');
-    if (slot0) slot0.appendChild(F.formatBar(p.querySelector('.rv-pn-src')));
+    if (isFirstSlide()) prependDocSettings(p, p.querySelector('.rv-pn-srctitle'));
+    var slot0 = p.querySelector(':scope > .rv-fmt-slot');
+    if (slot0) slot0.appendChild(F.formatBar(p.querySelector('.rv-pn-src-slide')));
     var applyBtn0 = p.querySelector('.rv-pn-apply');
     applyBtn0.disabled = true;
     var bounds0 = null;
     function commit0() {
       if (!bounds0) return;
-      var ta = p.querySelector('.rv-pn-src');
+      var ta = p.querySelector('.rv-pn-src-slide');
       F.rvPostEdit([{ op: 'replace_lines', start: bounds0.start, end: bounds0.end, text: ta.value.split('\n') }], file);
     }
     F.fetchSrc(s0, e0, function (j) {
-      var ta = p.querySelector('.rv-pn-src');
+      var ta = p.querySelector('.rv-pn-src-slide');
       if (j.lines && ta) ta.value = j.lines.join('\n');
       if (j.lines) {
         bounds0 = { start: j.start, end: j.end };
@@ -233,29 +262,35 @@
 
   /* --- document settings (the .pres header block) edited in the panel ------ */
 
-  function renderDocSettings(p) {
-    p.innerHTML =
-      '<div class="rv-pn-head"><b>' + RV.esc(RV.t('docset.title')) + '</b></div>' +
+  /* --- the deck's settings block, as a reusable widget ----------------------
+     Rendered in two places, from one implementation: on its own (Slide ▸
+     Deck settings) and folded into the first slide's panel, which is where
+     authors look for the title / author / theme lines. */
+
+  function docSettingsWidget(host) {
+    host.innerHTML =
       '<div class="rv-pn-hint">' + RV.esc(RV.t('docset.hint')) + '</div>' +
-      '<div class="rv-pn-srctitle">' + RV.esc(RV.t('panel.source')) + '</div>' +
       '<div class="rv-fmt-slot"></div>' +
-      '<textarea class="rv-pn-src rv-pn-src-slide" spellcheck="false"></textarea>' +
+      '<textarea class="rv-pn-src rv-pn-src-doc" spellcheck="false"></textarea>' +
       '<button class="rv-pn-apply">' + RV.esc(RV.t('docset.apply')) + '</button>' +
       '<div class="rv-pn-foot">' + RV.esc(RV.t('panel.autosave')) + '</div>';
-    var ta = p.querySelector('.rv-pn-src');
-    var slot = p.querySelector('.rv-fmt-slot');
+    var ta = host.querySelector('.rv-pn-src');
+    var slot = host.querySelector('.rv-fmt-slot');
     if (slot) slot.appendChild(F.formatBar(ta));
-    var applyBtn = p.querySelector('.rv-pn-apply');
+    var applyBtn = host.querySelector('.rv-pn-apply');
     var bounds = null;
     applyBtn.disabled = true;
     // The settings block is the main file's lines before its first slide /
     // include directive. Derive it from the main SOURCE — a DOM section's
     // data-rv-src is file-local when the first slide is itself included, so
     // reading it as a main-file line would edit the wrong span.
+    // Own fetch slot ('docset'): on the first slide this widget and the slide's
+    // own source box are filled in the same render, and the shared default
+    // slot aborts whichever request was issued first.
     F.fetchSrc(1, 1, function (j0) {
       var total = (j0 && j0.total) || 1;      // the /src endpoint rejects end > total
       F.fetchSrc(1, total, function (j) {
-        if (!j.lines || !S.docSel) return;    // panel navigated away
+        if (!j.lines || !document.contains(ta)) return;   // panel navigated away
         var lines = j.lines, first = 0;
         for (var i = 0; i < lines.length; i++) {
           if (/^\s*(===|%%%|>>>|>\s*include\s*:)/.test(lines[i])) { first = i + 1; break; }
@@ -268,8 +303,9 @@
         }
         applyBtn.disabled = false;
         armSourceBox(ta, commit);
-      });
-    });
+        if (host._rvOnLines) host._rvOnLines(first > 1 ? first - 1 : 0);
+      }, '', 'docset');
+    }, '', 'docset');
     function commit() {
       var out = ta.value.split('\n');
       if (bounds) {
@@ -281,7 +317,48 @@
       }
     }
     applyBtn.addEventListener('click', commit);
+    return ta;
+  }
+
+  function renderDocSettings(p) {
+    p.innerHTML =
+      '<div class="rv-pn-head"><b>' + RV.esc(RV.t('docset.title')) + '</b></div>' +
+      '<div class="rv-pn-srctitle">' + RV.esc(RV.t('panel.source')) + '</div>' +
+      '<div class="rv-pn-docbody"></div>';
+    docSettingsWidget(p.querySelector('.rv-pn-docbody'));
     appendPalette(p);
+  }
+
+  // Folded into the first slide's panel: the deck header is edited far more
+  // often than any single slide, and a menu entry under View was not where
+  // anyone looked for it. Short headers (the usual 6-10 settings lines) open
+  // straight away; a long one starts collapsed. An explicit toggle sticks.
+  var DOCSET_AUTO_OPEN_LINES = 12;
+
+  function prependDocSettings(p, before) {
+    var d = document.createElement('details');
+    d.className = 'rv-pn-cheat rv-pn-docset';
+    d.innerHTML = '<summary>' + RV.esc(RV.t('docset.title')) + '</summary>' +
+                  '<div class="rv-pn-docbody"></div>';
+    var pref = null;
+    try { pref = localStorage.getItem('rv-ed-docset'); } catch (e) {}
+    d.open = pref === '1';
+    var body = d.querySelector('.rv-pn-docbody');
+    body._rvOnLines = function (n) {
+      if (pref === null) d.open = n > 0 && n <= DOCSET_AUTO_OPEN_LINES;
+    };
+    d.addEventListener('toggle', function () {
+      pref = d.open ? '1' : '0';
+      try { localStorage.setItem('rv-ed-docset', pref); } catch (e) {}
+    });
+    p.insertBefore(d, before);
+    docSettingsWidget(body);
+  }
+
+  // The deck's opening slide — where the settings block is surfaced.
+  function isFirstSlide() {
+    var idx = (window.Reveal && Reveal.getIndices) ? Reveal.getIndices() : null;
+    return !!idx && idx.h === 0 && !idx.v;
   }
 
   // Entry point (the View ▸ Document source menu / the ⚙ button call this).
@@ -325,7 +402,7 @@
   // Drop a snippet into the panel's source box at the caret, else append it as
   // a new block on the current slide.
   function paletteInsert(insert) {
-    var ta = document.querySelector('#rv-ed-panel .rv-pn-src');
+    var ta = panelSourceBox();
     if (ta) { F.insertAtCursor(ta, insert); return; }
     var sec = window.Reveal && Reveal.getCurrentSlide && Reveal.getCurrentSlide();
     if (!sec || !sec.hasAttribute('data-rv-src')) { F.toast(RV.t('palette.needTarget')); return; }
@@ -363,7 +440,7 @@
     d.querySelectorAll('.rv-pl-chip').forEach(function (btn) {
       btn.addEventListener('click', function () {
         if (btn.getAttribute('data-wrap')) {
-          var ta = document.querySelector('#rv-ed-panel .rv-pn-src');
+          var ta = panelSourceBox();
           if (ta) F.wrapFragBlock(ta); else F.toast(RV.t('palette.needTarget'));
           return;
         }
@@ -642,6 +719,7 @@
   F.appendPalette = appendPalette;
   F.openDocSettings = openDocSettings;
   F.armSourceBox = armSourceBox;
+  F.panelSourceBox = panelSourceBox;
   F.flushDirtySources = flushDirtySources;
   F.panelDirty = panelDirty;
   RV.onChange('on', rvPanelSync);

@@ -133,6 +133,57 @@
     }, 15000, 'source box holding "' + contains + '"');
   }
 
+  RVT.test('the first slide\'s panel carries the deck settings block', function () {
+    // #14: the header is edited far more often than any one slide, and a menu
+    // entry under View was not where anyone looked for it.
+    var f;
+    return openDeck().then(function (frame) {
+      f = frame;
+      f.contentWindow.Reveal.slide(0, 0);
+      return RVT.until(function () {
+        var cur = f.contentWindow.Reveal.getCurrentSlide();
+        return cur && f.contentWindow.Reveal.getIndices().h === 0 ? cur : null;
+      }, 15000, 'on the first slide');
+    }).then(function (sec) {
+      f.contentWindow.RV.set('sel', null);
+      f.contentWindow.RV.state.panelFor = null;
+      f.contentWindow.RV.fn.rvPanelSync();
+      return RVT.until(function () {
+        var ta = f.contentDocument.querySelector('#rv-ed-panel .rv-pn-src-doc');
+        return ta && ta.value.indexOf('> title:') !== -1 ? ta : null;
+      }, 15000, 'settings box on the first slide panel');
+    }).then(function (ta) {
+      var doc = f.contentDocument;
+      RVT.assert(ta.value.indexOf('> title: JS harness') !== -1,
+                 'shows the real header: ' + JSON.stringify(ta.value.slice(0, 60)));
+      var det = doc.querySelector('#rv-ed-panel .rv-pn-docset');
+      RVT.assert(det && det.open, 'a short header opens without a click');
+      RVT.assert(doc.querySelector('#rv-ed-panel .rv-pn-src-slide'),
+                 'the slide source box is still there');
+      RVT.assert(doc.querySelectorAll('#rv-ed-panel .rv-pn-src').length === 2,
+                 'two independent source boxes');
+      // Each box owns its own footer: typing in one must not relabel the other.
+      var slideBox = doc.querySelector('#rv-ed-panel .rv-pn-src-slide');
+      var foots = doc.querySelectorAll('#rv-ed-panel .rv-pn-foot');
+      var before = foots[0].textContent;
+      slideBox.value = slideBox.value + ' ';
+      slideBox.dispatchEvent(new f.contentWindow.Event('input', { bubbles: true }));
+      RVT.assert(foots[0].textContent === before,
+                 'the settings footer is untouched by typing in the slide box');
+      slideBox.value = slideBox.value.replace(/ $/, '');
+      slideBox.dispatchEvent(new f.contentWindow.Event('input', { bubbles: true }));
+
+      // Navigating off slide 1 drops the settings block again.
+      f.contentWindow.Reveal.slide(1, 0);
+      return RVT.until(function () {
+        return !doc.querySelector('#rv-ed-panel .rv-pn-src-doc') ? true : null;
+      }, 15000, 'settings block gone from a later slide');
+    }).then(function () {
+      f.remove();
+      return true;
+    });
+  });
+
   RVT.test('selecting another element saves the edited source box', function () {
     var f;
     return openDeck().then(function (frame) {

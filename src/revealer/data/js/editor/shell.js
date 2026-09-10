@@ -244,6 +244,8 @@
           var span = F.currentSlideSpan && F.currentSlideSpan();
           if (span) F.openTemplateGallery(span); else F.toast(RV.t('outline.unmapped')); } },
       { label: RV.t('menu.selector'), onClick: function () { F.toggleOutline(); } },
+      { sep: true },
+      { label: RV.t('menu.docSource'), onClick: function () { F.openDocSettings(); } },
     ]));
     bar.appendChild(makeMenu(RV.t('menu.history'), [
       { label: RV.t('menu.undo'), onClick: function () { F.rvUndoRedo('undo'); } },
@@ -258,7 +260,6 @@
         onClick: function () {
           RV.set('splitPref', !S.splitPref);
           try { localStorage.setItem('rv-ed-split', S.splitPref ? '1' : '0'); } catch (e) {} } },
-      { label: RV.t('menu.docSource'), onClick: function () { F.openDocSettings(); } },
     ]));
     bar.appendChild(makeMenu(RV.t('menu.export'), [
       { label: RV.t('menu.exportHtml'), onClick: exportHtml },

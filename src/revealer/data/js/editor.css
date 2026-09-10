@@ -533,6 +533,12 @@ body.rv-split #rv-ed-outline {
 
 #rv-ed-panel .rv-pn-src-slide { min-height: 360px; }
 
+/* The deck settings folded into the first slide's panel: same disclosure
+   chrome as the cheatsheet, but it sits at the TOP (it is the thing authors
+   come to slide 1 for) and its box is shorter than a slide's. */
+#rv-ed-panel .rv-pn-docset { margin-top: 0; border-top: 0; border-bottom: 1px solid #2a3350; padding-bottom: 6px; }
+#rv-ed-panel .rv-pn-docset summary { color: #c4cbe4; font-weight: 600; }
+#rv-ed-panel .rv-pn-src-doc { min-height: 180px; }
 #rv-ed-panel .rv-pn-cheat { margin-top: 4px; border-top: 1px solid #2a3350; padding-top: 6px; }
 #rv-ed-panel .rv-pn-cheat summary { cursor: pointer; color: #c4cbe4; }
 #rv-ed-panel .rv-pn-cheat summary:hover { color: #fff; }

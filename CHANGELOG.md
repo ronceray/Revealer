@@ -55,7 +55,16 @@
   editor palette document `> fill between|center|around|end` and the two
   `> space` forms instead of leaving them to the CSS.
 
-### Editor (issues #12 #13 #15)
+### Editor (issues #12 #13 #14 #15)
+
+- **The deck's header block is editable from the first slide.** The settings
+  editor existed only behind *View ▸ Document source* and nobody found it.
+  The first slide's panel now opens with a **⚙ Deck settings** section above
+  the slide source (unfolded for a short header, collapsed for a long one,
+  the choice remembered), and the menu entry moved to *Slide ▸ Deck settings*
+  with a label that says what it edits. Both render the same widget, so both
+  autosave and both edit the same span. The palette and format bar act on the
+  box you are typing in rather than the first one in the panel.
 
 - **The panel's source box no longer loses edits.** It committed only
   through *Apply source*, so selecting another element, changing slide or

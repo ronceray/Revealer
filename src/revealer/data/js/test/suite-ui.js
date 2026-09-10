@@ -132,7 +132,8 @@
     }).then(function (f) {
       var doc = f.contentDocument;
       var tok = (f.contentWindow.__RV_DEV__ || {}).token || '';
-      RVT.menuClick(doc, 'View', 'Document source');
+      RVT.assert(RVT.menuClick(doc, 'Slide', 'Deck settings'),
+                 'Slide menu offers the deck settings entry');
       return RVT.until(function () {
         var ta = doc.querySelector('#rv-ed-panel .rv-pn-src');
         return ta && ta.value.indexOf('> title:') !== -1 ? ta : null;
