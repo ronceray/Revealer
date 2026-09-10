@@ -181,3 +181,55 @@ def test_slide_index_matches_reveal_numbering(tmp_path):
     assert ix[2]["hidden"] is True
     assert (ix[6]["file"], ix[6]["line"]) == ("part.pres", 1)
     assert (ix[1]["file"], ix[1]["line"]) == ("", 2)
+
+
+# --- #1: the KaTeX bundle is synced, not deleted-and-recopied -----------------
+
+def test_katex_sync_is_idempotent_and_repairs_a_damaged_copy(tmp_path):
+    from revealer import assets
+
+    src = assets.DATA / "katex"
+    dest = tmp_path / "katex"
+    want = assets._tree_manifest(src)
+    assets._sync_tree(src, dest)
+    assert assets._tree_manifest(dest) == want
+    # a partially deleted bundle (what the old race left behind) is repaired
+    next(p for p in dest.rglob("*") if p.is_file()).unlink()
+    assets._sync_tree(src, dest)
+    assert assets._tree_manifest(dest) == want
+    # an up-to-date copy is left untouched
+    stamp = {p: p.stat().st_mtime_ns for p in dest.rglob("*") if p.is_file()}
+    assets._sync_tree(src, dest)
+    assert {p: p.stat().st_mtime_ns for p in dest.rglob("*") if p.is_file()} == stamp
+
+
+def test_concurrent_katex_syncs_never_leave_a_partial_bundle(tmp_path):
+    import contextlib
+    import random
+    import threading
+
+    from revealer import assets
+
+    src = assets.DATA / "katex"
+    dest = tmp_path / "katex"
+    assets._sync_tree(src, dest)
+    files = [p for p in dest.rglob("*") if p.is_file()]
+    errors: list[BaseException] = []
+
+    def builder(seed):
+        rng = random.Random(seed)
+        try:
+            for _ in range(6):
+                with contextlib.suppress(OSError):
+                    rng.choice(files).unlink()   # stale -> forces a refresh
+                assets._sync_tree(src, dest)
+        except BaseException as exc:  # noqa: BLE001 - collected for the assert
+            errors.append(exc)
+
+    threads = [threading.Thread(target=builder, args=(i,)) for i in range(4)]
+    for t in threads:
+        t.start()
+    for t in threads:
+        t.join()
+    assert not errors, errors
+    assert assets._tree_manifest(dest) == assets._tree_manifest(src)

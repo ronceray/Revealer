@@ -15,6 +15,7 @@ itself works fully offline once ``reveal.js`` is present.
 
 from __future__ import annotations
 
+import hashlib
 import io
 import os
 import shutil
@@ -295,10 +296,88 @@ def inject_revealer_assets(reveal_dir: str) -> None:
     # `katex: { local: 'reveal.js/katex' }`.
     katex_src = DATA / "katex"
     if katex_src.is_dir():
-        katex_dest = reveal / "katex"
-        if katex_dest.exists():
-            shutil.rmtree(katex_dest)
-        shutil.copytree(katex_src, katex_dest)
+        _sync_tree(katex_src, reveal / "katex")
+
+
+def _tree_manifest(root: Path) -> dict[str, int] | None:
+    """``{relative path: size}`` of every file under ``root`` — ``None`` when
+    the tree changed underfoot (another builder refreshing it)."""
+    try:
+        return {str(p.relative_to(root)): p.stat().st_size
+                for p in root.rglob("*") if p.is_file()}
+    except OSError:
+        return None
+
+
+def _flock(fh, lock: bool) -> None:
+    """Exclusive advisory lock on an open file (POSIX flock / Windows locking)."""
+    try:
+        import fcntl
+        fcntl.flock(fh, fcntl.LOCK_EX if lock else fcntl.LOCK_UN)
+    except ImportError:  # Windows
+        import msvcrt
+        fh.seek(0)
+        msvcrt.locking(fh.fileno(), msvcrt.LK_LOCK if lock else msvcrt.LK_UNLCK, 1)
+
+
+class _DirLock:
+    """Best-effort exclusive lock for refreshing ``target`` — a no-op where the
+    lock cannot be taken. The lock file lives in the temp dir (keyed by the
+    target's path), not next to the deck, so it never shows up in a deck's
+    own version control."""
+
+    def __init__(self, target: Path):
+        key = hashlib.sha1(str(target.resolve()).encode("utf-8")).hexdigest()[:16]
+        self.path = Path(tempfile.gettempdir()) / "revealer-{0}.lock".format(key)
+        self.fh = None
+
+    def __enter__(self):
+        try:
+            self.fh = open(self.path, "a+")  # noqa: SIM115 - released in __exit__
+            _flock(self.fh, True)
+        except Exception:
+            if self.fh is not None:
+                self.fh.close()
+            self.fh = None
+        return self
+
+    def __exit__(self, *exc):
+        if self.fh is not None:
+            try:
+                _flock(self.fh, False)
+            except Exception:
+                pass
+            self.fh.close()
+        return False
+
+
+def _sync_tree(src: Path, dest: Path) -> None:
+    """Make ``dest`` an exact copy of the ``src`` tree, safely under concurrency.
+
+    Two builds of one deck routinely overlap (``revealer serve`` rebuilding on
+    save while a terminal ``revealer build`` runs). The old delete-then-copy
+    let one process's ``rmtree`` race the other's ``copytree`` — it crashed
+    with ``Directory not empty`` and, worse, left a partially deleted KaTeX
+    bundle (math without fonts, noticed offline at the venue).
+
+    Now: (1) a destination that already matches the source is left alone —
+    the common case, so a rebuild never touches it at all; (2) the rare
+    refresh happens under a lock file, and is re-checked once the lock is
+    held, so a concurrent builder that just refreshed it makes this a no-op.
+    """
+    want = _tree_manifest(src)
+
+    def up_to_date() -> bool:
+        return dest.is_dir() and _tree_manifest(dest) == want
+
+    if up_to_date():
+        return
+    with _DirLock(dest):
+        if up_to_date():
+            return
+        if dest.exists():
+            shutil.rmtree(dest)
+        shutil.copytree(src, dest)
 
 
 # --- reveal.js + plugin download --------------------------------------------
