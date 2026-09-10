@@ -1,6 +1,16 @@
 # Changelog
 
-## Unreleased
+## 0.4.0 — 2026-09-10
+
+The diagnostics release. Everything a build could not see — a column whose
+fractions did not mean what they said, text silently shrunk to a fifth of the
+theme size, a callout spilling onto the figure below it — now either behaves
+as written or says so. `revealer check` renders the deck and reports what the
+parser cannot, the browser editor stopped losing typed text, and the last
+reason to hand-write HTML instead of using the DSL (cropping a figure) is a
+flag on `!`.
+
+Closes every issue open on the fork: #1–#18.
 
 ### Layout DSL (issues #2 #3 #4 #5 #17 #18)
 
@@ -122,21 +132,18 @@
 
 ### Claude Code skill (issue #16)
 
-- **Raw HTML is the last resort.** SKILL.md now carries a hard rule (name
-  the construct you considered and why it fails; confirm with the user
-  before any raw HTML that is not a documented gap) plus a
-  "tempted to write / use instead" table, and points at `revealer index`
-  for screenshot indices. verify.md decodes the new warnings.
-
-### Claude Code skill
-
 - **Added** — `revealer-slides` Claude Code skill
   (`.claude/skills/revealer-slides/`): agent-facing authoring skill with a
   grammar-generated syntax reference, a build-verified pattern library, and a
   headless-Chrome screenshot verifier. Install: see *Installation › Claude
   Code skill*.
+- **Raw HTML is the last resort.** SKILL.md carries a hard rule (name the
+  construct you considered and why it fails; confirm with the user before
+  any raw HTML that is not a documented gap) plus a "tempted to write / use
+  instead" table, and the loop now runs `revealer check` and `revealer
+  index`. verify.md decodes every warning either can print.
 
-### Language & build
+### Language & build (hardening)
 
 - **`> size:` now works inside `> … > end:` blocks** (callout boxes, cards,
   fragments, table cells): like the existing in-block `> align:`, it applies
@@ -167,7 +174,7 @@
 - `.bib` files are read as UTF-8 regardless of locale; a non-UTF-8 `.pres`
   reports file and byte offset instead of a raw UnicodeDecodeError.
 
-### Editor
+### Editor (edit-mode robustness)
 
 - **Edit mode survives saves.** Every save (and structural edit — new slide,
   block move, delete) rebuilds the deck and reloads the page; the session

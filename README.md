@@ -77,6 +77,10 @@ Plain text, **bold**, $E = mc^2$ and raw HTML all work.
   matplotlib style.
 - **Math** — KaTeX, bundled offline, with your own LaTeX macros
   (`> macros: defs.tex`).
+- **Layout diagnostics** — `revealer check` renders the deck and reports
+  what a parser cannot see: content overflowing its box, painted off the
+  slide, or cropped through a figure. The editor badges the current slide
+  live.
 - **PDF export** — lossless, one page per slide or per fragment state.
 - **Lecture courses** — assemble master decks from per-lecture files with
   `> include:`.
@@ -87,8 +91,8 @@ Plain text, **bold**, $E = mc^2$ and raw HTML all work.
 
 All Python dependencies install automatically. Some features use external
 tools and degrade gracefully without them: **git** (save history),
-**Chrome/Chromium + `img2pdf`** (PDF export), **`pdftocairo`** from
-poppler-utils (PDF figures).
+**Chrome/Chromium** (PDF export — with `img2pdf` — and `revealer check`),
+**`pdftocairo`** from poppler-utils (PDF figures).
 
 ## About this fork
 
