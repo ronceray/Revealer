@@ -120,3 +120,28 @@ def test_style_only_block_on_the_title_slide(deck):
 def test_style_with_visible_content_keeps_its_paragraph(deck):
     html = build_deck(deck("=== T\n\n<style>.x{color:red}</style>\nvisible\n\nmore\n"))
     assert html.count('<div class="rv-paragraph"') == 2
+
+
+# --- #17: `h=` on a layer's media sizes the stack -----------------------------
+
+def test_layer_media_height_sizes_the_stack(deck):
+    html = build_deck(deck(
+        "=== T\n> fill\n> stack\n> layer\n! Media/a.png fill contain h=660px\n"
+        "> layer +\n! Media/b.png fill contain\n> end: stack\n",
+        media={"Media/a.png": PNG, "Media/b.png": PNG}))
+    assert 'class="rv-stack" style="flex:0 0 660px;height:660px;"' in html
+
+
+def test_stack_h_wins_over_the_layer_media_h(deck):
+    html = build_deck(deck(
+        "=== T\n> fill\n> stack h=300\n> layer\n! Media/a.png fill h=660\n> end: stack\n",
+        media={"Media/a.png": PNG}))
+    assert 'style="flex:0 0 300px;height:300px;"' in html
+
+
+def test_disagreeing_layer_heights_warn(deck, capsys):
+    build_deck(deck(
+        "=== T\n> fill\n> stack\n> layer\n! Media/a.png fill h=600\n"
+        "> layer +\n! Media/a.png fill h=400\n> end: stack\n",
+        media={"Media/a.png": PNG}))
+    assert any("different heights (600px and 400px)" in line for line in _warnings(capsys))

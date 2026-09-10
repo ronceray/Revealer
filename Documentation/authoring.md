@@ -479,7 +479,10 @@ fragments — convenient to build up a figure step by step:
 
 A fragment layer is opaque by default, hiding the layer beneath; `clear`
 keeps it transparent (a see-through overlay). `h=` pins the stack height,
-otherwise it fills its flex parent.
+otherwise it fills its flex parent. An `h=` written on a layer's media
+(`! base.png fill h=400px`) sizes the stack the same way — the layers
+clamp their media to the stack, so it could not act on the image alone;
+the first such `h=` wins, and layers that disagree get a warning.
 
 `> pin: x% y% [w%] [+]` places an absolute overlay with its center at the
 given percentages of the slide body — annotations, arrows, badges:

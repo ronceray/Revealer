@@ -1642,6 +1642,26 @@ def _contentify_legacy(html: str, src: list | None = None) -> str:
             m = re.match(r"^h=(\d+)(?:px)?$", t)
             if m:
                 height = m.group(1) + "px"
+        # A layer's media `h=` is inert on its own (the layer clamps it to the
+        # stack, which just fills the free space), so it sizes the stack
+        # instead — the first one wins, others must agree.
+        media_h = None
+        for ln in lines[start_index + 1:]:
+            if re.match(r"^>\s*end\s*:\s*stack\s*$", ln):
+                break
+            mh = re.match(r"^!{1,2}\s+\S+.*?\bh=([0-9.]+(?:px|em|rem|vh|vw|%)?)(?:\s|$)",
+                          ln, re.IGNORECASE)
+            if not mh:
+                continue
+            hv = mh.group(1) + ("px" if re.match(r"^[0-9.]+$", mh.group(1)) else "")
+            if media_h is None:
+                media_h = hv
+            elif hv != media_h:
+                _warn(src[start_index],
+                      "layers of this stack ask for different heights ({0} and {1}); "
+                      "the first one sizes the stack".format(media_h, hv))
+        if height is None and media_h is not None:
+            height = media_h
         layers = []
         current = None
         index = start_index + 1
