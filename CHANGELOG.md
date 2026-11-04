@@ -2,6 +2,15 @@
 
 ## Unreleased
 
+### Inline formatting
+
+- **Markers may enclose math.** `[Library: $\{b_i\}$]{.sm}`,
+  `**gain $x$**` and `*a $x$ b*` used to render literally, silently: the
+  line was split at every `$…$` before markers were matched, cutting any
+  enclosing pair in two. Math and raw tags are now held as opaque
+  placeholders while the whole line is formatted, so they stay untouched
+  but no longer break the markers around them.
+
 ### SVG animation
 
 - **`> svg:` works inside layout blocks.** Inside a `> row` / `> col`,

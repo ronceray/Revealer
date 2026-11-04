@@ -80,8 +80,7 @@ of screenshotting.
   Highlight: `[ text ]` alone on a line.
 - Inline: `**bold**` `*italic*` `` `code` `` `[text](url)`
   `[text]{.accent}` `[text]{color=#c0392b}`; escape markers with `\`.
-  A `**bold**` span cannot contain `$math$` (the asterisks render
-  literally) — keep bold and math disjoint.
+  Markers may enclose math: `[Library: $\{b_i\}$]{.sm}`, `**gain $x$**`.
 - One idea per slide. The fit engine absorbs only a *small* overflow
   (down to `fit-floor`, 0.85 by default) so body text stays the same
   size on every slide; past that the content overflows at full size

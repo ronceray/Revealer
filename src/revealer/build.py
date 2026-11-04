@@ -554,10 +554,19 @@ def _inline_md(text: str) -> str:
     if ("*" not in text and "`" not in text and "[" not in text
             and "<" not in text and "&" not in text):
         return text
-    parts = _MD_PROTECT_RE.split(text)
-    for i in range(0, len(parts), 2):
-        parts[i] = _md_segment(parts[i])
-    return "".join(parts)
+    # Protected spans (math, tags) are swapped for opaque placeholders and the
+    # whole line is formatted at once, so a marker pair may enclose them:
+    # `[Library: $x$]{.sm}`, `**bold $x$**`. Splitting at them instead cut
+    # such pairs in two, and both halves stayed literal.
+    protected = []
+
+    def _hold(m):
+        protected.append(m.group(0))
+        return "\x03{0}\x04".format(len(protected) - 1)
+
+    held = _MD_PROTECT_RE.sub(_hold, text.replace("\x03", "").replace("\x04", ""))
+    out = _md_segment(held)
+    return re.sub(r"\x03(\d+)\x04", lambda m: protected[int(m.group(1))], out)
 
 
 # --- inline source map (P7): source columns -> rendered text ------------------
