@@ -18,7 +18,21 @@ Some explanatory text.
 ```
 
 The SVG is embedded directly in the slide (not via `<img>`), which is what makes
-its inner elements addressable for animation.
+its inner elements addressable for animation. It renders where the `> svg:`
+line is written — including inside a layout block, e.g. in one column of a
+`> fill` slide:
+
+```
+=== A diagram next to text
+> fill
+> row
+> col 2/5
+> svg: Media/Animated/scheme.svg
+> animate: #dot opacity:1
+> col 3/5
+Some explanatory text.
+> end: row
+```
 
 `> svg:` also accepts a `.pdf` path: the PDF is converted to SVG on the fly
 and cached (see the [figures pipeline](figures.md)).
@@ -46,8 +60,13 @@ awkward — the source SVG stays fully visible when opened on its own.
 Each `> animate:` line defines one step. Its syntax is:
 
 ```
-> animate: <selector>[,<selector2>] <attr>:<value>[; <attr2>:<value2>] [@ <duration>]
+> animate: [+N] <selector>[,<selector2>] <attr>:<value>[; <attr2>:<value2>] [@ <duration>]
 ```
+
+* **+N** *(optional)* — the step's fragment index, so it can interleave with
+  `+N` fragments elsewhere on the slide. Without it, a step plays after every
+  indexed fragment (reveal.js orders unindexed fragments last), in document
+  order with the other unindexed ones.
 
 * **selector** — one or more CSS selectors (typically `#id`) targeting elements
   inside the SVG. Several selectors can be comma-separated (spaces after the

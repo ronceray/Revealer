@@ -1,5 +1,20 @@
 # Changelog
 
+## Unreleased
+
+### SVG animation
+
+- **`> svg:` works inside layout blocks.** Inside a `> row` / `> col`,
+  `> pin:` or any other block, `> svg:`, `> hide:` and `> animate:` used to
+  be passed to the layout renderer, which printed them as literal text —
+  silently, with no warning. They are now slide parameters at any depth, and
+  the SVG renders exactly where `> svg:` is written (e.g. in its column).
+- **Indexed animation steps.** `> animate: +N #sel attr:val` gives the step
+  `data-fragment-index="N"`, so it can interleave with `+N` fragments
+  elsewhere on the slide. Unindexed steps used to — and still do — play
+  after every indexed fragment (reveal.js orders unindexed fragments last).
+  A bare `+` is accepted and means the default (document order).
+
 ## 0.4.0 — 2026-09-10
 
 The diagnostics release. Everything a build could not see — a column whose

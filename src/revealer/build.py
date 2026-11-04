@@ -352,6 +352,9 @@ _TABLE_END_RE = re.compile(r"^>\s*end\s*:\s*table\s*$")
 # block / paragraph splitting, like code blocks and tables.
 _MACRO_OPEN_RE = re.compile(_grammar.macro_open_pattern())
 
+# Inline-SVG directives, honoured at any block depth (see the parse loop).
+_SVG_DIRECTIVE_RE = re.compile(r"^>\s*(?:svg|hide|animate)\s*:")
+
 # Legacy-renderer dispatch order/patterns derive from the registry. `box`
 # uses a capturing variant group so the handler learns which callout kind.
 _DISPATCH: list[tuple[str, re.Pattern]] = [
@@ -1948,6 +1951,20 @@ def _contentify_legacy(html: str, src: list | None = None) -> str:
     return html
 
 
+def _split_animate_index(spec: str):
+    """Strip a leading fragment marker from an ``> animate:`` value.
+
+    ``+N #sel attr:val`` -> ``(N, "#sel attr:val")``; a bare ``+`` (the
+    default: next step in document order) and no marker both give
+    ``(None, spec)``. Selectors never start with ``+``, so this is unambiguous.
+    """
+
+    m = re.match(r"^\s*\+(\d*)\s+(.*)$", spec, flags=re.DOTALL)
+    if not m:
+        return None, spec
+    return (int(m.group(1)) if m.group(1) else None), m.group(2)
+
+
 def _parse_animate(spec: str, default_duration: str):
     """Parse an ``> animate:`` value.
 
@@ -2487,8 +2504,14 @@ def _build(pfile: str, dev: bool) -> str:
                 # captured as slide parameters. A depth counter supports
                 # nesting; tables are tracked separately above (a `> row`
                 # inside a table is a table row, not a layout row).
+                # `> svg:` / `> hide:` / `> animate:` are slide parameters
+                # even inside a block: they fall through to the `key: value`
+                # path below, which drops the SVG placeholder into the content
+                # stream right here — so `> svg:` inside a `> col` (or a
+                # `> pin:`) renders in that column instead of as literal text.
                 block_open = _MACRO_OPEN_RE.match(line)
-                if len(slide) and not notes and (block_depth > 0 or block_open):
+                if (len(slide) and not notes and (block_depth > 0 or block_open)
+                        and not _SVG_DIRECTIVE_RE.match(line)):
                     _slide_append(slide[-1], line, lineno)
                     if block_open:
                         block_depth += 1
@@ -3217,12 +3240,16 @@ def _build_svg(S, pdir, default_duration):
         if not isinstance(steps, list):
             steps = [steps]
         for step in steps:
+            index, step = _split_animate_index(step)
             targets, attrs, duration = _parse_animate(step, default_duration)
+            index_attr = (' data-fragment-index="{0}"'.format(index)
+                          if index is not None else "")
             out += (
-                '<span class="fragment revealer-svg-anim" '
+                '<span class="fragment revealer-svg-anim"{3} '
                 'data-svg-target="{0}" data-svg-attrs="{1}" '
                 'data-svg-duration="{2}"></span>'.format(
-                    _escape_attr(targets), _escape_attr(attrs), _escape_attr(duration)
+                    _escape_attr(targets), _escape_attr(attrs), _escape_attr(duration),
+                    index_attr
                 )
             )
 
