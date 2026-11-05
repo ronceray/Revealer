@@ -2,6 +2,30 @@
 
 ## Unreleased
 
+### Inline formatting
+
+- **Trailing line roles: `text {.sm}`.** A `{.class …}` block at the end of
+  a line (paragraph line, bullet, caption, title), separated by a space,
+  styles the whole line — the same HTML as `[text]{.sm}`, but with no
+  brackets to balance, so links, bold and math nest freely. `color=` and
+  `size=` work too. `[text]{…}` stays for pieces inside a line.
+- **`revealer migrate`** rewrites whole-line `[text]{…}` spans (and bullets)
+  to the trailing form, only where both render identically; it keeps a
+  `.pres.bak`. On the 30-slide JMBS deck: 73 lines, byte-identical HTML.
+
+### Sizes
+
+- **`> size:` on `> fill` slides is positional.** It used to scale the whole
+  slide body wherever it was written, so a `> size: sm` meant for one
+  caption shrank everything. Before any content it still scales the slide;
+  after content it applies from that line on, as inside a block.
+
+### CLI
+
+- **`revealer index` shows the on-screen slide number** (`#` column: what
+  `> slideNumber: c/t` displays, `-` for uncounted backups), next to the
+  reveal.js index, so "slide 17" maps to a line without counting.
+
 ### Parsing
 
 - **`#` lines inside `@@` code blocks are code.** Every line starting with

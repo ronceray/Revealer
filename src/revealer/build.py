@@ -546,6 +546,28 @@ def _md_segment(seg: str) -> str:
     return seg.replace("\x00", "*").replace("\x01", "`").replace("\x02", "[")
 
 
+# A trailing attribute block styles the whole line (or bullet, caption, …):
+# `Gerardos & Ronceray, PRL (2025) {.fine}` == `[Gerardos & Ronceray, PRL (2025)]{.fine}`,
+# without brackets to balance, so links, bold and math inside nest freely.
+# It must be separated from the text by whitespace and hold only `.class`,
+# `color=` or `size=` items (the same vocabulary as `[text]{…}`).
+_ATTR_ITEM = r"(?:\.[A-Za-z][\w-]*|(?:color|size)=[^\s{}]+)"
+_TRAILING_ATTR_RE = re.compile(
+    r"^(?P<body>.*?[^\s\\])[ \t]+\{(?P<attr>" + _ATTR_ITEM + r"(?:[ \t]+" + _ATTR_ITEM + r")*)\}[ \t]*$",
+    re.S)
+
+
+def _trailing_attr(text: str):
+    """``(body, open_tag)`` when ``text`` ends with a line attribute block."""
+    m = _TRAILING_ATTR_RE.match(text)
+    if not m:
+        return None
+    tag = _md_span_sub(re.match(r"^(.*)\{(.*)\}$", "x{" + m.group("attr") + "}", re.S))
+    if not tag.startswith("<span"):
+        return None
+    return m.group("body"), tag[:tag.index(">") + 1]
+
+
 def _inline_md(text: str) -> str:
     r"""Inline formatting: **bold**, *italic*, `code`, [text](url), [text]{.role}.
 
@@ -554,6 +576,10 @@ def _inline_md(text: str) -> str:
     """
     if not _MARKDOWN or not text:
         return text
+    trailing = _trailing_attr(text) if "{" in text else None
+    if trailing:
+        body, tag = trailing
+        return tag + _inline_md(body) + "</span>"
     if ("*" not in text and "`" not in text and "[" not in text
             and "<" not in text and "&" not in text):
         return text
@@ -666,6 +692,14 @@ def inline_segments(text: str):
     """The per-line source map for rendered inline text (or None if refused)."""
     if not text:
         return []
+    trailing = _trailing_attr(text) if (_MARKDOWN and "{" in text) else None
+    if trailing:
+        body, tag = trailing
+        inner = inline_segments(body)
+        if inner is None:
+            return None
+        return ([[0, 0, tag, "markup"]] + inner
+                + [[len(body), len(text), "</span>", "markup"]])
     if not _MARKDOWN or ("*" not in text and "`" not in text and "[" not in text
                          and "$" not in text and "<" not in text
                          and "&" not in text):
@@ -969,13 +1003,21 @@ def contentify(html, base_size=1.0, base_align=None, paragraph_spacing=0.5, fill
         # wrappers, so the flex chain resolves heights against the canvas.
         # Scoped directives are consumed here (they used to leak as literal
         # text): `size` applies to the whole slide body, the rest is inert.
+        # A `> size:` before any content scales the whole body; written after
+        # some content it stays in-stream and restyles what follows (up to
+        # `> size: reset`), exactly as inside a card, column or box.
         fill_size = None
+        seen_content = False
         kept_lines, kept_src = [], []
         for line, ln in zip(lines, src):
             m = _SCOPED_DIRECTIVE_RE.match(line.strip())
             if m and _grammar.DIRECTIVES.get(m.group(1).replace("_", "-"),
                                              None) is not None:
                 key = m.group(1).replace("_", "-")
+                if key == "size" and seen_content:
+                    kept_lines.append(line)
+                    kept_src.append(ln)
+                    continue
                 if key == "size":
                     fill_size = _parse_scale(m.group(2).strip(), None)
                 # align is handled by the legacy renderer; keep it in-stream
@@ -983,6 +1025,10 @@ def contentify(html, base_size=1.0, base_align=None, paragraph_spacing=0.5, fill
                     kept_lines.append(line)
                     kept_src.append(ln)
                 continue
+            if line.strip() and not line.lstrip().startswith(">"):
+                seen_content = True
+            elif line.strip() and not re.match(r"^>\s*[\w-]+\s*:", line.strip()):
+                seen_content = True  # a block opener (> row, > info, …) is content
             kept_lines.append(line)
             kept_src.append(ln)
         body = _contentify_legacy("\n".join(kept_lines), src=kept_src)
@@ -2411,8 +2457,11 @@ def slide_index(pfile: str) -> list[dict]:
             entries.append({"marker": marker, "title": title, "line": lineno % _FILE_STRIDE,
                             "file": inc_file or "", "hidden": False, "index": None})
             continue
-        if entries and re.match(r"^>\s*visibility\s*:\s*hidden\s*$", line):
-            entries[-1]["hidden"] = True
+        vis = re.match(r"^>\s*visibility\s*:\s*(\w+)\s*$", line)
+        if entries and vis:
+            entries[-1]["visibility"] = vis.group(1).lower()
+            if vis.group(1).lower() == "hidden":
+                entries[-1]["hidden"] = True
     h, v = -1, 0
     for e in entries:
         if e["hidden"]:
@@ -2423,6 +2472,18 @@ def slide_index(pfile: str) -> list[dict]:
         else:
             h, v = h + 1, 0
             e["index"] = str(h)
+    # The number reveal.js shows in the slide counter (`> slideNumber: c/t`):
+    # visible slides in order, skipping uncounted ones (backups by default).
+    c = 0
+    for e in entries:
+        vis = e.pop("visibility", None)
+        uncounted = vis == "uncounted" or (
+            vis is None and _BACKUP_TITLE_RE.match(e["title"] or ""))
+        if e["hidden"] or uncounted:
+            e["counter"] = None
+        else:
+            c += 1
+            e["counter"] = c
     return entries
 
 
@@ -3370,3 +3431,48 @@ def main(argv=None):
         return 1
     build(argv[0])
     return 0
+
+
+# --- `revealer migrate`: whole-line `[text]{…}` -> `text {…}` ---------------
+
+_MIGRATE_LINE_RE = re.compile(
+    r"^(?P<lead>\s*(?:\*\s+(?:\+\d*\s+)?)?)\[(?P<inner>.*)\]\{(?P<attr>"
+    + _ATTR_ITEM + r"(?:[ \t]+" + _ATTR_ITEM + r")*)\}(?P<trail>[ \t]*)$")
+
+
+def _brackets_wrap_all(inner: str) -> bool:
+    """True when the `[` opening the line is closed by the final `]`: no
+    unescaped `]` inside ``inner`` closes it early."""
+    depth, i = 0, 0
+    while i < len(inner):
+        c = inner[i]
+        if c == "\\":
+            i += 2
+            continue
+        if c == "[":
+            depth += 1
+        elif c == "]":
+            depth -= 1
+            if depth < 0:
+                return False
+        i += 1
+    return depth == 0
+
+
+def migrate_roles(text: str) -> tuple[str, int]:
+    """Rewrite every line (or bullet) that is entirely ``[text]{attrs}`` into
+    the trailing form ``text {attrs}``. Code blocks and comments are left
+    alone, and a line is only rewritten when both forms render identically."""
+    out, n, in_code = [], 0, False
+    for line in text.split("\n"):
+        if line.startswith("@@"):
+            in_code = not in_code
+        m = None if (in_code or line.startswith("#")) else _MIGRATE_LINE_RE.match(line)
+        if m and m.group("inner").strip() and _brackets_wrap_all(m.group("inner")):
+            old = line[len(m.group("lead")):].rstrip()
+            new = "{0} {{{1}}}".format(m.group("inner").rstrip(), m.group("attr"))
+            if _inline_md(old) == _inline_md(new):
+                line = m.group("lead") + new
+                n += 1
+        out.append(line)
+    return "\n".join(out), n

@@ -53,7 +53,8 @@ $$display$$
 [link](url)
 [x]{.accent}
 [x]{color}
-{.title/.lede/.sm/.fine}
+line {.sm/.fine/.lede/.title}
+[x]{.chip} (inline)
 escape \* \` \[
 ```
 

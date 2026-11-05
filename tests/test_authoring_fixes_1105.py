@@ -61,3 +61,48 @@ def test_backup_slides_uncounted_by_default(deck):
     html = build_deck(deck("=== A\n--- (backup) B\nx\n=== Backup: C\ny\n"
                            "=== (Backup) D\n> visibility: counted\nz\n=== Backups are fun\n"))
     assert html.count('data-visibility="uncounted"') == 2
+
+
+# --- trailing line roles, migrate, positional fill size, counter -----------
+
+from revealer.build import _inline_md, contentify, inline_segments, migrate_roles  # noqa: E402
+
+
+def test_trailing_role_equals_bracket_form():
+    for body in ["Gerardos & Ronceray, *PRL* (2025)", "Library: $\\{b_i\\}$", "plain"]:
+        assert _inline_md(body + " {.sm}") == _inline_md("[" + body + "]{.sm}")
+    assert _inline_md("a [link](http://x) {.fine .accent}") == (
+        '<span class="fine accent">a <a href="http://x" target="_blank">link</a></span>')
+    assert _inline_md("red {color=#c00}") == '<span style="color:#c00">red</span>'
+
+
+def test_trailing_role_needs_space_and_known_items():
+    for t in ["set {x}", "word{.sm}", "plain {.sm}x", "a {b c}"]:
+        assert _inline_md(t) == t
+
+
+def test_trailing_role_keeps_the_inline_map():
+    segs = inline_segments("A *b* {.sm}")
+    assert segs is not None and "".join(s[2] for s in segs) == _inline_md("A *b* {.sm}")
+
+
+def test_migrate_rewrites_whole_lines_only():
+    src = ("[A line]{.sm}\n* +2 [bullet]{.fine}\n[a]{.chip} [b]{.chip}\n"
+           "@@\n[code]{.sm}\n@@\n# [comment]{.sm}\n")
+    new, n = migrate_roles(src)
+    assert n == 2
+    assert new.splitlines()[:3] == ["A line {.sm}", "* +2 bullet {.fine}", "[a]{.chip} [b]{.chip}"]
+    assert "[code]{.sm}" in new and "# [comment]{.sm}" in new
+
+
+def test_fill_size_is_positional():
+    top = contentify("> size: 0.8\nx\n", fill=True)
+    assert top.startswith('<div class="rv-fillsize" style="font-size:0.8000em')
+    later = contentify("x\n> size: 0.7\ny\n", fill=True)
+    assert "rv-fillsize" not in later and 'class="rv-size" style="font-size:0.7000em">y' in later
+
+
+def test_index_counter_skips_backups(tmp_path):
+    p = tmp_path / "t.pres"
+    p.write_text("=== A\n--- (backup) B\n=== C\n> visibility: uncounted\n=== D\n")
+    assert [e["counter"] for e in slide_index(str(p))] == [1, None, None, 2]

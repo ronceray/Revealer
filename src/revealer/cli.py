@@ -473,8 +473,9 @@ def index(
     target: str = typer.Argument(None, help="Presentation folder or .pres file."),
     as_json: bool = typer.Option(False, "--json", help="Machine-readable output."),
 ):
-    """List the slides with the indices reveal.js uses (7, 8/1): for deep
-    links (#/8/1), screenshots, and talking about "slide 15" unambiguously."""
+    """List the slides with the indices reveal.js uses (7, 8/1) — for deep
+    links (#/8/1) and screenshots — and the number the on-screen slide
+    counter shows (#; "-" for uncounted backups), to find "slide 15"."""
 
     from .build import slide_index
 
@@ -485,13 +486,40 @@ def index(
 
         console.print_json(json.dumps(entries))
         return
+    console.print("[dim]{0:<6} {1:>4} {2:>6}[/dim]".format("index", "#", "line"), highlight=False)
     for e in entries:
         idx = e["index"] if e["index"] is not None else "-"
+        num = e["counter"] if e["counter"] is not None else "-"
         where = "{0}:{1}".format(e["file"], e["line"]) if e["file"] else str(e["line"])
         note = "  [dim](hidden)[/dim]" if e["hidden"] else ""
-        console.print("[bold]{0:<6}[/bold] [dim]{1:>6}[/dim]  {2} {3}{4}".format(
-            idx, where, e["marker"], rich_escape(e["title"]), note),
+        console.print("[bold]{0:<6}[/bold] {1:>4} [dim]{2:>6}[/dim]  {3} {4}{5}".format(
+            idx, num, where, e["marker"], rich_escape(e["title"]), note),
             highlight=False, markup=True)
+
+
+@app.command()
+def migrate(
+    target: str = typer.Argument(None, help="Presentation folder or .pres file."),
+    dry_run: bool = typer.Option(False, "--dry-run", help="Report only, write nothing."),
+):
+    """Rewrite whole-line `[text]{.role}` spans to the trailing form
+    `text {.role}` (identical rendering). A backup `<name>.pres.bak` is kept."""
+
+    from .build import migrate_roles
+
+    pres = _resolve_target(target)
+    text = pres.read_text(encoding="utf-8")
+    new, n = migrate_roles(text)
+    if not n:
+        console.print("Nothing to migrate.")
+        return
+    if dry_run:
+        console.print("{0} line(s) would be rewritten.".format(n))
+        return
+    backup = pres.with_suffix(".pres.bak")
+    backup.write_text(text, encoding="utf-8")
+    pres.write_text(new, encoding="utf-8")
+    console.print("Rewrote {0} line(s) in {1} (backup: {2}).".format(n, pres.name, backup.name))
 
 
 @app.command()

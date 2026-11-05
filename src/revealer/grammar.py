@@ -322,7 +322,8 @@ STATIC_CHEAT: tuple[tuple[str, str, str], ...] = (
     ("Inline format", "[x]{color}", "[text]{color=#f00}"),
     # Sizes are a theme-defined scale, not literally "big"/"small"
     # (`.lede` is smaller than body text in some themes, e.g. SFI).
-    ("Inline format", "{.title/.lede/.sm/.fine}", "[text]{.lede}"),
+    ("Inline format", "line {.sm/.fine/.lede/.title}", " {.sm}"),
+    ("Inline format", "[x]{.chip} (inline)", "[text]{.chip}"),
     ("Inline format", "escape \\* \\` \\[", "\\"),
     # Scoped text directives (authoring.md § Sizes and alignment): alone at
     # the top of a slide or column block they restyle that whole scope;

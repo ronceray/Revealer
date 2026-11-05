@@ -81,6 +81,10 @@ of screenshotting.
 - Inline: `**bold**` `*italic*` `` `code` `` `[text](url)`
   `[text]{.accent}` `[text]{color=#c0392b}`; escape markers with `\`.
   Markers may enclose math: `[Library: $\{b_i\}$]{.sm}`, `**gain $x$**`.
+- **Style a whole line with a trailing role**: `Gerardos & Ronceray, PRL
+  (2025) {.fine}`, `* A bullet {.sm}` (space before `{`). Prefer it to
+  `[whole line]{.fine}`; keep `[x]{.chip}` for pieces inside a line.
+  `revealer migrate deck.pres` converts old decks (rendering unchanged).
 - One idea per slide. The fit engine absorbs only a *small* overflow
   (down to `fit-floor`, 0.85 by default) so body text stays the same
   size on every slide; past that the content overflows at full size
@@ -124,7 +128,7 @@ The construct for the situation you are tempted to hand-code:
 | a `<table>` | `> table(r,c)` … `> end: table` |
 | `transform:scale(...)` / `overflow:hidden` on a figure | `! fig.png fill zoom=1.4@47%,50%` or `crop=12%,0,0,9%` |
 | vertical whitespace | `> space: 40px` (fixed) or `> space` (filling, on a `> fill` slide) |
-| `<span style="font-size:…">` | `[text]{.sm}` / `{.lede}` / `{.title}` / `> size:` |
+| `<span style="font-size:…">` | `whole line {.sm}` / `{.lede}` / `{.title}`, `[word]{.sm}` inside a line, `> size:` for several lines |
 | `<span style="color:…">` | `[text]{.accent}` / `{.warn}` / `{.good}` / `[text]{color=#c0392b}` |
 | an inline `<style>` to nudge one element | a per-slide `> size:` / `> align:`, or ask the user for a theme change |
 

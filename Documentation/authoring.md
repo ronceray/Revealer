@@ -194,8 +194,18 @@ Light markdown works in any text, list item, caption, cell or box title:
 **bold**  *italic*  `code`  [a link](https://revealjs.com)
 [accented]{.accent}  [red]{color=#c0392b}  [large]{size=1.4em}
 [big]{.lede}  [small]{.sm}
+
+A whole line in small print, with *anything* inside {.sm}
+* A bullet with a [link](https://revealjs.com) and $x^2$ {.fine}
 ```
 
+- **A trailing attribute block styles the whole line** (paragraph line,
+  bullet, caption, card or box title): `text {.sm}` renders exactly like
+  `[text]{.sm}`, with no brackets to balance, so links, bold and math nest
+  freely inside. It must be separated from the text by a space and hold
+  only `.class`, `color=` or `size=` items; `revealer migrate` rewrites
+  existing whole-line `[text]{…}` spans to this form. Keep `[text]{…}` for
+  pieces *inside* a line (chips, one accented word).
 - `[text]{...}` spans accept `.class` tokens (added as CSS classes — themes
   provide roles such as `.accent`, `.lede`, `.sm`), `color=` and `size=`.
 - Math spans (`$…$`, `$$…$$`) and HTML tags are left untouched.
@@ -223,6 +233,9 @@ Your LaTeX macros can be reused with [`> macros:` / `> macro:`](#katex-macros).
 - **Inside a `> … > end:` block** (callout box, card, fragment, table
   cell): they apply from that line to the end of the block —
   `> size: reset` / `> align: none` returns to the block's default.
+- **On a `> fill` slide**: written before any content, `> size:` scales
+  the whole slide body; written after some content, it applies from that
+  line on, as inside a block (`> size: reset` ends it).
 - **In the settings block**: they become the presentation default.
 
 `size` factors cascade multiplicatively (presentation × slide × block ×
