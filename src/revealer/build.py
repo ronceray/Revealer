@@ -448,6 +448,9 @@ def _figure_src(path: str) -> str:
 
 _BUILD_HOOK_RE = re.compile(r"^>\s*build\s*:\s*(.+?)\s*$")
 _SLIDE_MARKER_RE = re.compile(r"^(>>> first:|>>> biblio|=== |--- |%%% )")
+# Titles of backup / appendix slides, uncounted unless `> visibility: counted`:
+# "(backup) …", "Backup: …", "[Backup] …" (any case).
+_BACKUP_TITLE_RE = re.compile(r"^\s*[(\[]?\s*backup\b", re.I)
 
 
 def _run_build_hooks(pdir: str, pres_text: str) -> None:
@@ -2918,8 +2921,11 @@ def _build(pfile: str, dev: bool) -> str:
             opt = 'data-transition="none" data-state="slide_{:d}"'.format(k) + \
                 _src_attr(S.get("src"), S.get("src_end")) + _inc_attr(S["param"])
 
-            if S["param"].get("visibility") in ("hidden", "uncounted"):
-                opt += ' data-visibility="{0}"'.format(S["param"]["visibility"])
+            visibility = S["param"].get("visibility")
+            if visibility is None and _BACKUP_TITLE_RE.match(S.get("title") or ""):
+                visibility = "uncounted"  # backup slides stay out of the count
+            if visibility in ("hidden", "uncounted"):
+                opt += ' data-visibility="{0}"'.format(visibility)
 
             section_classes = []
             if S["param"].get("style") == "dark":

@@ -739,6 +739,7 @@ Written right after a slide marker (`===`, `---`, `%%%`, `>>> first:`,
 | --- | --- |
 | `> visibility: hidden` | **Hide the slide.** |
 | `> visibility: uncounted` | **Leave the slide out of the slide count** (backup / appendix slides): it is still shown and navigable, but the slide number and progress bar skip it, so `c/t` counts the main talk only. |
+| `> visibility: counted` | **Count a backup slide anyway.** Slides whose title starts with `(backup)`, `Backup` or `[Backup]` (any case) are uncounted by default. |
 | `> style: dark` | **Dark style** for the current slide. |
 | `> theme:` *name* | **Per-slide theme switch** (restored on navigation). |
 | `> subtitle:` *text* | **Subtitle** (first slide only). |

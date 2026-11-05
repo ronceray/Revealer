@@ -26,6 +26,9 @@
   Backup slides used to inflate the total in `> slideNumber: c/t` and the
   progress bar (a 30-slide talk with 8 backups read "…/38"). The slide is
   still rendered and reachable; reveal.js simply skips it when numbering.
+- **Backup slides are uncounted by default.** A slide whose title starts
+  with `(backup)`, `Backup` or `[Backup]` (any case) gets
+  `> visibility: uncounted` automatically; `> visibility: counted` opts out.
 
 ### Inline formatting
 

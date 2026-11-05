@@ -55,3 +55,9 @@ def test_fill_slide_chip_line(deck):
 def test_uncounted_visibility(deck):
     html = build_deck(deck("=== A\n--- (backup) B\n> visibility: uncounted\nx\n"))
     assert 'data-visibility="uncounted"' in html
+
+
+def test_backup_slides_uncounted_by_default(deck):
+    html = build_deck(deck("=== A\n--- (backup) B\nx\n=== Backup: C\ny\n"
+                           "=== (Backup) D\n> visibility: counted\nz\n=== Backups are fun\n"))
+    assert html.count('data-visibility="uncounted"') == 2
