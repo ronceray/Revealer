@@ -317,6 +317,11 @@ Each arrow press advances one step; stepping back reverts it.
 
 Hand-authoring the SVG itself:
 
+- An inlined SVG keeps its file's `width`/`height`: set `width="100%"`
+  (and e.g. `style="max-height:80vh"`) on the root `<svg>`, keep the
+  `viewBox`. Narrow the `viewBox` to show part of a figure.
+- Ids are deck-global: the same SVG on two slides needs two copies with
+  prefixed ids.
 - A comma list (`#dot, #arrow`) animates several elements in one step;
   a `<g id="…">` wrapper does the same job structurally.
 - Arrowhead `<marker>`s scale with the stroke width by default

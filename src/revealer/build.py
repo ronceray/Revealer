@@ -907,7 +907,7 @@ def _render_block(block, base_size, base_align, base_spacing):
             elif key == "align":
                 para_align = _norm_align(value) or para_align
 
-        body_html = _contentify_legacy("\n".join(para["body"]), src=para["body_src"])
+        body_html = _contentify_legacy("\n".join(para["body"]), src=para["body_src"], flex=False)
         if not _VOID_HTML_RE.sub("", body_html).strip():
             # Nothing to see (a bare <style>/<script>/comment block): emit it
             # outside the paragraph flow, or it would take a spacing slot and
@@ -1011,7 +1011,7 @@ def contentify(html, base_size=1.0, base_align=None, paragraph_spacing=0.5, fill
     return '<div class="multi-column">{}</div>'.format(columns)
 
 
-def _contentify_legacy(html: str, src: list | None = None) -> str:
+def _contentify_legacy(html: str, src: list | None = None, flex: bool = True) -> str:
     """Render a paragraph body (lists, code, tables, highlight, raw HTML).
 
     This is the historical per-line renderer. It is now used to render the body
@@ -1941,7 +1941,7 @@ def _contentify_legacy(html: str, src: list | None = None) -> str:
 
             # --- Default: add line (with inline markdown)
 
-            html += _inline_md(line)
+            html += _LINE_OPEN + _inline_md(line) + _LINE_CLOSE
 
         if not line.startswith("<pre>"):
             html += "\n"
@@ -1957,7 +1957,81 @@ def _contentify_legacy(html: str, src: list | None = None) -> str:
     if colmode:
         html += "</div></div>"
 
-    return html
+    return _merge_text_runs(html, flex)
+
+
+# Inline content that a flex container would split apart. On `> fill` slides
+# (and inside cards, columns, layers, …) the parent is a flex column, so each
+# top-level text run and each inline element of a line becomes its own flex
+# item, stacked full width: "Noise: [a]{.chip} [b]{.chip}" rendered as three
+# rows. Such mixed lines are wrapped in one block so they flow as a paragraph.
+_BLOCK_TAGS = frozenset("""address article aside blockquote canvas dd div dl dt
+    fieldset figcaption figure footer form h1 h2 h3 h4 h5 h6 header hr iframe li
+    main nav ol p pre section svg table tbody td tfoot th thead tr ul video img
+    style script""".split())
+_TAG_RE = re.compile(r"<(/?)([a-zA-Z][\w-]*)[^>]*?(/?)>")
+_VOID_TAGS = frozenset("br img hr input meta link source wbr".split())
+
+
+# Default (text) lines are fenced while rendering so that a run of consecutive
+# text lines can be treated as one paragraph afterwards.
+_LINE_OPEN, _LINE_CLOSE = "\x00rvL", "\x00rvE"
+_TEXT_RUN_RE = re.compile(r"(?:\x00rvL.*?\x00rvE\n?)+", re.S)
+
+
+def _merge_text_runs(html: str, flex: bool) -> str:
+    """Drop the text-line fences; in a flex container, wrap each run of text
+    lines that mixes several inline items (see `_wrap_mixed_inline`)."""
+    def run(m):
+        body = m.group(0)
+        trail = "\n" if body.endswith("\n") else ""
+        inner = body.replace(_LINE_OPEN, "").replace(_LINE_CLOSE, "")
+        if trail:
+            inner = inner[:-1]
+        return (_wrap_mixed_inline(inner) if flex else inner) + trail
+    return _TEXT_RUN_RE.sub(run, html)
+
+
+def _text_items(t: str) -> int:
+    """Flex items a top-level text run becomes once KaTeX has rendered its
+    inline math: each non-blank text piece and each ``$…$`` span."""
+    return sum(1 for part in _MATH_SPLIT_RE.split(t) if part.strip())
+
+
+_MATH_SPLIT_RE = re.compile(r"(\$\$?[^$]+\$\$?)")
+
+
+def _wrap_mixed_inline(h: str) -> str:
+    """Wrap ``h`` in ``<div class="rv-line">`` when it holds several inline
+    items at top level (text runs, inline elements, inline math); leave it as
+    is when it is a single item, contains block-level tags, or is unbalanced
+    (raw HTML opened on one line and closed on another)."""
+    s = h.strip()
+    if not s or ("<" not in s and "$" not in s):
+        return h
+    depth, items, pos = 0, 0, 0
+    for m in _TAG_RE.finditer(s):
+        if depth == 0:
+            items += _text_items(s[pos:m.start()])
+        closing, name, selfclose = m.group(1), m.group(2).lower(), m.group(3)
+        if name in _BLOCK_TAGS:
+            return h
+        if closing:
+            depth -= 1
+            if depth < 0:
+                return h
+        elif selfclose or name in _VOID_TAGS:
+            items += depth == 0
+        else:
+            items += depth == 0
+            depth += 1
+        pos = m.end()
+    if depth != 0:
+        return h
+    items += _text_items(s[pos:])
+    if items < 2:
+        return h
+    return '<div class="rv-line">' + h + "</div>"
 
 
 def _split_animate_index(spec: str):
@@ -2319,11 +2393,16 @@ def slide_index(pfile: str) -> list[dict]:
     expanded, _includes = _expand_includes(
         text, pdir, _stack=(os.path.realpath(pfile),))
     entries: list[dict] = []
+    in_code = False
     for lineno, inc_file, line in expanded:
-        if line.startswith("#"):
+        if line.startswith("@@"):
+            in_code = not in_code
+            continue
+        if line.startswith("#") and not in_code:
             continue
         m = _SLIDE_MARKER_RE.match(line)
         if m:
+            in_code = False
             marker = m.group(1).rstrip()
             title = line[len(m.group(1)):].strip()
             entries.append({"marker": marker, "title": title, "line": lineno % _FILE_STRIDE,
@@ -2443,9 +2522,14 @@ def _build(pfile: str, dev: bool) -> str:
     _expanded, _includes = _expand_includes(
         pres_text, pdir, _stack=(os.path.realpath(pfile),), _files=_files)
     if True:  # (indentation-stable replacement of the StringIO loop)
+        in_code = False  # inside an @@ … @@ snippet: '#' lines are code, not comments
         for lineno, _inc_file, line in _expanded:
 
-            if line.startswith("#"):
+            if _SLIDE_MARKER_RE.match(line):
+                in_code = False
+            elif line.startswith("@@"):
+                in_code = not in_code
+            elif line.startswith("#") and not in_code:
                 continue
 
             s = ">>> first: "
@@ -2834,8 +2918,8 @@ def _build(pfile: str, dev: bool) -> str:
             opt = 'data-transition="none" data-state="slide_{:d}"'.format(k) + \
                 _src_attr(S.get("src"), S.get("src_end")) + _inc_attr(S["param"])
 
-            if S["param"].get("visibility") == "hidden":
-                opt += ' data-visibility="hidden"'
+            if S["param"].get("visibility") in ("hidden", "uncounted"):
+                opt += ' data-visibility="{0}"'.format(S["param"]["visibility"])
 
             section_classes = []
             if S["param"].get("style") == "dark":
@@ -3042,7 +3126,7 @@ def _build(pfile: str, dev: bool) -> str:
                 + nS
                 + ";} .speaker-controls-notes ul {margin: 0px; padding-left: 10px;}</style>"
             )
-            notes_html += _contentify_legacy(S["notes"]) + "</aside>"
+            notes_html += _contentify_legacy(S["notes"], flex=False) + "</aside>"
 
         # --- Bibliography citations
 

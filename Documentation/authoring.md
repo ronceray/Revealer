@@ -106,6 +106,7 @@ Written right after a slide marker:
 | Command | Description |
 | --- | --- |
 | `> visibility: hidden` | **Hide slide.** |
+| `> visibility: uncounted` | **Leave the slide out of the slide count** (backup / appendix slides): it is still shown and navigable, but the slide number and progress bar skip it, so `c/t` counts the main talk only. |
 | `> style: dark` | **Dark style** for the current slide. |
 | `> theme:` *name* | **Theme for the current slide.** Temporarily switches the reveal.js theme while this slide is active. See [Themes](themes.md). |
 | `> subtitle:` *text* | **Subtitle** (first slide only). |

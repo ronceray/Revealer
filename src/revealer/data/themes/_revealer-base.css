@@ -921,3 +921,8 @@ h1.relief {
   text-align: center;
   line-height: 1.2;
 }
+
+/* A line mixing text, inline elements and inline math inside a flex column
+   (`> fill` bodies, cards, columns, layers) is wrapped so it flows as one
+   paragraph instead of one flex row per inline item. */
+.reveal .rv-line { display: block; margin: 0; min-width: 0; }

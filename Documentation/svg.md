@@ -95,6 +95,14 @@ restores each element to its original state.
 
 ## Tips
 
+* An inlined SVG keeps the `width`/`height` of its file (matplotlib writes
+  them in `pt`), so it may render too large or too small. In the file, drop
+  them and set `width="100%"` (optionally `style="max-height:80vh"`) on the
+  root `<svg>`, keeping the `viewBox`; narrow the `viewBox` to show only part
+  of a figure.
+* Ids must be unique in the whole deck: to inline the same figure on two
+  slides, use two copies with prefixed ids (and update `url(#…)` /
+  `href="#…"` references).
 * Give meaningful `id`s to the elements you want to animate in your SVG editor
   (Inkscape: *Object Properties → ID*).
 * Set the SVG's initial state (e.g. `opacity="0"`) directly in the file, or

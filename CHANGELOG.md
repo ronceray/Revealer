@@ -2,6 +2,31 @@
 
 ## Unreleased
 
+### Parsing
+
+- **`#` lines inside `@@` code blocks are code.** Every line starting with
+  `#` was dropped as a `.pres` comment, even inside a code snippet, so Python
+  or shell comments silently vanished from code. Comments are now only
+  recognised outside `@@ … @@` (in the build and in `revealer index`).
+
+### Layout
+
+- **Mixed inline lines flow as one paragraph in flex bodies.** On `> fill`
+  slides and inside cards, columns, layers and cells the body is a flex
+  column, so a line such as `Noise: [a]{.chip} [b]{.chip}` or `a $x$ b`
+  became one full-width row per text run, span and formula — silently. A run
+  of consecutive text lines that mixes several inline items is now wrapped in
+  one `.rv-line` block. Single items (a lone `[…]{.lede}`, plain text, a lone
+  formula), block-level HTML and unbalanced raw HTML are left untouched;
+  ordinary (non-fill) paragraphs and notes are unchanged.
+
+### Slides
+
+- **`> visibility: uncounted`** leaves a slide out of the slide count.
+  Backup slides used to inflate the total in `> slideNumber: c/t` and the
+  progress bar (a 30-slide talk with 8 backups read "…/38"). The slide is
+  still rendered and reachable; reveal.js simply skips it when numbering.
+
 ### Inline formatting
 
 - **Markers may enclose math.** `[Library: $\{b_i\}$]{.sm}`,
